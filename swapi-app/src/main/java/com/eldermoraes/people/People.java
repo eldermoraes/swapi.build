@@ -99,10 +99,9 @@ public class People extends SWObject {
     public List<String> getFilms() {
         if (films != null && getBaseUrl() != null) {
             return films.stream()
-                    .map(film -> getBaseUrl() + films)
+                    .map(film -> getBaseUrl() + film)
                     .toList();
         }
-
         return films;
     }
 
@@ -113,10 +112,9 @@ public class People extends SWObject {
     public List<String> getSpecies() {
         if (species != null && getBaseUrl() != null) {
             return species.stream()
-                    .map(specie -> getBaseUrl() + species)
+                    .map(specie -> getBaseUrl() + specie)
                     .toList();
         }
-
         return species;
     }
 
@@ -127,10 +125,9 @@ public class People extends SWObject {
     public List<String> getStarships() {
         if (starships != null && getBaseUrl() != null) {
             return starships.stream()
-                    .map(starship -> getBaseUrl() + starships)
+                    .map(starship -> getBaseUrl() + starship)
                     .toList();
         }
-
         return starships;
     }
 
@@ -155,7 +152,7 @@ public class People extends SWObject {
     }
 
     public String getUrl() {
-        return url;
+        return getBaseUrl() + url;
     }
 
     public void setUrl(String url) {

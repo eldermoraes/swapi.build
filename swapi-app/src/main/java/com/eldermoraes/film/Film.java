@@ -154,7 +154,7 @@ public class Film extends SWObject {
     }
 
     public String getUrl() {
-        return url;
+        return getBaseUrl() + url;
     }
 
     public void setUrl(String url) {

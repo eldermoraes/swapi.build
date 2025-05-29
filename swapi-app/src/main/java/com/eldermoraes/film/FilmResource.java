@@ -9,12 +9,10 @@ import java.util.List;
 @Path("/films")
 public class FilmResource {
 
-    FilmService filmService;
-    UriInfo uriInfo;
+    private final FilmService filmService;
 
     FilmResource(UriInfo uriInfo, FilmService filmService){
-        this.uriInfo = uriInfo;
-        String hostUrl = this.uriInfo.getBaseUri().toString();
+        String hostUrl = uriInfo.getBaseUri().toString();
 
         this.filmService = filmService;
         this.filmService.setBaseUrl(hostUrl);
