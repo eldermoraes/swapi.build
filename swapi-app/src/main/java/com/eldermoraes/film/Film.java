@@ -1,9 +1,9 @@
 package com.eldermoraes.film;
 
 import java.util.List;
-import jakarta.json.bind.annotation.JsonbTransient;
+import com.eldermoraes.SWObject;
 
-public class Film {
+public class Film extends SWObject {
 
     private String title;
     private int episode_id;
@@ -20,32 +20,9 @@ public class Film {
     private String edited;
     private String url;
 
-    @JsonbTransient
-    private String baseUrl;
-
     public Film() {
 
     }
-
-    public Film(String title, int episode_id, String opening_crawl, String director, String producer,
-                String release_date, List<String> characters, List<String> planets, List<String> starships,
-                List<String> vehicles, List<String> species, String created, String edited, String url) {
-        this.title = title;
-        this.episode_id = episode_id;
-        this.opening_crawl = opening_crawl;
-        this.director = director;
-        this.producer = producer;
-        this.release_date = release_date;
-        this.characters = characters;
-        this.planets = planets;
-        this.starships = starships;
-        this.vehicles = vehicles;
-        this.species = species;
-        this.created = created;
-        this.edited = edited;
-        this.url = url;
-    }
-
 
     public String getTitle() {
         return title;
@@ -95,14 +72,10 @@ public class Film {
         this.release_date = release_date;
     }
 
-    public void setBaseUrl(String baseUrl) {
-        this.baseUrl = baseUrl;
-    }
-
     public List<String> getCharacters() {
-        if (characters != null && baseUrl != null) {
+        if (characters != null && getBaseUrl() != null) {
             return characters.stream()
-                .map(character -> baseUrl + character)
+                .map(character -> getBaseUrl() + character)
                 .toList();
         }
         return characters;
@@ -113,9 +86,9 @@ public class Film {
     }
 
     public List<String> getPlanets() {
-        if (planets != null && baseUrl != null) {
+        if (planets != null && getBaseUrl() != null) {
             return planets.stream()
-                .map(planet -> baseUrl + planet)
+                .map(planet -> getBaseUrl() + planet)
                 .toList();
         }
         return planets;
@@ -126,9 +99,9 @@ public class Film {
     }
 
     public List<String> getStarships() {
-        if (starships != null && baseUrl != null) {
+        if (starships != null && getBaseUrl() != null) {
             return starships.stream()
-                .map(starship -> baseUrl + starship)
+                .map(starship -> getBaseUrl() + starship)
                 .toList();
         }
         return starships;
@@ -139,9 +112,9 @@ public class Film {
     }
 
     public List<String> getVehicles() {
-        if (vehicles != null && baseUrl != null) {
+        if (vehicles != null && getBaseUrl() != null) {
             return vehicles.stream()
-                .map(vehicle -> baseUrl + vehicle)
+                .map(vehicle -> getBaseUrl() + vehicle)
                 .toList();
         }
         return vehicles;
@@ -152,9 +125,9 @@ public class Film {
     }
 
     public List<String> getSpecies() {
-        if (species != null && baseUrl != null) {
+        if (species != null && getBaseUrl() != null) {
             return species.stream()
-                .map(specie -> baseUrl + specie)
+                .map(specie -> getBaseUrl() + specie)
                 .toList();
         }
         return species;

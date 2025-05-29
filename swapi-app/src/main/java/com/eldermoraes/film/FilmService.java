@@ -61,7 +61,7 @@ public class FilmService {
 
     public Film getFilmByTitle(String title) {
         return FILMS.stream()
-                .filter(film -> film.getTitle().equalsIgnoreCase(title))
+                .filter(film -> film.getTitle().toLowerCase().contains(title.toLowerCase()))
                 .findFirst()
                 .orElse(null);
     }
