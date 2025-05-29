@@ -1,6 +1,7 @@
-package com.eldermoraes;
+package com.eldermoraes.film;
 
 import java.util.List;
+import jakarta.json.bind.annotation.JsonbTransient;
 
 public class Film {
 
@@ -18,6 +19,9 @@ public class Film {
     private String created;
     private String edited;
     private String url;
+
+    @JsonbTransient
+    private String baseUrl;
 
     public Film() {
 
@@ -91,7 +95,16 @@ public class Film {
         this.release_date = release_date;
     }
 
+    public void setBaseUrl(String baseUrl) {
+        this.baseUrl = baseUrl;
+    }
+
     public List<String> getCharacters() {
+        if (characters != null && baseUrl != null) {
+            return characters.stream()
+                .map(character -> baseUrl + character)
+                .toList();
+        }
         return characters;
     }
 
@@ -100,6 +113,11 @@ public class Film {
     }
 
     public List<String> getPlanets() {
+        if (planets != null && baseUrl != null) {
+            return planets.stream()
+                .map(planet -> baseUrl + planet)
+                .toList();
+        }
         return planets;
     }
 
@@ -108,6 +126,11 @@ public class Film {
     }
 
     public List<String> getStarships() {
+        if (starships != null && baseUrl != null) {
+            return starships.stream()
+                .map(starship -> baseUrl + starship)
+                .toList();
+        }
         return starships;
     }
 
@@ -116,6 +139,11 @@ public class Film {
     }
 
     public List<String> getVehicles() {
+        if (vehicles != null && baseUrl != null) {
+            return vehicles.stream()
+                .map(vehicle -> baseUrl + vehicle)
+                .toList();
+        }
         return vehicles;
     }
 
@@ -124,6 +152,11 @@ public class Film {
     }
 
     public List<String> getSpecies() {
+        if (species != null && baseUrl != null) {
+            return species.stream()
+                .map(specie -> baseUrl + specie)
+                .toList();
+        }
         return species;
     }
 
