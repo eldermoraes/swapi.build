@@ -14,9 +14,8 @@ public class PeopleResource {
     private final PeopleService peopleService;
 
     PeopleResource(UriInfo uriInfo, PeopleService peopleService) {
-        String hostUrl = uriInfo.getBaseUri().toString();
         this.peopleService = peopleService;
-        this.peopleService.setBaseUrl(hostUrl);
+        this.peopleService.setBaseUrl(uriInfo.getBaseUri().toString());
     }
 
     @GET

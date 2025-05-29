@@ -12,10 +12,8 @@ public class FilmResource {
     private final FilmService filmService;
 
     FilmResource(UriInfo uriInfo, FilmService filmService){
-        String hostUrl = uriInfo.getBaseUri().toString();
-
         this.filmService = filmService;
-        this.filmService.setBaseUrl(hostUrl);
+        this.filmService.setBaseUrl(uriInfo.getBaseUri().toString());
     }
 
     @GET
