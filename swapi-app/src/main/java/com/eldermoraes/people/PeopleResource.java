@@ -1,14 +1,13 @@
 package com.eldermoraes.people;
 
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.Path;
-import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.QueryParam;
+import io.smallrye.common.annotation.RunOnVirtualThread;
+import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 
 @Path("people")
+@RunOnVirtualThread
 public class PeopleResource {
 
     private final PeopleService peopleService;
@@ -28,4 +27,14 @@ public class PeopleResource {
         }
     }
 
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("{id}")
+    public Response getPeopleById(@PathParam("id") String id) {
+        if (id != null && !id.isEmpty()) {
+            return Response.accepted().entity(peopleService.getPeopleById(Integer.parseInt(id))).build();
+        } else {
+            return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
+        }
+    }
 }

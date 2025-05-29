@@ -62,4 +62,8 @@ public class PlanetService  implements SWService {
                 .findFirst()
                 .orElse(null);
     }
+
+    public Planet getPlanetById(int id) {
+        return planetList.get(id - 1);
+    }
 }

@@ -63,4 +63,8 @@ public class PeopleService implements SWService {
                 .orElse(null);
     }
 
+    public People getPeopleById(int id) {
+        return peopleList.get(id - 1);
+    }
+
 }

@@ -1,5 +1,6 @@
 package com.eldermoraes.film;
 
+import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -7,6 +8,7 @@ import jakarta.ws.rs.core.UriInfo;
 import java.util.List;
 
 @Path("/films")
+@RunOnVirtualThread
 public class FilmResource {
 
     private final FilmService filmService;

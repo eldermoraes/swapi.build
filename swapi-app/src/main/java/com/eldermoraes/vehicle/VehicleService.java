@@ -62,4 +62,8 @@ public class VehicleService implements SWService {
                 .findFirst()
                 .orElse(null);
     }
+
+    public Vehicle getVehicleById(int id) {
+        return vehicleList.get(id - 1);
+    }
 }

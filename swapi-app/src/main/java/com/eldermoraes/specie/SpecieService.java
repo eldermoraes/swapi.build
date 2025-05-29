@@ -62,4 +62,8 @@ public class SpecieService implements SWService {
                 .findFirst()
                 .orElse(null);
     }
+
+    public Specie getSpecieById(int id) {
+        return specieList.get(id - 1);
+    }
 }

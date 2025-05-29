@@ -62,4 +62,8 @@ public class StarshipService implements SWService {
                 .findFirst()
                 .orElse(null);
     }
+
+    public Starship getStarshipById(int id) {
+        return starshipList.get(id - 1);
+    }
 }
