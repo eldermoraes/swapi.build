@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.lang.reflect.Type;
+import java.util.concurrent.ThreadLocalRandom;
 
 @ApplicationScoped
 public class FilmService implements SWService {
@@ -67,5 +68,12 @@ public class FilmService implements SWService {
                 .filter(film -> film.getTitle().toLowerCase().contains(title.toLowerCase()))
                 .findFirst()
                 .orElse(null);
+    }
+
+    public Film getRandomFilm() {
+        if (filmList == null || filmList.isEmpty()) {
+            return null;
+        }
+        return filmList.get(ThreadLocalRandom.current().nextInt(filmList.size()));
     }
 }

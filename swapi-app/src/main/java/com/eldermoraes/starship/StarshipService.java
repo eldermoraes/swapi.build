@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 @ApplicationScoped
 public class StarshipService implements SWService {
@@ -65,5 +66,12 @@ public class StarshipService implements SWService {
 
     public Starship getStarshipById(int id) {
         return starshipList.get(id - 1);
+    }
+
+    public Starship getRandomStarship() {
+        if (starshipList == null || starshipList.isEmpty()) {
+            return null;
+        }
+        return starshipList.get(ThreadLocalRandom.current().nextInt(starshipList.size()));
     }
 }

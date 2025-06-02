@@ -39,4 +39,11 @@ public class VehicleResource {
             return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
         }
     }
+
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("random")
+    public Response getRandomVehicle() {
+        return Response.accepted().entity(vehicleService.getRandomVehicle()).build();
+    }
 }

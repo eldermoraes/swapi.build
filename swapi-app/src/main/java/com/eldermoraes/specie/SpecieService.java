@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 @ApplicationScoped
 public class SpecieService implements SWService {
@@ -65,5 +66,12 @@ public class SpecieService implements SWService {
 
     public Specie getSpecieById(int id) {
         return specieList.get(id - 1);
+    }
+
+    public Specie getRandomSpecie() {
+        if (specieList == null || specieList.isEmpty()) {
+            return null;
+        }
+        return specieList.get(ThreadLocalRandom.current().nextInt(specieList.size()));
     }
 }

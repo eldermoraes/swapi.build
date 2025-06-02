@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 @ApplicationScoped
 public class VehicleService implements SWService {
@@ -65,5 +66,12 @@ public class VehicleService implements SWService {
 
     public Vehicle getVehicleById(int id) {
         return vehicleList.get(id - 1);
+    }
+
+    public Vehicle getRandomVehicle() {
+        if (vehicleList == null || vehicleList.isEmpty()) {
+            return null;
+        }
+        return vehicleList.get(ThreadLocalRandom.current().nextInt(vehicleList.size()));
     }
 }

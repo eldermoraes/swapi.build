@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 @ApplicationScoped
 public class PlanetService  implements SWService {
@@ -65,5 +66,12 @@ public class PlanetService  implements SWService {
 
     public Planet getPlanetById(int id) {
         return planetList.get(id - 1);
+    }
+
+    public Planet getRandomPlanet() {
+        if (planetList == null || planetList.isEmpty()) {
+            return null;
+        }
+        return planetList.get(ThreadLocalRandom.current().nextInt(planetList.size()));
     }
 }

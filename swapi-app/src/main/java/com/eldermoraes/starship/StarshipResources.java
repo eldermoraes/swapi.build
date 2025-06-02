@@ -38,4 +38,11 @@ public class StarshipResources {
         }
     }
 
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("random")
+    public Response getRandomStarship() {
+        return Response.accepted().entity(starshipService.getRandomStarship()).build();
+    }
+
 }

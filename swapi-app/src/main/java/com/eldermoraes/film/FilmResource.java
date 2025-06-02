@@ -36,4 +36,11 @@ public class FilmResource {
         return Response.accepted().entity(filmService.getFilmByEpisodeId(episodeId)).build();
     }
 
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("random")
+    public Response getRandomFilm() {
+        return Response.accepted().entity(filmService.getRandomFilm()).build();
+    }
+
 }

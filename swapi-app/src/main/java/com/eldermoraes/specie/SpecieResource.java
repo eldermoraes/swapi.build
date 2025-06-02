@@ -39,4 +39,11 @@ public class SpecieResource {
         }
     }
 
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("random")
+    public Response getRandomSpecie() {
+        return Response.accepted().entity(specieService.getRandomSpecie()).build();
+    }
+
 }

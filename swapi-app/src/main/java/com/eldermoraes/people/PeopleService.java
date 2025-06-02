@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 @ApplicationScoped
 public class PeopleService implements SWService {
@@ -64,7 +65,16 @@ public class PeopleService implements SWService {
     }
 
     public People getPeopleById(int id) {
+        if (peopleList == null || id < 1 || id > peopleList.size()) {
+            return null;
+        }
         return peopleList.get(id - 1);
     }
 
+    public People getRandomPeople() {
+        if (peopleList == null || peopleList.isEmpty()) {
+            return null;
+        }
+        return peopleList.get(ThreadLocalRandom.current().nextInt(peopleList.size()));
+    }
 }

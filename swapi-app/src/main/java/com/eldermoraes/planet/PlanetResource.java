@@ -39,4 +39,11 @@ public class PlanetResource {
             return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
         }
     }
+
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("random")
+    public Response getRandomPlanet() {
+        return Response.accepted().entity(planetService.getRandomPlanet()).build();
+    }
 }
