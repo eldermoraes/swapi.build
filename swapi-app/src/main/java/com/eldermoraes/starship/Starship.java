@@ -1,9 +1,11 @@
 package com.eldermoraes.starship;
 
 import com.eldermoraes.SWObject;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 
 import java.util.List;
 
+@RegisterForReflection
 public class Starship extends SWObject {
 
     private String name;

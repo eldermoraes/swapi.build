@@ -1,8 +1,11 @@
 package com.eldermoraes.people;
 
 import com.eldermoraes.SWObject;
+import io.quarkus.runtime.annotations.RegisterForReflection;
+
 import java.util.List;
 
+@RegisterForReflection
 public class People extends SWObject {
 
     private String name;

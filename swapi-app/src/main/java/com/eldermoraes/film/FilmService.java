@@ -6,6 +6,7 @@ import jakarta.json.bind.Jsonb;
 import jakarta.json.bind.JsonbBuilder;
 import jakarta.json.bind.JsonbConfig;
 import java.io.InputStream;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.lang.reflect.Type;
@@ -33,22 +34,27 @@ public class FilmService implements SWService {
     @Override
     public void loadJsonData() {
         JsonbConfig config = new JsonbConfig().withFormatting(true);
-        try (Jsonb jsonb = JsonbBuilder.create(config);
-             InputStream is = Thread.currentThread().getContextClassLoader()
-                     .getResourceAsStream("films.json")) {
+        URL url = getClass().getResource("/data/films.json");
+        if (url != null) {
+            try (Jsonb jsonb = JsonbBuilder.create(config);
 
-            if (is == null) {
-                System.err.println("Could not find films.json in resources");
+                 InputStream is = url.openStream()) {
+
+                if (is == null) {
+                    System.err.println("Could not get data from films.json");
+                    filmList = new ArrayList<>();
+                    return;
+                }
+
+                Type listType = new ArrayList<Film>(){}.getClass().getGenericSuperclass();
+                filmList = jsonb.fromJson(is, listType);
+
+            } catch (Exception e) {
+                System.err.println("Error loading films: " + e.getMessage());
                 filmList = new ArrayList<>();
-                return;
             }
-
-            Type listType = new ArrayList<Film>(){}.getClass().getGenericSuperclass();
-            filmList = jsonb.fromJson(is, listType);
-
-        } catch (Exception e) {
-            System.err.println("Error loading films: " + e.getMessage());
-            filmList = new ArrayList<>();
+        } else{
+            System.err.println("Could not find films.json in resources");
         }
     }
 

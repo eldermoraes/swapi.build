@@ -2,7 +2,9 @@ package com.eldermoraes.film;
 
 import java.util.List;
 import com.eldermoraes.SWObject;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 
+@RegisterForReflection
 public class Film extends SWObject {
 
     private String title;

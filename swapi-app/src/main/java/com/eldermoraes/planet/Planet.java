@@ -1,9 +1,11 @@
 package com.eldermoraes.planet;
 
 import com.eldermoraes.SWObject;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 
 import java.util.List;
 
+@RegisterForReflection
 public class Planet extends SWObject {
 
     private String name;

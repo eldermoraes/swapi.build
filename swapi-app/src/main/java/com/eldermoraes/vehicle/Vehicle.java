@@ -1,9 +1,11 @@
 package com.eldermoraes.vehicle;
 
 import com.eldermoraes.SWObject;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 
 import java.util.List;
 
+@RegisterForReflection
 public class Vehicle extends SWObject {
 
     private String name;

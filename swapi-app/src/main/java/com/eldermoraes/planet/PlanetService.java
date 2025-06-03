@@ -8,6 +8,7 @@ import jakarta.json.bind.JsonbConfig;
 
 import java.io.InputStream;
 import java.lang.reflect.Type;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -34,22 +35,27 @@ public class PlanetService  implements SWService {
     @Override
     public void loadJsonData() {
         JsonbConfig config = new JsonbConfig().withFormatting(true);
-        try (Jsonb jsonb = JsonbBuilder.create(config);
-             InputStream is = Thread.currentThread().getContextClassLoader()
-                     .getResourceAsStream("planets.json")) {
+        URL url = getClass().getResource("/data/planets.json");
+        if (url != null) {
+            try (Jsonb jsonb = JsonbBuilder.create(config);
 
-            if (is == null) {
-                System.err.println("Could not find planets.json in resources");
+                 InputStream is = url.openStream()) {
+
+                if (is == null) {
+                    System.err.println("Could not get data from planet.json");
+                    planetList = new ArrayList<>();
+                    return;
+                }
+
+                Type listType = new ArrayList<Planet>(){}.getClass().getGenericSuperclass();
+                planetList = jsonb.fromJson(is, listType);
+
+            } catch (Exception e) {
+                System.err.println("Error loading planet: " + e.getMessage());
                 planetList = new ArrayList<>();
-                return;
             }
-
-            Type listType = new ArrayList<Planet>(){}.getClass().getGenericSuperclass();
-            planetList = jsonb.fromJson(is, listType);
-
-        } catch (Exception e) {
-            System.err.println("Error loading films: " + e.getMessage());
-            planetList = new ArrayList<>();
+        } else{
+            System.err.println("Could not find planet.json in resources");
         }
     }
 

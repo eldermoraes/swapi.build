@@ -8,9 +8,11 @@ import jakarta.json.bind.JsonbConfig;
 
 import java.io.InputStream;
 import java.lang.reflect.Type;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+
 
 @ApplicationScoped
 public class PeopleService implements SWService {
@@ -33,23 +35,29 @@ public class PeopleService implements SWService {
 
     @Override
     public void loadJsonData() {
+
         JsonbConfig config = new JsonbConfig().withFormatting(true);
-        try (Jsonb jsonb = JsonbBuilder.create(config);
-             InputStream is = Thread.currentThread().getContextClassLoader()
-                     .getResourceAsStream("people.json")) {
+        URL url = getClass().getResource("/data/people.json");
+        if (url != null) {
+            try (Jsonb jsonb = JsonbBuilder.create(config);
 
-            if (is == null) {
-                System.err.println("Could not find people.json in resources");
+                 InputStream is = url.openStream()) {
+
+                if (is == null) {
+                    System.err.println("Could not get data from people.json");
+                    peopleList = new ArrayList<>();
+                    return;
+                }
+
+                Type listType = new ArrayList<People>(){}.getClass().getGenericSuperclass();
+                peopleList = jsonb.fromJson(is, listType);
+
+            } catch (Exception e) {
+                System.err.println("Error loading people: " + e.getMessage());
                 peopleList = new ArrayList<>();
-                return;
             }
-
-            Type listType = new ArrayList<People>(){}.getClass().getGenericSuperclass();
-            peopleList = jsonb.fromJson(is, listType);
-
-        } catch (Exception e) {
-            System.err.println("Error loading films: " + e.getMessage());
-            peopleList = new ArrayList<>();
+        } else{
+            System.err.println("Could not find people.json in resources");
         }
     }
 

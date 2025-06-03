@@ -8,6 +8,7 @@ import jakarta.json.bind.JsonbConfig;
 
 import java.io.InputStream;
 import java.lang.reflect.Type;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -34,22 +35,27 @@ public class StarshipService implements SWService {
     @Override
     public void loadJsonData() {
         JsonbConfig config = new JsonbConfig().withFormatting(true);
-        try (Jsonb jsonb = JsonbBuilder.create(config);
-             InputStream is = Thread.currentThread().getContextClassLoader()
-                     .getResourceAsStream("starships.json")) {
+        URL url = getClass().getResource("/data/starships.json");
+        if (url != null) {
+            try (Jsonb jsonb = JsonbBuilder.create(config);
 
-            if (is == null) {
-                System.err.println("Could not find starships.json in resources");
+                 InputStream is = url.openStream()) {
+
+                if (is == null) {
+                    System.err.println("Could not get data from starships.json");
+                    starshipList = new ArrayList<>();
+                    return;
+                }
+
+                Type listType = new ArrayList<Starship>(){}.getClass().getGenericSuperclass();
+                starshipList = jsonb.fromJson(is, listType);
+
+            } catch (Exception e) {
+                System.err.println("Error loading starships: " + e.getMessage());
                 starshipList = new ArrayList<>();
-                return;
             }
-
-            Type listType = new ArrayList<Starship>(){}.getClass().getGenericSuperclass();
-            starshipList = jsonb.fromJson(is, listType);
-
-        } catch (Exception e) {
-            System.err.println("Error loading films: " + e.getMessage());
-            starshipList = new ArrayList<>();
+        } else{
+            System.err.println("Could not find starships.json in resources");
         }
     }
 
