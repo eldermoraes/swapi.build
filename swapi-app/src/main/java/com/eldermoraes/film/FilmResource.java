@@ -1,5 +1,6 @@
 package com.eldermoraes.film;
 
+import io.quarkus.logging.Log;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -40,6 +41,7 @@ public class FilmResource {
     @Produces(MediaType.APPLICATION_JSON)
     @Path("random")
     public Response getRandomFilm() {
+        Log.info("Thread name: " + Thread.currentThread().getName());
         return Response.accepted().entity(filmService.getRandomFilm()).build();
     }
 

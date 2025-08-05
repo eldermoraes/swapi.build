@@ -1,5 +1,6 @@
 package com.eldermoraes.people;
 
+import io.quarkus.logging.Log;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -42,6 +43,7 @@ public class PeopleResource {
     @Produces(MediaType.APPLICATION_JSON)
     @Path("random")
     public Response getRandomPeople() {
+        Log.info("Thread name: " + Thread.currentThread().getName());
         return Response.accepted().entity(peopleService.getRandomPeople()).build();
     }
 }
