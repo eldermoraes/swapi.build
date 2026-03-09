@@ -22,3 +22,17 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# IDE
+.idea/
+
+# Claude Code
+CLAUDE.md
+
+# Quinoa cache
+swapi-app/.quinoa/
+
+# Frontend
+swapi-app/src/main/webui/node_modules/
+swapi-app/src/main/webui/dist/
+swapi-app/src/main/webui/.quinoa/
