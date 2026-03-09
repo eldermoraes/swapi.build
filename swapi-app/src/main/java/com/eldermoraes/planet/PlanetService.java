@@ -63,11 +63,10 @@ public class PlanetService  implements SWService {
         return planetList;
     }
 
-    public Planet getPlanetByName(String name) {
+    public List<Planet> getPlanetByName(String name) {
         return planetList.stream()
                 .filter(planet -> planet.getName().toLowerCase().contains(name.toLowerCase()))
-                .findFirst()
-                .orElse(null);
+                .collect(java.util.stream.Collectors.toList());
     }
 
     public Planet getPlanetById(int id) {

@@ -69,11 +69,10 @@ public class FilmService implements SWService {
                 .orElse(null);
     }
 
-    public Film getFilmByTitle(String title) {
+    public List<Film> getFilmByTitle(String title) {
         return filmList.stream()
                 .filter(film -> film.getTitle().toLowerCase().contains(title.toLowerCase()))
-                .findFirst()
-                .orElse(null);
+                .collect(java.util.stream.Collectors.toList());
     }
 
     public Film getRandomFilm() {

@@ -64,11 +64,10 @@ public class SpecieService implements SWService {
         return specieList;
     }
 
-    public Specie getSpecieByName(String name) {
+    public List<Specie> getSpecieByName(String name) {
         return specieList.stream()
                 .filter(specie -> specie.getName().toLowerCase().contains(name.toLowerCase()))
-                .findFirst()
-                .orElse(null);
+                .collect(java.util.stream.Collectors.toList());
     }
 
     public Specie getSpecieById(int id) {

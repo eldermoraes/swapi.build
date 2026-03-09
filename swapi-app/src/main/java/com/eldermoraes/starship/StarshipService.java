@@ -63,11 +63,10 @@ public class StarshipService implements SWService {
         return starshipList;
     }
 
-    public Starship getStarshipByName(String name) {
+    public List<Starship> getStarshipByName(String name) {
         return starshipList.stream()
                 .filter(starship -> starship.getName().toLowerCase().contains(name.toLowerCase()))
-                .findFirst()
-                .orElse(null);
+                .collect(java.util.stream.Collectors.toList());
     }
 
     public Starship getStarshipById(int id) {

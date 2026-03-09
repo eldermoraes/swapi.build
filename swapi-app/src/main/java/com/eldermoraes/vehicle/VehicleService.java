@@ -63,11 +63,10 @@ public class VehicleService implements SWService {
         return vehicleList;
     }
 
-    public Vehicle getVehicleByName(String name) {
+    public List<Vehicle> getVehicleByName(String name) {
         return vehicleList.stream()
                 .filter(vehicle -> vehicle.getName().toLowerCase().contains(name.toLowerCase()))
-                .findFirst()
-                .orElse(null);
+                .collect(java.util.stream.Collectors.toList());
     }
 
     public Vehicle getVehicleById(int id) {

@@ -65,11 +65,10 @@ public class PeopleService implements SWService {
         return peopleList;
     }
 
-    public People getPeopleByName(String name) {
+    public List<People> getPeopleByName(String name) {
         return peopleList.stream()
                 .filter(people -> people.getName().toLowerCase().contains(name.toLowerCase()))
-                .findFirst()
-                .orElse(null);
+                .collect(java.util.stream.Collectors.toList());
     }
 
     public People getPeopleById(int id) {
