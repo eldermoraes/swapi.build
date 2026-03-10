@@ -72,10 +72,14 @@ public class PeopleService implements SWService {
     }
 
     public People getPeopleById(int id) {
-        if (peopleList == null || id < 1 || id > peopleList.size()) {
+        if (peopleList == null) {
             return null;
         }
-        return peopleList.get(id - 1);
+        String suffix = "/people/" + id;
+        return peopleList.stream()
+                .filter(p -> p.getUrl() != null && p.getUrl().endsWith(suffix))
+                .findFirst()
+                .orElse(null);
     }
 
     public People getRandomPeople() {

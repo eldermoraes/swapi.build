@@ -70,7 +70,14 @@ public class PlanetService  implements SWService {
     }
 
     public Planet getPlanetById(int id) {
-        return planetList.get(id - 1);
+        if (planetList == null) {
+            return null;
+        }
+        String suffix = "/planets/" + id;
+        return planetList.stream()
+                .filter(p -> p.getUrl() != null && p.getUrl().endsWith(suffix))
+                .findFirst()
+                .orElse(null);
     }
 
     public Planet getRandomPlanet() {

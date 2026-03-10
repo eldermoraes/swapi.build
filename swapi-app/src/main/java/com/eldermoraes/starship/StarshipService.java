@@ -70,7 +70,14 @@ public class StarshipService implements SWService {
     }
 
     public Starship getStarshipById(int id) {
-        return starshipList.get(id - 1);
+        if (starshipList == null) {
+            return null;
+        }
+        String suffix = "/starships/" + id;
+        return starshipList.stream()
+                .filter(s -> s.getUrl() != null && s.getUrl().endsWith(suffix))
+                .findFirst()
+                .orElse(null);
     }
 
     public Starship getRandomStarship() {

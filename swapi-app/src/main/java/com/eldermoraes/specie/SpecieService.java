@@ -71,7 +71,14 @@ public class SpecieService implements SWService {
     }
 
     public Specie getSpecieById(int id) {
-        return specieList.get(id - 1);
+        if (specieList == null) {
+            return null;
+        }
+        String suffix = "/species/" + id;
+        return specieList.stream()
+                .filter(s -> s.getUrl() != null && s.getUrl().endsWith(suffix))
+                .findFirst()
+                .orElse(null);
     }
 
     public Specie getRandomSpecie() {

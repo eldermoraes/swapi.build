@@ -70,7 +70,14 @@ public class VehicleService implements SWService {
     }
 
     public Vehicle getVehicleById(int id) {
-        return vehicleList.get(id - 1);
+        if (vehicleList == null) {
+            return null;
+        }
+        String suffix = "/vehicles/" + id;
+        return vehicleList.stream()
+                .filter(v -> v.getUrl() != null && v.getUrl().endsWith(suffix))
+                .findFirst()
+                .orElse(null);
     }
 
     public Vehicle getRandomVehicle() {
