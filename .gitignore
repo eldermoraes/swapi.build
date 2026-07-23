@@ -29,6 +29,10 @@ replay_pid*
 # Claude Code
 CLAUDE.md
 
+# Secrets and Vercel local config
+.env
+.vercel/
+
 # Quinoa cache
 swapi-app/.quinoa/
 
