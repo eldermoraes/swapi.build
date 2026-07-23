@@ -87,6 +87,10 @@ java -jar target/quarkus-app/quarkus-run.jar
 
 The frontend is automatically built and bundled by [Quinoa](https://docs.quarkiverse.io/quarkus-quinoa/dev/index.html) during the Maven build. No separate `npm` step is needed.
 
+## Deployment
+
+The app runs on [Vercel](https://vercel.com/) as a native (GraalVM/Mandrel) container image, built from `swapi-app/Dockerfile.vercel`. DNS is managed on Cloudflare (DNS-only records pointing to Vercel). Deploys are done with `npx vercel deploy --prod` from the `swapi-app/` directory.
+
 ## Tech Stack
 
 - **Runtime:** [Quarkus 3.23](https://quarkus.io/) on Java 21+ with Virtual Threads
