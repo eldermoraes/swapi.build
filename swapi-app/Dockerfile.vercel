@@ -1,12 +1,13 @@
 ## Stage 1: build nativo (Mandrel) — o Quinoa baixa Node 20.18.1 e builda o frontend durante o package
 FROM quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-25 AS build
+ARG NATIVE_XMX=6g
 USER quarkus
 WORKDIR /code
 COPY --chown=quarkus:quarkus mvnw /code/mvnw
 COPY --chown=quarkus:quarkus .mvn /code/.mvn
 COPY --chown=quarkus:quarkus pom.xml /code/
 COPY --chown=quarkus:quarkus src /code/src
-RUN ./mvnw package -Dnative -DskipTests -Dquarkus.native.native-image-xmx=6g
+RUN ./mvnw package -Dnative -DskipTests -Dquarkus.native.native-image-xmx=${NATIVE_XMX}
 
 ## Stage 2: runtime micro UBI9 (glibc 2.34, compativel com o builder ubi9)
 FROM quay.io/quarkus/ubi9-quarkus-micro-image:2.0
