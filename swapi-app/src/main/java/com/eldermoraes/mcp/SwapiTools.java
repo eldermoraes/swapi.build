@@ -9,10 +9,13 @@ import com.eldermoraes.vehicle.VehicleService;
 import io.quarkiverse.mcp.server.Tool;
 import io.quarkiverse.mcp.server.ToolArg;
 import io.quarkiverse.mcp.server.ToolCallException;
+import io.vertx.core.http.HttpServerRequest;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.json.bind.Jsonb;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+
+import java.util.Optional;
 
 @ApplicationScoped
 public class SwapiTools {
@@ -27,18 +30,36 @@ public class SwapiTools {
     @Inject VehicleService vehicleService;
     @Inject Jsonb jsonb;
 
-    @ConfigProperty(name = "swapi.public-base-url", defaultValue = "https://swapi.build/api")
-    String publicBaseUrl;
+    @ConfigProperty(name = "swapi.public-base-url")
+    Optional<String> publicBaseUrl;
 
-    // Os services montam URLs como baseUrl + path; o REST seta via UriInfo por request,
-    // aqui o contexto e fixo e vem de config.
+    // Client proxy request-scoped: resolve para a request MCP ativa no momento
+    // da chamada da tool (transporte HTTP ativa o contexto CDI de request).
+    @Inject HttpServerRequest request;
+
+    // Os services montam URLs como baseUrl + path; o REST descobre via UriInfo por
+    // request. Aqui a config explicita vence (escape hatch operacional); sem ela,
+    // o dominio vem da propria request - nada de dominio hardcoded no binario.
+    private String resolveBaseUrl() {
+        if (publicBaseUrl.isPresent()) {
+            return publicBaseUrl.get();
+        }
+        try {
+            return request.scheme() + "://" + request.host() + "/api";
+        } catch (RuntimeException e) {
+            throw new ToolCallException("Cannot resolve public base URL: "
+                    + "no active HTTP request and swapi.public-base-url is not set");
+        }
+    }
+
     private void applyBaseUrl() {
-        peopleService.setBaseUrl(publicBaseUrl);
-        filmService.setBaseUrl(publicBaseUrl);
-        planetService.setBaseUrl(publicBaseUrl);
-        specieService.setBaseUrl(publicBaseUrl);
-        starshipService.setBaseUrl(publicBaseUrl);
-        vehicleService.setBaseUrl(publicBaseUrl);
+        String baseUrl = resolveBaseUrl();
+        peopleService.setBaseUrl(baseUrl);
+        filmService.setBaseUrl(baseUrl);
+        planetService.setBaseUrl(baseUrl);
+        specieService.setBaseUrl(baseUrl);
+        starshipService.setBaseUrl(baseUrl);
+        vehicleService.setBaseUrl(baseUrl);
     }
 
     @Tool(description = "Lists all entities of a Star Wars resource type from swapi.build. "
