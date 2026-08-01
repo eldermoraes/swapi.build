@@ -8,7 +8,7 @@ Tornar README e site (swapi.build) informativos sobre o MCP server lançado em 0
 
 ## Decisões (com o usuário)
 
-1. **Página `/mcp` dedicada** no site + item "MCP" no nav + callout no hero da home. `/docs` continua só REST.
+1. **Página dedicada** no site + item "MCP" no nav + callout no hero da home. `/docs` continua só REST. **Path da página: `/docs/mcp`** — o path `/mcp` pertence ao endpoint MCP (GET retorna 405, verificado em produção); a URL pública do endpoint não muda.
 2. **Guias completos nos dois lugares**: README com snippets copy-paste dos clients (em `<details>` colapsáveis) e página `/mcp` com o mesmo conteúdo mais contexto. Duplicação aceita.
 3. **Abas** para o setup por client na página `/mcp` (não seções empilhadas).
 4. **Escopo carona**: commit "MCP polish" do backlog no mesmo ciclo/deploy — `destructiveHint = false` nas 4 `@Tool.Annotations`, asserts de hints das 4 tools, `%test.swapi.public-base-url`.
