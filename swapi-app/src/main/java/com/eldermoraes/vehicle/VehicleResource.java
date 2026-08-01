@@ -37,7 +37,12 @@ public class VehicleResource {
     @Path("{id}")
     public Response getVehicleById(@PathParam("id") String id) {
         if (id != null && !id.isEmpty()) {
-            return Response.accepted().entity(vehicleService.getVehicleById(Integer.parseInt(id))).build();
+            Vehicle vehicle = vehicleService.getVehicleById(Integer.parseInt(id));
+            if (vehicle == null) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity("No vehicle found with id " + id).build();
+            }
+            return Response.accepted().entity(vehicle).build();
         } else {
             return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
         }

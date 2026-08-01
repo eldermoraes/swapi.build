@@ -35,7 +35,12 @@ public class StarshipResources {
     @Path("{id}")
     public Response getStarshipById(@PathParam("id") String id) {
         if (id != null && !id.isEmpty()) {
-            return Response.accepted().entity(starshipService.getStarshipById(Integer.parseInt(id))).build();
+            Starship starship = starshipService.getStarshipById(Integer.parseInt(id));
+            if (starship == null) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity("No starship found with id " + id).build();
+            }
+            return Response.accepted().entity(starship).build();
         } else {
             return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
         }

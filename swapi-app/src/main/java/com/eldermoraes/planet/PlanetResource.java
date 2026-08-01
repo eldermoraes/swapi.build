@@ -37,7 +37,12 @@ public class PlanetResource {
     @Produces(MediaType.APPLICATION_JSON)
     public Response getPlanetById(@PathParam("id") String id) {
         if (id != null && !id.isEmpty()) {
-            return Response.accepted().entity(planetService.getPlanetById(Integer.parseInt(id))).build();
+            Planet planet = planetService.getPlanetById(Integer.parseInt(id));
+            if (planet == null) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity("No planet found with id " + id).build();
+            }
+            return Response.accepted().entity(planet).build();
         } else {
             return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
         }

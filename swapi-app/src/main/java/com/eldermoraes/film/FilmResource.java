@@ -36,7 +36,12 @@ public class FilmResource {
     @Produces(MediaType.APPLICATION_JSON)
     @Path("{id}")
     public Response getFilmById(@PathParam("id") int id){
-        return Response.accepted().entity(filmService.getFilmById(id)).build();
+        Film film = filmService.getFilmById(id);
+        if (film == null) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .entity("No film found with id " + id).build();
+        }
+        return Response.accepted().entity(film).build();
     }
 
     @GET

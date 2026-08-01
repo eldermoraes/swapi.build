@@ -35,7 +35,12 @@ public class PeopleResource {
     @Path("{id}")
     public Response getPeopleById(@PathParam("id") String id) {
         if (id != null && !id.isEmpty()) {
-            return Response.accepted().entity(peopleService.getPeopleById(Integer.parseInt(id))).build();
+            People people = peopleService.getPeopleById(Integer.parseInt(id));
+            if (people == null) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity("No people found with id " + id).build();
+            }
+            return Response.accepted().entity(people).build();
         } else {
             return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
         }

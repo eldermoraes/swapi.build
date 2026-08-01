@@ -36,7 +36,12 @@ public class SpecieResource {
     @Path("{id}")
     public Response getSpecieById(@PathParam("id") String id) {
         if (id != null && !id.isEmpty()) {
-            return Response.accepted().entity(specieService.getSpecieById(Integer.parseInt(id))).build();
+            Specie specie = specieService.getSpecieById(Integer.parseInt(id));
+            if (specie == null) {
+                return Response.status(Response.Status.NOT_FOUND)
+                        .entity("No specie found with id " + id).build();
+            }
+            return Response.accepted().entity(specie).build();
         } else {
             return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
         }
