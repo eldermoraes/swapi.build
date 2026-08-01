@@ -28,16 +28,19 @@ public class SwapiToolsTest {
     }
 
     @Test
-    public void toolsAreListedAsReadOnly() {
+    public void allToolsAdvertiseReadOnlyNonDestructiveHints() {
         client().when()
                 .toolsList(page -> {
                     assertEquals(4, page.size());
-                    page.findByName("sw_list").annotations().ifPresentOrElse(
-                            a -> assertTrue(a.readOnlyHint()),
-                            () -> fail("sw_list sem annotations"));
-                    assertNotNull(page.findByName("sw_get"));
-                    assertNotNull(page.findByName("sw_random"));
-                    assertNotNull(page.findByName("sw_search"));
+                    for (String name : java.util.List.of("sw_list", "sw_get", "sw_random", "sw_search")) {
+                        var tool = page.findByName(name);
+                        assertNotNull(tool, name + " ausente");
+                        tool.annotations().ifPresentOrElse(a -> {
+                            assertTrue(a.readOnlyHint(), name + " deveria ser readOnly");
+                            assertFalse(a.destructiveHint(), name + " nao deveria anunciar destructive");
+                            assertFalse(a.openWorldHint(), name + " nao deveria anunciar openWorld");
+                        }, () -> fail(name + " sem annotations"));
+                    }
                 })
                 .thenAssertResults();
     }

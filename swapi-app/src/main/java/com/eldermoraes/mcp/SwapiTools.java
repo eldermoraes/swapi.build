@@ -44,7 +44,7 @@ public class SwapiTools {
     @Tool(description = "Lists all entities of a Star Wars resource type from swapi.build. "
             + "Returns a JSON array.",
           annotations = @Tool.Annotations(title = "List Star Wars resources",
-                  readOnlyHint = true, idempotentHint = true, openWorldHint = false))
+                  readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
     public String sw_list(
             @ToolArg(description = "Resource type") SwResource resource) {
         applyBaseUrl();
@@ -61,7 +61,7 @@ public class SwapiTools {
     @Tool(description = "Gets one Star Wars entity by numeric id. For FILMS the id is the "
             + "episode id (e.g. 4 = A New Hope). Returns a JSON object.",
           annotations = @Tool.Annotations(title = "Get Star Wars entity by id",
-                  readOnlyHint = true, idempotentHint = true, openWorldHint = false))
+                  readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
     public String sw_get(
             @ToolArg(description = "Resource type") SwResource resource,
             @ToolArg(description = "Numeric id (FILMS: episode id)") int id) {
@@ -84,7 +84,7 @@ public class SwapiTools {
     @Tool(description = "Returns one random Star Wars entity of the given resource type. "
             + "Great for live demos. Returns a JSON object.",
           annotations = @Tool.Annotations(title = "Random Star Wars entity",
-                  readOnlyHint = true, openWorldHint = false))
+                  readOnlyHint = true, destructiveHint = false, openWorldHint = false))
     public String sw_random(
             @ToolArg(description = "Resource type") SwResource resource) {
         applyBaseUrl();
@@ -101,7 +101,7 @@ public class SwapiTools {
     @Tool(description = "Searches a Star Wars resource by name (title for FILMS), "
             + "case-insensitive substring match. Returns a JSON array.",
           annotations = @Tool.Annotations(title = "Search Star Wars resources",
-                  readOnlyHint = true, idempotentHint = true, openWorldHint = false))
+                  readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
     public String sw_search(
             @ToolArg(description = "Resource type") SwResource resource,
             @ToolArg(description = "Name/title fragment") String query) {
