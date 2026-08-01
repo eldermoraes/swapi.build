@@ -92,7 +92,11 @@ public class People extends SWObject {
     }
 
     public String getHomeworld() {
-        return homeworld;
+        if (homeworld == null || homeworld.equals("null") || homeworld.isEmpty()) {
+            return "";
+        } else{
+            return getBaseUrl() + homeworld;
+        }
     }
 
     public void setHomeworld(String homeworld) {

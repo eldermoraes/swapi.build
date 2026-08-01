@@ -53,6 +53,8 @@ public class SwapiToolsTest {
                 .withAssert(r -> {
                     assertFalse(r.isError());
                     assertTrue(r.content().get(0).asText().text().contains("Luke Skywalker"));
+                    assertTrue(r.content().get(0).asText().text()
+                            .contains("\"homeworld\":\"http://localhost:8081/api/planets/1\""));
                 })
                 .send()
                 .thenAssertResults();
