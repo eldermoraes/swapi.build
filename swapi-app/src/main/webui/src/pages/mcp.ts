@@ -91,7 +91,7 @@ url = "${ENDPOINT}"`,
     id: 'ibm-bob',
     label: 'IBM Bob',
     html: `
-      <p>Add to <code>~/.bob/mcp.json</code> (global) or <code>.bob/mcp.json</code> in your project:</p>
+      <p>Add to <code>~/.bob/settings/mcp_settings.json</code> (global) or <code>.bob/mcp.json</code> in your project:</p>
       ${code(
         'bob-json',
         'json',
@@ -146,8 +146,8 @@ export function renderMcp(container: HTMLElement): void {
         </tbody>
       </table>
       <p class="guide-note"><code>resource</code> is one of <code>PEOPLE</code>, <code>FILMS</code>, <code>PLANETS</code>,
-      <code>SPECIES</code>, <code>STARSHIPS</code>, <code>VEHICLES</code>. For <code>FILMS</code>, ids are
-      episode ids (<code>4</code> = A New Hope).</p>
+      <code>SPECIES</code>, <code>STARSHIPS</code>, <code>VEHICLES</code>. Ids are the record ids from each
+      entity's <code>url</code> field (for <code>FILMS</code>, <code>1</code> = A New Hope).</p>
     </section>
 
     <section class="mcp-setup">
@@ -178,7 +178,8 @@ export function renderMcp(container: HTMLElement): void {
     <section class="mcp-trouble">
       <h2>Troubleshooting</h2>
       <p>The server scales to zero when idle. If the very first connection attempt fails or times out,
-      retry once — the container cold-starts in milliseconds and stateless requests are immune after that.</p>
+      retry once — the native binary starts in tens of milliseconds (the platform may take a bit longer
+      to provision the container) and stateless requests are immune after that.</p>
     </section>
   `;
 
