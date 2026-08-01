@@ -10,6 +10,10 @@ export function renderHome(container: HTMLElement): void {
     <section class="hero">
       <h1>SWAPI</h1>
       <p class="subtitle">The Star Wars API. All the Star Wars data you've ever wanted.</p>
+      <a href="/docs/mcp" class="mcp-callout">
+        <span class="mcp-callout-badge">NEW</span>
+        Now also a remote MCP server — stateless spec 2026-07-28. Point your AI agent at it &rarr;
+      </a>
     </section>
 
     <section class="try-it">

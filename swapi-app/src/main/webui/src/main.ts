@@ -3,6 +3,7 @@ import { renderHome } from './pages/home';
 import { renderResourceList, renderResourceDetail } from './pages/resource';
 import { renderDocumentation } from './pages/documentation';
 import { renderAbout } from './pages/about';
+import { renderMcp } from './pages/mcp';
 import { cancelPending } from './api';
 import { getResourceMeta } from './constants';
 
@@ -24,6 +25,7 @@ function getRoute(): { page: string; type?: string; id?: string } {
   const parts = path.split('/').filter(Boolean);
 
   if (parts.length === 0) return { page: 'home' };
+  if (parts[0] === 'docs' && parts[1] === 'mcp') return { page: 'mcp' };
   if (parts[0] === 'docs') return { page: 'docs' };
   if (parts[0] === 'about') return { page: 'about' };
   if (parts[0] === 'resource' && parts.length === 2)
@@ -39,6 +41,8 @@ function getPageTitle(route: { page: string; type?: string; id?: string }): stri
       return 'SWAPI - The Star Wars API';
     case 'docs':
       return 'Documentation - SWAPI';
+    case 'mcp':
+      return 'MCP Server - SWAPI';
     case 'about':
       return 'About - SWAPI';
     case 'resource-list':
@@ -57,6 +61,7 @@ function updateActiveNav() {
     const href = link.getAttribute('href') || '';
     if (route.page === 'home' && href === '/') link.classList.add('active');
     if (route.page === 'docs' && href === '/docs') link.classList.add('active');
+    if (route.page === 'mcp' && href === '/docs/mcp') link.classList.add('active');
     if (route.page === 'about' && href === '/about') link.classList.add('active');
   });
 }
@@ -77,6 +82,9 @@ async function navigate() {
       break;
     case 'docs':
       renderDocumentation(container);
+      break;
+    case 'mcp':
+      renderMcp(container);
       break;
     case 'about':
       renderAbout(container);
