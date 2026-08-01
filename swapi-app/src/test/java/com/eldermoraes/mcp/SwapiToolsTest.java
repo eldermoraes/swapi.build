@@ -80,4 +80,17 @@ public class SwapiToolsTest {
                 .send()
                 .thenAssertResults();
     }
+
+    @Test
+    public void getFilmByRecordIdReturnsANewHope() {
+        client().when()
+                .toolsCall("sw_get")
+                .withArguments(java.util.Map.of("resource", "FILMS", "id", 1))
+                .withAssert(r -> {
+                    assertFalse(r.isError());
+                    assertTrue(r.content().get(0).asText().text().contains("A New Hope"));
+                })
+                .send()
+                .thenAssertResults();
+    }
 }

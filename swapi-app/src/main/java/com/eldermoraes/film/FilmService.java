@@ -62,13 +62,6 @@ public class FilmService implements SWService {
         return filmList;
     }
 
-    public Film getFilmByEpisodeId(int episodeId) {
-        return filmList.stream()
-                .filter(film -> film.getEpisode_id() == episodeId)
-                .findFirst()
-                .orElse(null);
-    }
-
     public Film getFilmById(int id) {
         if (filmList == null) {
             return null;

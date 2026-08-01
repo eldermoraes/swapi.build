@@ -79,17 +79,17 @@ public class SwapiTools {
         });
     }
 
-    @Tool(description = "Gets one Star Wars entity by numeric id. For FILMS the id is the "
-            + "episode id (e.g. 4 = A New Hope). Returns a JSON object.",
+    @Tool(description = "Gets one Star Wars entity by numeric id. Ids are the record ids "
+            + "from each entity's url field (e.g. FILMS id 1 = A New Hope). Returns a JSON object.",
           annotations = @Tool.Annotations(title = "Get Star Wars entity by id",
                   readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
     public String sw_get(
             @ToolArg(description = "Resource type") SwResource resource,
-            @ToolArg(description = "Numeric id (FILMS: episode id)") int id) {
+            @ToolArg(description = "Numeric record id (from the entity's url field)") int id) {
         applyBaseUrl();
         Object result = switch (resource) {
             case PEOPLE -> peopleService.getPeopleById(id);
-            case FILMS -> filmService.getFilmByEpisodeId(id);
+            case FILMS -> filmService.getFilmById(id);
             case PLANETS -> planetService.getPlanetById(id);
             case SPECIES -> specieService.getSpecieById(id);
             case STARSHIPS -> starshipService.getStarshipById(id);
