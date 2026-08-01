@@ -53,11 +53,11 @@ export function renderHome(container: HTMLElement): void {
     if (!path) return;
     resultDiv.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     try {
-      const data = await fetchEndpoint(path);
+      const { data, status } = await fetchEndpoint(path);
       resultDiv.innerHTML = `
         <div class="result-panel">
           <div class="result-header">
-            <span class="result-status">GET /api/${escapeHtml(path)} <span class="status-code">200</span></span>
+            <span class="result-status">GET /api/${escapeHtml(path)} <span class="status-code">${status}</span></span>
           </div>
           <pre class="result-body">${highlightJson(data)}</pre>
         </div>

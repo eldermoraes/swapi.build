@@ -57,11 +57,11 @@ export async function renderResourceList(container: HTMLElement, type: string): 
     `;
   }
 
-  function showJson(data: unknown) {
+  function showJson(data: unknown, status: number) {
     contentDiv.innerHTML = `
       <div class="result-panel">
         <div class="result-header">
-          <span class="result-status"><span class="status-code">200</span></span>
+          <span class="result-status"><span class="status-code">${status}</span></span>
           <a href="/resource/${type}" class="back-btn">Back to list</a>
         </div>
         <pre class="result-body">${highlightJson(data)}</pre>
@@ -76,7 +76,7 @@ export async function renderResourceList(container: HTMLElement, type: string): 
   }
 
   try {
-    const items = await fetchResources<SWResource>(type);
+    const { data: items } = await fetchResources<SWResource>(type);
     renderItems(items);
   } catch (err) {
     showError('Failed to load', err);
@@ -87,7 +87,7 @@ export async function renderResourceList(container: HTMLElement, type: string): 
     if (!q) return;
     contentDiv.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     try {
-      const results = await searchResource<SWResource>(type, q);
+      const { data: results } = await searchResource<SWResource>(type, q);
       renderItems(results);
     } catch (err) {
       showError('Search failed', err);
@@ -101,8 +101,8 @@ export async function renderResourceList(container: HTMLElement, type: string): 
   randomBtn.addEventListener('click', async () => {
     contentDiv.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
     try {
-      const data = await fetchRandom(type);
-      showJson(data);
+      const { data, status } = await fetchRandom(type);
+      showJson(data, status);
     } catch (err) {
       showError('Failed', err);
     }
@@ -130,7 +130,7 @@ export async function renderResourceDetail(
   const contentDiv = document.getElementById('detail-content')!;
 
   try {
-    const data = await fetchResourceById<Record<string, unknown>>(type, id);
+    const { data, status } = await fetchResourceById<Record<string, unknown>>(type, id);
     const name = (data[meta.nameField] as string) || `${meta.title} #${id}`;
     const headerEl = container.querySelector('.detail-header')!;
     headerEl.innerHTML += `<h1 class="detail-title">${escapeHtml(name)}</h1>`;
@@ -138,7 +138,7 @@ export async function renderResourceDetail(
     contentDiv.innerHTML = `
       <div class="result-panel">
         <div class="result-header">
-          <span class="result-status">GET /api/${escapeHtml(type)}/${escapeHtml(id)} <span class="status-code">200</span></span>
+          <span class="result-status">GET /api/${escapeHtml(type)}/${escapeHtml(id)} <span class="status-code">${status}</span></span>
         </div>
         <pre class="result-body">${highlightJson(data)}</pre>
       </div>

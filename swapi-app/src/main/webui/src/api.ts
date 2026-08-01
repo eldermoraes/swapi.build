@@ -2,6 +2,11 @@ const BASE = '/api';
 
 let currentController: AbortController | null = null;
 
+export interface ApiResponse<T> {
+  data: T;
+  status: number;
+}
+
 export function cancelPending(): void {
   if (currentController) {
     currentController.abort();
@@ -20,7 +25,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(url: string): Promise<T> {
+async function request<T>(url: string): Promise<ApiResponse<T>> {
   cancelPending();
   currentController = new AbortController();
 
@@ -39,26 +44,26 @@ async function request<T>(url: string): Promise<T> {
   if (!res.ok) {
     throw new ApiError(`HTTP ${res.status}: ${res.statusText}`, res.status, 'http');
   }
-  return res.json() as Promise<T>;
+  return { data: (await res.json()) as T, status: res.status };
 }
 
-export async function fetchResources<T = unknown>(type: string): Promise<T[]> {
+export async function fetchResources<T = unknown>(type: string): Promise<ApiResponse<T[]>> {
   return request<T[]>(`${BASE}/${type}`);
 }
 
-export async function fetchResourceById<T = unknown>(type: string, id: string): Promise<T> {
+export async function fetchResourceById<T = unknown>(type: string, id: string): Promise<ApiResponse<T>> {
   return request<T>(`${BASE}/${type}/${id}`);
 }
 
-export async function searchResource<T = unknown>(type: string, query: string): Promise<T[]> {
+export async function searchResource<T = unknown>(type: string, query: string): Promise<ApiResponse<T[]>> {
   return request<T[]>(`${BASE}/${type}?search=${encodeURIComponent(query)}`);
 }
 
-export async function fetchRandom<T = unknown>(type: string): Promise<T> {
+export async function fetchRandom<T = unknown>(type: string): Promise<ApiResponse<T>> {
   return request<T>(`${BASE}/${type}/random`);
 }
 
-export async function fetchEndpoint<T = unknown>(path: string): Promise<T> {
+export async function fetchEndpoint<T = unknown>(path: string): Promise<ApiResponse<T>> {
   const url = path.startsWith('/') ? path : `${BASE}/${path}`;
   return request<T>(url);
 }
