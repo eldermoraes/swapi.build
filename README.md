@@ -6,7 +6,7 @@ Inspired by the original [SWAPI](https://swapi.dev/) (created by Paul Hallett, m
 
 ## Quick Start
 
-**Prerequisites:** Java 21+ and Maven (or use the included Maven Wrapper).
+**Prerequisites:** Java 25 and Maven (or use the included Maven Wrapper).
 
 ```bash
 cd swapi-app
@@ -199,7 +199,7 @@ The app runs on [Vercel](https://vercel.com/) as a native (GraalVM/Mandrel) cont
 
 ## Tech Stack
 
-- **Runtime:** [Quarkus 3.23](https://quarkus.io/) on Java 21+ with Virtual Threads
+- **Runtime:** [Quarkus 3.33](https://quarkus.io/) on Java 25 with Virtual Threads
 - **Serialization:** Jakarta REST + JSON-B
 - **Native image:** GraalVM via Mandrel builder
 - **Frontend:** TypeScript + [Vite](https://vite.dev/), served by Quinoa
