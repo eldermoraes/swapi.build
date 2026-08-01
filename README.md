@@ -36,22 +36,109 @@ curl http://localhost:5432/api/people/1
 
 ## MCP Server
 
-swapi.build is also available as a remote [MCP](https://modelcontextprotocol.io) server —
-Streamable HTTP, stateless (spec 2026-07-28), no authentication required:
+swapi.build is also a remote [MCP](https://modelcontextprotocol.io) server — built on the
+**stateless MCP spec (2026-07-28)**: every request is self-contained, with no `initialize`
+handshake and no session ids. First-party, read-only, no authentication:
 
 ```
 https://swapi.build/mcp
 ```
 
-Tools (all read-only): `sw_list`, `sw_get`, `sw_random`, `sw_search` — each takes a
-`resource` argument (`PEOPLE`, `FILMS`, `PLANETS`, `SPECIES`, `STARSHIPS`, `VEHICLES`).
+Full setup guides: **[swapi.build/docs/mcp](https://swapi.build/docs/mcp)**
+
+| Tool | Arguments | Returns |
+|------|-----------|---------|
+| `sw_list` | `resource` | All entities of a resource |
+| `sw_get` | `resource`, `id` | One entity by id |
+| `sw_random` | `resource` | A random entity |
+| `sw_search` | `resource`, `query` | Name/title substring match |
+
+`resource` is one of `PEOPLE`, `FILMS`, `PLANETS`, `SPECIES`, `STARSHIPS`, `VEHICLES`.
 For `FILMS`, ids are episode ids (e.g. `4` = A New Hope).
 
-Example (Claude Code):
+<details>
+<summary><strong>Claude Code</strong></summary>
 
 ```bash
 claude mcp add --transport http swapi-build https://swapi.build/mcp
 ```
+
+Or share via `.mcp.json` at the repo root:
+
+```json
+{
+  "mcpServers": {
+    "swapi-build": { "type": "http", "url": "https://swapi.build/mcp" }
+  }
+}
+```
+
+Verify: `claude mcp list` → `swapi-build ✔ Connected`.
+</details>
+
+<details>
+<summary><strong>Claude Desktop &amp; claude.ai</strong></summary>
+
+Settings → Connectors → **Add custom connector** → name `swapi-build`, URL
+`https://swapi.build/mcp`. No authentication needed. Verify in any chat via the **+** menu → Connectors.
+</details>
+
+<details>
+<summary><strong>OpenAI Codex</strong></summary>
+
+```bash
+codex mcp add swapi-build --url https://swapi.build/mcp
+```
+
+Or in `~/.codex/config.toml` (shared by CLI, IDE extension and ChatGPT desktop):
+
+```toml
+[mcp_servers.swapi-build]
+url = "https://swapi.build/mcp"
+```
+
+Verify: `codex mcp list`.
+</details>
+
+<details>
+<summary><strong>GitHub Copilot (VS Code)</strong></summary>
+
+`.vscode/mcp.json` (top-level key is `servers`):
+
+```json
+{
+  "servers": {
+    "swapi-build": { "type": "http", "url": "https://swapi.build/mcp" }
+  }
+}
+```
+
+Or Command Palette → **MCP: Add Server**. Verify via the **Configure Tools** button in Copilot Chat.
+On Business/Enterprise, the "MCP servers in Copilot" org policy must be enabled.
+</details>
+
+<details>
+<summary><strong>IBM Bob</strong></summary>
+
+`~/.bob/mcp.json` (global) or `.bob/mcp.json` (project):
+
+```json
+{
+  "mcpServers": {
+    "swapi-build": {
+      "type": "streamable-http",
+      "url": "https://swapi.build/mcp",
+      "disabled": false
+    }
+  }
+}
+```
+
+Or Bob panel → MCP tab → **Edit Global MCP**. Bob detects the tools automatically.
+</details>
+
+> The server scales to zero when idle — if the very first connection attempt fails, retry once
+> (cold start is milliseconds; stateless requests are immune after that).
 
 ## Project Structure
 
