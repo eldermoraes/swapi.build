@@ -26,8 +26,8 @@ replay_pid*
 # IDE
 .idea/
 
-# Claude Code
-CLAUDE.md
+# Claude Code local settings (permission rules stay machine-local)
+.claude/settings.local.json
 
 # Secrets and Vercel local config
 .env
@@ -40,3 +40,4 @@ swapi-app/.quinoa/
 swapi-app/src/main/webui/node_modules/
 swapi-app/src/main/webui/dist/
 swapi-app/src/main/webui/.quinoa/
+.vercel
