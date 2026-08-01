@@ -40,6 +40,7 @@ public class PlanetResource {
             Planet planet = planetService.getPlanetById(Integer.parseInt(id));
             if (planet == null) {
                 return Response.status(Response.Status.NOT_FOUND)
+                        .type(MediaType.TEXT_PLAIN)
                         .entity("No planet found with id " + id).build();
             }
             return Response.accepted().entity(planet).build();

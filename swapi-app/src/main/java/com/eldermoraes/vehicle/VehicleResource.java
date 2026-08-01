@@ -40,6 +40,7 @@ public class VehicleResource {
             Vehicle vehicle = vehicleService.getVehicleById(Integer.parseInt(id));
             if (vehicle == null) {
                 return Response.status(Response.Status.NOT_FOUND)
+                        .type(MediaType.TEXT_PLAIN)
                         .entity("No vehicle found with id " + id).build();
             }
             return Response.accepted().entity(vehicle).build();

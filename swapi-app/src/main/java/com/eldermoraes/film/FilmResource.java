@@ -39,6 +39,7 @@ public class FilmResource {
         Film film = filmService.getFilmById(id);
         if (film == null) {
             return Response.status(Response.Status.NOT_FOUND)
+                    .type(MediaType.TEXT_PLAIN)
                     .entity("No film found with id " + id).build();
         }
         return Response.accepted().entity(film).build();

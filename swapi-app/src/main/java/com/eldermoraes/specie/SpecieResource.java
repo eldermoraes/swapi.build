@@ -39,6 +39,7 @@ public class SpecieResource {
             Specie specie = specieService.getSpecieById(Integer.parseInt(id));
             if (specie == null) {
                 return Response.status(Response.Status.NOT_FOUND)
+                        .type(MediaType.TEXT_PLAIN)
                         .entity("No specie found with id " + id).build();
             }
             return Response.accepted().entity(specie).build();

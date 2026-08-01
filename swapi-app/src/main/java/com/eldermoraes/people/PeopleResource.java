@@ -38,6 +38,7 @@ public class PeopleResource {
             People people = peopleService.getPeopleById(Integer.parseInt(id));
             if (people == null) {
                 return Response.status(Response.Status.NOT_FOUND)
+                        .type(MediaType.TEXT_PLAIN)
                         .entity("No people found with id " + id).build();
             }
             return Response.accepted().entity(people).build();

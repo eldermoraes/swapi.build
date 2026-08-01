@@ -54,7 +54,7 @@ Full setup guides: **[swapi.build/docs/mcp](https://swapi.build/docs/mcp)**
 | `sw_search` | `resource`, `query` | Name/title substring match |
 
 `resource` is one of `PEOPLE`, `FILMS`, `PLANETS`, `SPECIES`, `STARSHIPS`, `VEHICLES`.
-For `FILMS`, ids are episode ids (e.g. `4` = A New Hope).
+Ids are the record ids from each entity's `url` field (for `FILMS`, `1` = A New Hope).
 
 <details>
 <summary><strong>Claude Code</strong></summary>

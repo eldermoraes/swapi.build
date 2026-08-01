@@ -38,6 +38,7 @@ public class StarshipResources {
             Starship starship = starshipService.getStarshipById(Integer.parseInt(id));
             if (starship == null) {
                 return Response.status(Response.Status.NOT_FOUND)
+                        .type(MediaType.TEXT_PLAIN)
                         .entity("No starship found with id " + id).build();
             }
             return Response.accepted().entity(starship).build();
