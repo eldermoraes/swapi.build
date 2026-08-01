@@ -27,7 +27,8 @@ an MCP server (Streamable HTTP, stateless) at `/mcp`.
 - **There is no git-push auto-deploy.** Deploys are CLI-only (`npx vercel deploy`).
 - **Tests:** `cd swapi-app && ./mvnw test`. Never run `mvn clean` while dev mode is
   running. Test HTTP port is 8081.
-- **The API returns HTTP 202 (not 200) by design** — historic behavior, do not "fix".
+- **Successful GETs return HTTP 200; nonexistent ids return 404** (the historic
+  202 quirk was retired on 2026-08-01 — no external clients depended on it).
 - **Container tooling is `podman`** (`/opt/podman/bin`), not `docker`. The podman
   machine needs 8 GB for local native builds.
 - **MCP server is stateless Streamable HTTP (spec 2026-07-28).** Never use legacy

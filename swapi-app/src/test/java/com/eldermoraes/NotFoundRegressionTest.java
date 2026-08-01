@@ -9,8 +9,8 @@ import static org.hamcrest.CoreMatchers.containsString;
 @QuarkusTest
 public class NotFoundRegressionTest {
 
-    // Sucessos continuam 202 (comportamento historico, ver CLAUDE.md);
-    // "nao existe" agora e um 404 de verdade, nao um 202 com body vazio.
+    // Sucessos retornam 200 (quirk 202 aposentado em 2026-08-01);
+    // "nao existe" e um 404 de verdade, nao um 200 com body vazio.
     @Test
     public void unknownFilmIs404() {
         given().when().get("/api/films/9999").then().statusCode(404)

@@ -24,9 +24,9 @@ public class SpecieResource {
     @Produces(MediaType.APPLICATION_JSON)
     public Response getSpecies(@QueryParam("search") String search) {
         if (search != null && !search.isEmpty()) {
-            return Response.accepted().entity(specieService.getSpecieByName(search)).build();
+            return Response.ok().entity(specieService.getSpecieByName(search)).build();
         } else {
-            return Response.accepted().entity(specieService.getAllSpecies()).build();
+            return Response.ok().entity(specieService.getAllSpecies()).build();
         }
 
     }
@@ -42,7 +42,7 @@ public class SpecieResource {
                         .type(MediaType.TEXT_PLAIN)
                         .entity("No specie found with id " + id).build();
             }
-            return Response.accepted().entity(specie).build();
+            return Response.ok().entity(specie).build();
         } else {
             return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
         }
@@ -53,7 +53,7 @@ public class SpecieResource {
     @Path("random")
     public Response getRandomSpecie() {
         Log.info("Thread name: " + Thread.currentThread().getName());
-        return Response.accepted().entity(specieService.getRandomSpecie()).build();
+        return Response.ok().entity(specieService.getRandomSpecie()).build();
     }
 
 }

@@ -24,9 +24,9 @@ public class PeopleResource {
     @Produces(MediaType.APPLICATION_JSON)
     public Response getAllPeople(@QueryParam("search") String search) {
         if (search != null && !search.isEmpty()) {
-            return Response.accepted().entity(peopleService.getPeopleByName(search)).build();
+            return Response.ok().entity(peopleService.getPeopleByName(search)).build();
         } else {
-            return Response.accepted().entity(peopleService.getAllPeople()).build();
+            return Response.ok().entity(peopleService.getAllPeople()).build();
         }
     }
 
@@ -41,7 +41,7 @@ public class PeopleResource {
                         .type(MediaType.TEXT_PLAIN)
                         .entity("No people found with id " + id).build();
             }
-            return Response.accepted().entity(people).build();
+            return Response.ok().entity(people).build();
         } else {
             return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
         }
@@ -52,6 +52,6 @@ public class PeopleResource {
     @Path("random")
     public Response getRandomPeople() {
         Log.info("Thread name: " + Thread.currentThread().getName());
-        return Response.accepted().entity(peopleService.getRandomPeople()).build();
+        return Response.ok().entity(peopleService.getRandomPeople()).build();
     }
 }

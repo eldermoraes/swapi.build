@@ -25,9 +25,9 @@ public class VehicleResource {
     @Produces(MediaType.APPLICATION_JSON)
     public Response getAllVehicles(@QueryParam("search") String search) {
         if (search != null && !search.isEmpty()) {
-            return Response.accepted().entity(vehicleService.getVehicleByName(search)).build();
+            return Response.ok().entity(vehicleService.getVehicleByName(search)).build();
         } else {
-            return Response.accepted().entity(vehicleService.getAllVehicles()).build();
+            return Response.ok().entity(vehicleService.getAllVehicles()).build();
         }
 
     }
@@ -43,7 +43,7 @@ public class VehicleResource {
                         .type(MediaType.TEXT_PLAIN)
                         .entity("No vehicle found with id " + id).build();
             }
-            return Response.accepted().entity(vehicle).build();
+            return Response.ok().entity(vehicle).build();
         } else {
             return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
         }
@@ -54,6 +54,6 @@ public class VehicleResource {
     @Path("random")
     public Response getRandomVehicle() {
         Log.info("Thread name: " + Thread.currentThread().getName());
-        return Response.accepted().entity(vehicleService.getRandomVehicle()).build();
+        return Response.ok().entity(vehicleService.getRandomVehicle()).build();
     }
 }

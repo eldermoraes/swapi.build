@@ -25,9 +25,9 @@ public class PlanetResource {
     @Produces(MediaType.APPLICATION_JSON)
     public Response getAllPlanets(@QueryParam("search") String search) {
         if (search != null && !search.isEmpty()) {
-            return Response.accepted().entity(planetService.getPlanetByName(search)).build();
+            return Response.ok().entity(planetService.getPlanetByName(search)).build();
         } else {
-            return Response.accepted().entity(planetService.getAllPlanets()).build();
+            return Response.ok().entity(planetService.getAllPlanets()).build();
         }
 
     }
@@ -43,7 +43,7 @@ public class PlanetResource {
                         .type(MediaType.TEXT_PLAIN)
                         .entity("No planet found with id " + id).build();
             }
-            return Response.accepted().entity(planet).build();
+            return Response.ok().entity(planet).build();
         } else {
             return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
         }
@@ -54,6 +54,6 @@ public class PlanetResource {
     @Path("random")
     public Response getRandomPlanet() {
         Log.info("Thread name: " + Thread.currentThread().getName());
-        return Response.accepted().entity(planetService.getRandomPlanet()).build();
+        return Response.ok().entity(planetService.getRandomPlanet()).build();
     }
 }

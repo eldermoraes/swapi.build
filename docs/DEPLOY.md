@@ -30,7 +30,7 @@ with a cookie jar:
 curl -sL -c jar.txt "<shareable-url-with-_vercel_share>" -o /dev/null
 ```
 
-**REST** — expect HTTP 202 and embedded URLs pointing at the preview host with
+**REST** — expect HTTP 200 and embedded URLs pointing at the preview host with
 `https` (proves per-request base-url discovery through `X-Forwarded-*`):
 
 ```bash
@@ -69,7 +69,7 @@ curl -s -o /dev/null -w 'status: %{http_code}\n' https://swapi.build/api/people/
 curl -s https://swapi.build/api/people/1 | grep -c 'https://swapi.build/api/people/1'
 ```
 
-Expect `status: 202` and `1` (embedded URLs on `https://swapi.build`, scheme `https`).
+Expect `status: 200` and `1` (embedded URLs on `https://swapi.build`, scheme `https`).
 Then run the MCP probe from step 2 against `https://swapi.build/mcp` (no cookie jar
 needed — the custom domain has no SSO).
 
@@ -82,4 +82,4 @@ needed — the custom domain has no SSO).
 | 403 on `*.vercel.app` URLs | Team SSO protection. Use a `_vercel_share` bypass link + cookie jar. |
 | Transient 404 on first stateful MCP connect | Serverless cold start. Retry resolves it. |
 | Quinoa build fails on Vercel with local artifacts | `swapi-app/.vercelignore` must exclude `dist/` and `target/`. |
-| 202 responses from the API | By design (historic behavior). Not an error. |
+| 202 responses from the API | Legacy quirk retired 2026-08-01 — current builds return 200; a 202 means an old deployment is live. |

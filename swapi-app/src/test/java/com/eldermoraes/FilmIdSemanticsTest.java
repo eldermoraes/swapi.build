@@ -14,14 +14,14 @@ public class FilmIdSemanticsTest {
     @Test
     public void filmsIdMatchesEmittedUrl() {
         given().when().get("/api/films/1")
-                .then().statusCode(202)
+                .then().statusCode(200)
                 .body(containsString("A New Hope"));
     }
 
     @Test
     public void recordIdFourIsThePhantomMenace() {
         given().when().get("/api/films/4")
-                .then().statusCode(202)
+                .then().statusCode(200)
                 .body(containsString("The Phantom Menace"));
     }
 }

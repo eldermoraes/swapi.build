@@ -24,9 +24,9 @@ public class StarshipResources {
     @Produces(MediaType.APPLICATION_JSON)
     public Response getStarships(@QueryParam("search") String search) {
         if (search != null && !search.isEmpty()) {
-            return Response.accepted().entity(starshipService.getStarshipByName(search)).build();
+            return Response.ok().entity(starshipService.getStarshipByName(search)).build();
         } else {
-            return Response.accepted().entity(starshipService.getAllStarships()).build();
+            return Response.ok().entity(starshipService.getAllStarships()).build();
         }
     }
 
@@ -41,7 +41,7 @@ public class StarshipResources {
                         .type(MediaType.TEXT_PLAIN)
                         .entity("No starship found with id " + id).build();
             }
-            return Response.accepted().entity(starship).build();
+            return Response.ok().entity(starship).build();
         } else {
             return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
         }
@@ -52,7 +52,7 @@ public class StarshipResources {
     @Path("random")
     public Response getRandomStarship() {
         Log.info("Thread name: " + Thread.currentThread().getName());
-        return Response.accepted().entity(starshipService.getRandomStarship()).build();
+        return Response.ok().entity(starshipService.getRandomStarship()).build();
     }
 
 }

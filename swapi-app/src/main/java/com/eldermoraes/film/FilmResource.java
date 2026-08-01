@@ -26,9 +26,9 @@ public class FilmResource {
     public Response getAllFilms(@QueryParam("search") String search) {
 
         if (search != null && !search.isEmpty()) {
-            return Response.accepted().entity(filmService.getFilmByTitle(search)).build();
+            return Response.ok().entity(filmService.getFilmByTitle(search)).build();
         } else{
-            return Response.accepted().entity(filmService.getAllFilms()).build();
+            return Response.ok().entity(filmService.getAllFilms()).build();
         }
     }
 
@@ -42,7 +42,7 @@ public class FilmResource {
                     .type(MediaType.TEXT_PLAIN)
                     .entity("No film found with id " + id).build();
         }
-        return Response.accepted().entity(film).build();
+        return Response.ok().entity(film).build();
     }
 
     @GET
@@ -50,7 +50,7 @@ public class FilmResource {
     @Path("random")
     public Response getRandomFilm() {
         Log.info("Thread name: " + Thread.currentThread().getName());
-        return Response.accepted().entity(filmService.getRandomFilm()).build();
+        return Response.ok().entity(filmService.getRandomFilm()).build();
     }
 
 }
