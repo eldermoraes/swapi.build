@@ -2,11 +2,13 @@ package com.eldermoraes.starship;
 
 import io.quarkus.logging.Log;
 import io.smallrye.common.annotation.RunOnVirtualThread;
+import jakarta.enterprise.context.RequestScoped;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
 
+@RequestScoped
 @Path("starships")
 @RunOnVirtualThread
 public class StarshipResources {

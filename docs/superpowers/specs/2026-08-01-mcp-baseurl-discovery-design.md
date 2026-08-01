@@ -68,6 +68,15 @@ vez de apontar para produção.
 **Muda:** `SwapiTools.java` (resolução), `application.properties` (proxy;
 propriedade fica sem default). Nenhum service ou entidade muda.
 
+**Descoberto na implementação (2026-08-01):** a premissa "o REST já descobre
+por request" era falsa. Sem anotação de escopo, o Quarkus REST trata os
+resources como singletons — o construtor (que captura `uriInfo.getBaseUri()`)
+roda uma vez, na primeira request, congelando o baseUrl dela para toda a vida
+da instância. Exposto pelo teste de forwarded headers (plain→forwarded na
+mesma instância). Fix incluído no escopo com aprovação do usuário:
+`@RequestScoped` nos 6 resources REST, restaurando o discovery per-request
+que a spec assumia existir.
+
 **Fora de escopo:**
 - Race conhecida do `baseUrl` (services mutam entidades estáticas
   compartilhadas) — item de backlog separado; fix é compor URL na
