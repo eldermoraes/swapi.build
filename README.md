@@ -34,6 +34,25 @@ All responses are JSON. Example:
 curl http://localhost:5432/api/people/1
 ```
 
+## MCP Server
+
+swapi.build is also available as a remote [MCP](https://modelcontextprotocol.io) server —
+Streamable HTTP, stateless (spec 2026-07-28), no authentication required:
+
+```
+https://swapi.build/mcp
+```
+
+Tools (all read-only): `sw_list`, `sw_get`, `sw_random`, `sw_search` — each takes a
+`resource` argument (`PEOPLE`, `FILMS`, `PLANETS`, `SPECIES`, `STARSHIPS`, `VEHICLES`).
+For `FILMS`, ids are episode ids (e.g. `4` = A New Hope).
+
+Example (Claude Code):
+
+```bash
+claude mcp add --transport http swapi-build https://swapi.build/mcp
+```
+
 ## Project Structure
 
 ```
