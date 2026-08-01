@@ -30,8 +30,11 @@ Alternativas rejeitadas:
 ## Resolução do base URL (precedência)
 
 1. `swapi.public-base-url` setada explicitamente → ela vence. A propriedade
-   vira `Optional<String>` **sem** `defaultValue`. Preserva os overrides
-   `%dev`/`%test` existentes e dá válvula de escape operacional.
+   vira `Optional<String>` **sem** `defaultValue` — válvula de escape
+   operacional. Os overrides `%dev`/`%test` existentes são removidos: com
+   discovery eles produziriam exatamente o mesmo valor (dev serve em
+   `localhost:5432`, teste em `localhost:8081`), e manter o `%test` faria o
+   teste de discovery passar por acidente.
 2. Senão, deriva da request ativa: `scheme://host` + `/api`.
 3. Sem config e sem request HTTP ativa (caso teórico, ex. transporte stdio):
    `ToolCallException` com mensagem clara — nunca inventar domínio.
@@ -74,10 +77,15 @@ propriedade fica sem default). Nenhum service ou entidade muda.
 
 ## Testes
 
-- Testes atuais continuam passando (usam o override `%test`).
-- Novo teste MCP via `McpAssured` num perfil **sem** override, assertando que
-  as URLs embutidas no JSON das tools refletem o host real da request de teste
-  (`localhost:<porta>`) — prova o discovery fim a fim.
+- Testes atuais continuam passando (não dependem do valor do base URL).
+- Novo teste MCP via `McpAssured` (sem override, que deixa de existir),
+  assertando que as URLs embutidas no JSON das tools refletem o host real da
+  request de teste (`localhost:8081`) — prova o discovery fim a fim.
+- Teste de precedência: `@TestProfile` setando `swapi.public-base-url` e
+  assertando que a config explícita vence o discovery.
+- Teste REST com `X-Forwarded-Proto`/`X-Forwarded-Host` provando a config de
+  proxy (REST-assured permite headers arbitrários; a camada Vert.x é comum
+  aos dois caminhos).
 
 ## Verificação pós-deploy
 
