@@ -69,6 +69,17 @@ public class FilmService implements SWService {
                 .orElse(null);
     }
 
+    public Film getFilmById(int id) {
+        if (filmList == null) {
+            return null;
+        }
+        String suffix = "/films/" + id;
+        return filmList.stream()
+                .filter(f -> f.getUrl() != null && f.getUrl().endsWith(suffix))
+                .findFirst()
+                .orElse(null);
+    }
+
     public List<Film> getFilmByTitle(String title) {
         return filmList.stream()
                 .filter(film -> film.getTitle().toLowerCase().contains(title.toLowerCase()))

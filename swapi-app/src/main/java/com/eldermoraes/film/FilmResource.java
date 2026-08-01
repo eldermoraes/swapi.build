@@ -34,9 +34,9 @@ public class FilmResource {
 
     @GET
     @Produces(MediaType.APPLICATION_JSON)
-    @Path("{episodeId}")
-    public Response getFilmByEpisodeId(@PathParam("episodeId") int episodeId){
-        return Response.accepted().entity(filmService.getFilmByEpisodeId(episodeId)).build();
+    @Path("{id}")
+    public Response getFilmById(@PathParam("id") int id){
+        return Response.accepted().entity(filmService.getFilmById(id)).build();
     }
 
     @GET
