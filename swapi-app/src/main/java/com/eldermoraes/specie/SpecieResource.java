@@ -34,18 +34,14 @@ public class SpecieResource {
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     @Path("{id}")
-    public Response getSpecieById(@PathParam("id") String id) {
-        if (id != null && !id.isEmpty()) {
-            Specie specie = specieService.getSpecieById(Integer.parseInt(id));
-            if (specie == null) {
-                return Response.status(Response.Status.NOT_FOUND)
-                        .type(MediaType.TEXT_PLAIN)
-                        .entity("No specie found with id " + id).build();
-            }
-            return Response.ok().entity(specie).build();
-        } else {
-            return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
+    public Response getSpecieById(@PathParam("id") int id) {
+        Specie specie = specieService.getSpecieById(id);
+        if (specie == null) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .type(MediaType.TEXT_PLAIN)
+                    .entity("No specie found with id " + id).build();
         }
+        return Response.ok().entity(specie).build();
     }
 
     @GET

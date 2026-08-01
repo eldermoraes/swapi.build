@@ -33,18 +33,14 @@ public class StarshipResources {
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     @Path("{id}")
-    public Response getStarshipById(@PathParam("id") String id) {
-        if (id != null && !id.isEmpty()) {
-            Starship starship = starshipService.getStarshipById(Integer.parseInt(id));
-            if (starship == null) {
-                return Response.status(Response.Status.NOT_FOUND)
-                        .type(MediaType.TEXT_PLAIN)
-                        .entity("No starship found with id " + id).build();
-            }
-            return Response.ok().entity(starship).build();
-        } else {
-            return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
+    public Response getStarshipById(@PathParam("id") int id) {
+        Starship starship = starshipService.getStarshipById(id);
+        if (starship == null) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .type(MediaType.TEXT_PLAIN)
+                    .entity("No starship found with id " + id).build();
         }
+        return Response.ok().entity(starship).build();
     }
 
     @GET

@@ -35,18 +35,14 @@ public class VehicleResource {
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     @Path("{id}")
-    public Response getVehicleById(@PathParam("id") String id) {
-        if (id != null && !id.isEmpty()) {
-            Vehicle vehicle = vehicleService.getVehicleById(Integer.parseInt(id));
-            if (vehicle == null) {
-                return Response.status(Response.Status.NOT_FOUND)
-                        .type(MediaType.TEXT_PLAIN)
-                        .entity("No vehicle found with id " + id).build();
-            }
-            return Response.ok().entity(vehicle).build();
-        } else {
-            return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
+    public Response getVehicleById(@PathParam("id") int id) {
+        Vehicle vehicle = vehicleService.getVehicleById(id);
+        if (vehicle == null) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .type(MediaType.TEXT_PLAIN)
+                    .entity("No vehicle found with id " + id).build();
         }
+        return Response.ok().entity(vehicle).build();
     }
 
     @GET

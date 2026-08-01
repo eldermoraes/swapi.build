@@ -33,18 +33,14 @@ public class PeopleResource {
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     @Path("{id}")
-    public Response getPeopleById(@PathParam("id") String id) {
-        if (id != null && !id.isEmpty()) {
-            People people = peopleService.getPeopleById(Integer.parseInt(id));
-            if (people == null) {
-                return Response.status(Response.Status.NOT_FOUND)
-                        .type(MediaType.TEXT_PLAIN)
-                        .entity("No people found with id " + id).build();
-            }
-            return Response.ok().entity(people).build();
-        } else {
-            return Response.status(Response.Status.BAD_REQUEST).entity("ID parameter is required").build();
+    public Response getPeopleById(@PathParam("id") int id) {
+        People people = peopleService.getPeopleById(id);
+        if (people == null) {
+            return Response.status(Response.Status.NOT_FOUND)
+                    .type(MediaType.TEXT_PLAIN)
+                    .entity("No people found with id " + id).build();
         }
+        return Response.ok().entity(people).build();
     }
 
     @GET
