@@ -95,3 +95,34 @@ export interface Vehicle extends SWResource {
   pilots: string[];
   films: string[];
 }
+
+// Subconjunto do documento OpenAPI 3.x consumido pela página de docs
+export interface OpenApiParameter {
+  name: string;
+  in: 'path' | 'query';
+  description?: string;
+  example?: string;
+}
+
+export interface OpenApiOperation {
+  summary?: string;
+  description?: string;
+  tags?: string[];
+  parameters?: OpenApiParameter[];
+  responses: Record<string, { description?: string }>;
+}
+
+export interface OpenApiSchemaObj {
+  description?: string;
+  type?: string;
+  properties?: Record<string, OpenApiSchemaObj>;
+  items?: OpenApiSchemaObj;
+}
+
+export interface OpenApiSpec {
+  openapi: string;
+  info: { title: string; version: string; description?: string };
+  tags?: { name: string; description?: string }[];
+  paths: Record<string, { get?: OpenApiOperation }>;
+  components?: { schemas?: Record<string, OpenApiSchemaObj> };
+}

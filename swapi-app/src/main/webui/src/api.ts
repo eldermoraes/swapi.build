@@ -1,3 +1,5 @@
+import type { OpenApiSpec } from './types';
+
 const BASE = '/api';
 
 let currentController: AbortController | null = null;
@@ -66,4 +68,19 @@ export async function fetchRandom<T = unknown>(type: string): Promise<ApiRespons
 export async function fetchEndpoint<T = unknown>(path: string): Promise<ApiResponse<T>> {
   const url = path.startsWith('/') ? path : `${BASE}/${path}`;
   return request<T>(url);
+}
+
+// Fetch direto (fora de request()): a spec não participa do cancelamento de
+// navegação e precisa de Accept explícito para garantir JSON.
+export async function fetchOpenApiSpec(): Promise<OpenApiSpec> {
+  let res: Response;
+  try {
+    res = await fetch('/openapi.json', { headers: { Accept: 'application/json' } });
+  } catch {
+    throw new ApiError('Network error — check your connection', 0, 'network');
+  }
+  if (!res.ok) {
+    throw new ApiError(`HTTP ${res.status}: ${res.statusText}`, res.status, 'http');
+  }
+  return (await res.json()) as OpenApiSpec;
 }
