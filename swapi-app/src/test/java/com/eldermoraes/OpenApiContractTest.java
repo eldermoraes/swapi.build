@@ -12,9 +12,8 @@ import static org.hamcrest.Matchers.notNullValue;
 @QuarkusTest
 class OpenApiContractTest {
 
-    // Task 3 cobre "people"; Tasks 4 ampliam o @ValueSource para os demais
     @ParameterizedTest
-    @ValueSource(strings = {"people"})
+    @ValueSource(strings = {"people", "films", "planets", "species", "starships", "vehicles"})
     void resourceOperationsAreFullyDocumented(String resource) {
         given().accept("*/*")
         .when().get("/openapi.json")
@@ -31,5 +30,15 @@ class OpenApiContractTest {
                         not(emptyOrNullString()))
                 // random
                 .body("paths.'/api/" + resource + "/random'.get.summary", not(emptyOrNullString()));
+    }
+
+    @org.junit.jupiter.api.Test
+    void rootOperationIsDocumented() {
+        given().accept("*/*")
+        .when().get("/openapi.json")
+        .then()
+                .statusCode(200)
+                // o gerador materializa o root como "/api" (sem barra final)
+                .body("paths.'/api'.get.summary", not(emptyOrNullString()));
     }
 }
