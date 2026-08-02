@@ -573,6 +573,12 @@ a:hover {
   font-size: 0.8rem;
 }
 
+/* Footer legal */
+.footer-legal {
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+}
+
 /* About page */
 .about {
   max-width: 800px;
