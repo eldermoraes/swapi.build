@@ -28,6 +28,9 @@ Base path: `/api`
 | Starships | `GET /api/starships` | `GET /api/starships/:id` | `GET /api/starships/random` | `GET /api/starships?search=name` |
 | Vehicles | `GET /api/vehicles` | `GET /api/vehicles/:id` | `GET /api/vehicles/random` | `GET /api/vehicles?search=name` |
 
+Ids are the record ids from each entity's `url` field (for films, `1` = A New Hope).
+Successful responses return `200`; unknown or non-numeric ids return `404`.
+
 All responses are JSON. Example:
 
 ```bash
@@ -120,7 +123,7 @@ On Business/Enterprise, the "MCP servers in Copilot" org policy must be enabled.
 <details>
 <summary><strong>IBM Bob</strong></summary>
 
-`~/.bob/mcp.json` (global) or `.bob/mcp.json` (project):
+`~/.bob/settings/mcp_settings.json` (global) or `.bob/mcp.json` (project):
 
 ```json
 {
@@ -138,12 +141,14 @@ Or Bob panel → MCP tab → **Edit Global MCP**. Bob detects the tools automati
 </details>
 
 > The server scales to zero when idle — if the very first connection attempt fails, retry once
-> (cold start is milliseconds; stateless requests are immune after that).
+> (the native binary starts in tens of milliseconds; the platform may take a bit longer to
+> provision the container, and stateless requests are immune after that).
 
 ## Project Structure
 
 ```
 swapi-app/
+  Dockerfile.vercel           # Native container image used by Vercel deploys
   src/main/
     java/com/eldermoraes/     # Backend (Quarkus + Jakarta REST)
       film/                   # Film model, service, resource
@@ -152,9 +157,11 @@ swapi-app/
       specie/                 # Specie model, service, resource
       starship/               # Starship model, service, resource
       vehicle/                # Vehicle model, service, resource
+      mcp/                    # MCP server tools (sw_list, sw_get, sw_random, sw_search)
       SWObject.java           # Base model class
       SWService.java          # Service interface
       ApiResource.java        # Root /api endpoint
+      ApplicationPath.java    # Jakarta REST base path (/api)
     resources/
       data/                   # Static JSON data files
       application.properties  # Quarkus configuration
@@ -162,10 +169,14 @@ swapi-app/
       src/
         api.ts                # API client with request management
         main.ts               # SPA router
-        pages/                # Page renderers (home, resource, docs, about)
+        pages/                # Page renderers (home, resource, docs, mcp, about, privacy, terms)
+        json-highlight.ts     # JSON syntax highlighting for result panels
+        style.css             # Site styles
         types.ts              # TypeScript interfaces for API resources
         constants.ts          # Shared resource metadata
         utils.ts              # Shared utilities (escapeHtml)
+  src/test/
+    java/com/eldermoraes/     # Regression suite (REST contracts, MCP tools, forwarded headers)
 ```
 
 Each backend domain (film, people, planet, etc.) follows the same pattern:
@@ -200,6 +211,7 @@ The app runs on [Vercel](https://vercel.com/) as a native (GraalVM/Mandrel) cont
 ## Tech Stack
 
 - **Runtime:** [Quarkus 3.33](https://quarkus.io/) on Java 25 with Virtual Threads
+- **MCP server:** [Quarkiverse MCP Server](https://docs.quarkiverse.io/quarkus-mcp-server/dev/index.html) — Streamable HTTP, stateless spec 2026-07-28
 - **Serialization:** Jakarta REST + JSON-B
 - **Native image:** GraalVM via Mandrel builder
 - **Frontend:** TypeScript + [Vite](https://vite.dev/), served by Quinoa
@@ -210,7 +222,7 @@ Pull requests are always welcome. Whether it's fixing a bug, improving the docs,
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/my-change`)
-3. Make your changes and verify: `cd swapi-app && ./mvnw quarkus:dev`
+3. Make your changes (with tests) and run the suite: `cd swapi-app && ./mvnw test`
 4. Commit and push
 5. Open a Pull Request
 
@@ -222,4 +234,5 @@ Pull requests are always welcome. Whether it's fixing a bug, improving the docs,
 
 ## License
 
-This project is open source. See the repository for license details.
+Licensed under the [Apache License 2.0](LICENSE). The website also publishes a
+[Privacy Policy](https://swapi.build/privacy) and [Terms of Use](https://swapi.build/terms).
