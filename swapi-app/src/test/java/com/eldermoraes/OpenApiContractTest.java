@@ -4,6 +4,9 @@ import io.quarkus.test.junit.QuarkusTest;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.HashSet;
+import java.util.Set;
+
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.not;
@@ -58,5 +61,29 @@ class OpenApiContractTest {
                 .statusCode(200)
                 // o gerador materializa o root como "/api" (sem barra final)
                 .body("paths.'/api'.get.summary", not(emptyOrNullString()));
+    }
+
+    @org.junit.jupiter.api.Test
+    void everyApiPathIsPresentInSpec() {
+        String body = given().accept("*/*")
+                .when().get("/openapi.json")
+                .then().statusCode(200)
+                .extract().asString();
+
+        Set<String> paths = new io.restassured.path.json.JsonPath(body).getMap("paths").keySet()
+                .stream().map(String::valueOf).collect(java.util.stream.Collectors.toSet());
+
+        Set<String> expected = new HashSet<>();
+        for (String r : new String[]{"people", "films", "planets", "species", "starships", "vehicles"}) {
+            expected.add("/api/" + r);
+            expected.add("/api/" + r + "/{id}");
+            expected.add("/api/" + r + "/random");
+        }
+
+        org.junit.jupiter.api.Assertions.assertTrue(paths.containsAll(expected),
+                "Paths ausentes na spec: " + expected.stream().filter(p -> !paths.contains(p)).toList());
+        // root (a forma exata /api ou /api/ depende do gerador)
+        org.junit.jupiter.api.Assertions.assertTrue(paths.contains("/api/") || paths.contains("/api"),
+                "Path root ausente na spec");
     }
 }
