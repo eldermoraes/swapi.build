@@ -24,14 +24,6 @@ public class FilmService implements SWService {
     }
 
     @Override
-    public void setBaseUrl(String baseUrl) {
-        if (filmList != null) {
-            String cleanUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-            filmList.forEach(film -> film.setBaseUrl(cleanUrl));
-        }
-    }
-
-    @Override
     public void loadJsonData() {
         JsonbConfig config = new JsonbConfig().withFormatting(true);
         URL url = getClass().getResource("/data/films.json");

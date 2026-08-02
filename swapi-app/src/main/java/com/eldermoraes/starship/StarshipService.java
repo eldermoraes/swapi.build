@@ -25,14 +25,6 @@ public class StarshipService implements SWService {
     }
 
     @Override
-    public void setBaseUrl(String baseUrl) {
-        if (starshipList != null) {
-            String cleanUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-            starshipList.forEach(starship -> starship.setBaseUrl(cleanUrl));
-        }
-    }
-
-    @Override
     public void loadJsonData() {
         JsonbConfig config = new JsonbConfig().withFormatting(true);
         URL url = getClass().getResource("/data/starships.json");

@@ -26,14 +26,6 @@ public class PeopleService implements SWService {
     }
 
     @Override
-    public void setBaseUrl(String baseUrl) {
-        if (peopleList != null) {
-            String cleanUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-            peopleList.forEach(people -> people.setBaseUrl(cleanUrl));
-        }
-    }
-
-    @Override
     public void loadJsonData() {
 
         JsonbConfig config = new JsonbConfig().withFormatting(true);

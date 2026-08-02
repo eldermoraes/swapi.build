@@ -25,14 +25,6 @@ public class PlanetService  implements SWService {
     }
 
     @Override
-    public void setBaseUrl(String baseUrl) {
-        if (planetList != null) {
-            String cleanUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-            planetList.forEach(planet -> planet.setBaseUrl(cleanUrl));
-        }
-    }
-
-    @Override
     public void loadJsonData() {
         JsonbConfig config = new JsonbConfig().withFormatting(true);
         URL url = getClass().getResource("/data/planets.json");

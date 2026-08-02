@@ -6,7 +6,6 @@ import jakarta.enterprise.context.RequestScoped;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.UriInfo;
 
 @RequestScoped
 @Path("species")
@@ -15,9 +14,8 @@ public class SpecieResource {
 
     private final SpecieService specieService;
 
-    SpecieResource(UriInfo uriInfo, SpecieService specieService) {
+    SpecieResource(SpecieService specieService) {
         this.specieService = specieService;
-        this.specieService.setBaseUrl(uriInfo.getBaseUri().toString());
     }
 
     @GET

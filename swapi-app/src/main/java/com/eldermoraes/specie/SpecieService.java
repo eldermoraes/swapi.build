@@ -26,14 +26,6 @@ public class SpecieService implements SWService {
     }
 
     @Override
-    public void setBaseUrl(String baseUrl) {
-        if (specieList != null) {
-            String cleanUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-            specieList.forEach(specie -> specie.setBaseUrl(cleanUrl));
-        }
-    }
-
-    @Override
     public void loadJsonData() {
         JsonbConfig config = new JsonbConfig().withFormatting(true);
         URL url = getClass().getResource("/data/species.json");

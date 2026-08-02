@@ -6,7 +6,6 @@ import jakarta.enterprise.context.RequestScoped;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.UriInfo;
 
 @RequestScoped
 @Path("starships")
@@ -15,9 +14,8 @@ public class StarshipResources {
 
     private final StarshipService starshipService;
 
-    StarshipResources(UriInfo uriInfo, StarshipService starshipService) {
+    StarshipResources(StarshipService starshipService) {
         this.starshipService = starshipService;
-        this.starshipService.setBaseUrl(uriInfo.getBaseUri().toString());
     }
 
     @GET

@@ -1,5 +1,6 @@
 package com.eldermoraes.mcp;
 
+import com.eldermoraes.RequestBaseUrl;
 import com.eldermoraes.film.FilmService;
 import com.eldermoraes.people.PeopleService;
 import com.eldermoraes.planet.PlanetService;
@@ -53,13 +54,7 @@ public class SwapiTools {
     }
 
     private void applyBaseUrl() {
-        String baseUrl = resolveBaseUrl();
-        peopleService.setBaseUrl(baseUrl);
-        filmService.setBaseUrl(baseUrl);
-        planetService.setBaseUrl(baseUrl);
-        specieService.setBaseUrl(baseUrl);
-        starshipService.setBaseUrl(baseUrl);
-        vehicleService.setBaseUrl(baseUrl);
+        RequestBaseUrl.set(resolveBaseUrl());
     }
 
     @Tool(description = "Lists all entities of a Star Wars resource type from swapi.build. "

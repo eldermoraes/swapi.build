@@ -25,14 +25,6 @@ public class VehicleService implements SWService {
     }
 
     @Override
-    public void setBaseUrl(String baseUrl) {
-        if (vehicleList != null) {
-            String cleanUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-            vehicleList.forEach(vehicle -> vehicle.setBaseUrl(cleanUrl));
-        }
-    }
-
-    @Override
     public void loadJsonData() {
         JsonbConfig config = new JsonbConfig().withFormatting(true);
         URL url = getClass().getResource("/data/vehicles.json");

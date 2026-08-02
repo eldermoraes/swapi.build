@@ -6,7 +6,6 @@ import jakarta.enterprise.context.RequestScoped;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.UriInfo;
 import java.util.List;
 
 @RequestScoped
@@ -16,9 +15,8 @@ public class FilmResource {
 
     private final FilmService filmService;
 
-    FilmResource(UriInfo uriInfo, FilmService filmService){
+    FilmResource(FilmService filmService){
         this.filmService = filmService;
-        this.filmService.setBaseUrl(uriInfo.getBaseUri().toString());
     }
 
     @GET

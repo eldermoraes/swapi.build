@@ -7,7 +7,6 @@ import jakarta.enterprise.context.RequestScoped;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.UriInfo;
 
 @RequestScoped
 @Path("planets")
@@ -16,9 +15,8 @@ public class PlanetResource {
 
     private final PlanetService planetService;
 
-    PlanetResource(UriInfo uriInfo, PlanetService planetService) {
+    PlanetResource(PlanetService planetService) {
         this.planetService = planetService;
-        this.planetService.setBaseUrl(uriInfo.getBaseUri().toString());
     }
 
     @GET

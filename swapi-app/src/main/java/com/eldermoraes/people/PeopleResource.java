@@ -6,7 +6,6 @@ import jakarta.enterprise.context.RequestScoped;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.UriInfo;
 
 @RequestScoped
 @Path("people")
@@ -15,9 +14,8 @@ public class PeopleResource {
 
     private final PeopleService peopleService;
 
-    PeopleResource(UriInfo uriInfo, PeopleService peopleService) {
+    PeopleResource(PeopleService peopleService) {
         this.peopleService = peopleService;
-        this.peopleService.setBaseUrl(uriInfo.getBaseUri().toString());
     }
 
     @GET

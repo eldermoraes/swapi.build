@@ -7,7 +7,6 @@ import jakarta.enterprise.context.RequestScoped;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.UriInfo;
 
 @RequestScoped
 @Path("vehicles")
@@ -16,9 +15,8 @@ public class VehicleResource {
 
     private final VehicleService vehicleService;
 
-    VehicleResource(UriInfo uriInfo, VehicleService vehicleService) {
+    VehicleResource(VehicleService vehicleService) {
         this.vehicleService = vehicleService;
-        this.vehicleService.setBaseUrl(uriInfo.getBaseUri().toString());
     }
 
     @GET
