@@ -9,7 +9,7 @@ interface ClientGuide {
 function code(id: string, lang: string, content: string): string {
   return `
     <div class="code-block" data-copy-id="${id}">
-      <button class="copy-btn" data-copy-target="${id}" aria-label="Copy to clipboard">Copy</button>
+      <button class="copy-btn" data-copy-target="${id}" aria-live="polite" aria-label="Copy to clipboard">Copy</button>
       <pre id="${id}" class="code-pre ${lang}">${content
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -180,6 +180,9 @@ export function renderMcp(container: HTMLElement): void {
       <p>The server scales to zero when idle. If the very first connection attempt fails or times out,
       retry once — the native binary starts in tens of milliseconds (the platform may take a bit longer
       to provision the container) and stateless requests are immune after that.</p>
+      <p>Probing <code>/mcp</code> with raw <code>curl</code>? Stateless requests must include the
+      <code>MCP-Protocol-Version</code>, <code>Mcp-Method</code> and <code>Mcp-Name</code> headers —
+      MCP clients send these automatically.</p>
     </section>
   `;
 
@@ -204,6 +207,14 @@ export function renderMcp(container: HTMLElement): void {
     tab.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowRight') selectTab((idx + 1) % tabs.length);
       if (e.key === 'ArrowLeft') selectTab((idx - 1 + tabs.length) % tabs.length);
+      if (e.key === 'Home') {
+        e.preventDefault();
+        selectTab(0);
+      }
+      if (e.key === 'End') {
+        e.preventDefault();
+        selectTab(tabs.length - 1);
+      }
     });
   });
 
@@ -211,10 +222,16 @@ export function renderMcp(container: HTMLElement): void {
     btn.addEventListener('click', () => {
       const target = document.getElementById(btn.dataset.copyTarget!);
       if (!target) return;
-      navigator.clipboard.writeText(target.textContent ?? '').then(() => {
-        btn.textContent = 'Copied!';
-        setTimeout(() => (btn.textContent = 'Copy'), 1500);
-      });
+      navigator.clipboard
+        .writeText(target.textContent ?? '')
+        .then(() => {
+          btn.textContent = 'Copied!';
+          setTimeout(() => (btn.textContent = 'Copy'), 1500);
+        })
+        .catch(() => {
+          btn.textContent = 'Copy failed';
+          setTimeout(() => (btn.textContent = 'Copy'), 1500);
+        });
     });
   });
 }

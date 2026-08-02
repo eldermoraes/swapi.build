@@ -95,4 +95,14 @@ public class SwapiToolsTest {
                 .send()
                 .thenAssertResults();
     }
+
+    @Test
+    public void unknownFilmIdIsToolError() {
+        client().when()
+                .toolsCall("sw_get")
+                .withArguments(java.util.Map.of("resource", "FILMS", "id", 9999))
+                .withAssert(r -> assertTrue(r.isError()))
+                .send()
+                .thenAssertResults();
+    }
 }
