@@ -91,7 +91,8 @@ Código Java (annotations) ──build──▶ /openapi.json ──▶ /documen
 Backend (`@QuarkusTest` + REST Assured):
 
 - `GET /openapi.json` → 200, JSON válido, `openapi: 3.x`.
-- Todos os paths esperados presentes (6 resources × 4 operações + root `/api/` = 25).
+- Todos os paths esperados presentes (6 resources × 3 paths + root = 19; list e
+  search compartilham o mesmo path com query param).
 - Contrato 200/404 documentado em cada operação by-id.
 - Nenhuma entrada `servers` com domínio absoluto.
 - Schemas das 6 entidades presentes, com descrições não vazias.
