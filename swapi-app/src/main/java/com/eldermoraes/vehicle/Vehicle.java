@@ -2,27 +2,32 @@ package com.eldermoraes.vehicle;
 
 import com.eldermoraes.SWObject;
 import io.quarkus.runtime.annotations.RegisterForReflection;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 import java.util.List;
 
 @RegisterForReflection
+@Schema(description = "A vehicle (transport without hyperdrive) in the Star Wars universe")
 public class Vehicle extends SWObject {
 
-    private String name;
-    private String model;
-    private String manufacturer;
-    private String cost_in_credits;
-    private String length;
-    private String max_atmosphering_speed;
-    private String crew;
-    private String passengers;
-    private String cargo_capacity;
-    private String consumables;
-    private String vehicle_class;
-    private List<String> pilots;
-    private List<String> films;
+    @Schema(description = "Common name of this vehicle") private String name;
+    @Schema(description = "Model or official name, e.g. \"All-Terrain Attack Transport\"") private String model;
+    @Schema(description = "Manufacturer(s), comma-separated") private String manufacturer;
+    @Schema(description = "Cost in galactic credits, as a string") private String cost_in_credits;
+    @Schema(description = "Length in meters, as a string") private String length;
+    @Schema(description = "Maximum speed in atmosphere") private String max_atmosphering_speed;
+    @Schema(description = "Number of personnel needed to run or pilot this vehicle") private String crew;
+    @Schema(description = "Number of non-essential people this vehicle can transport") private String passengers;
+    @Schema(description = "Maximum cargo capacity in kilograms, as a string") private String cargo_capacity;
+    @Schema(description = "Maximum time this vehicle can provide consumables for its crew") private String consumables;
+    @Schema(description = "Class of this vehicle, e.g. \"Wheeled\"") private String vehicle_class;
+    @Schema(description = "URLs of the people resources that have piloted this vehicle") private List<String> pilots;
+    @Schema(description = "URLs of the film resources this vehicle appeared in") private List<String> films;
+    @Schema(description = "ISO 8601 timestamp of when this resource was created")
     private String created;
+    @Schema(description = "ISO 8601 timestamp of when this resource was last edited")
     private String edited;
+    @Schema(description = "Canonical URL of this resource, built from the request's base URL")
     private String url;
 
     public Vehicle() {

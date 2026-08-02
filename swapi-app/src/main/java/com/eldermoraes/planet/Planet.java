@@ -2,25 +2,30 @@ package com.eldermoraes.planet;
 
 import com.eldermoraes.SWObject;
 import io.quarkus.runtime.annotations.RegisterForReflection;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 import java.util.List;
 
 @RegisterForReflection
+@Schema(description = "A planet in the Star Wars universe")
 public class Planet extends SWObject {
 
-    private String name;
-    private String rotation_period;
-    private String orbital_period;
-    private String diameter;
-    private String climate;
-    private String gravity;
-    private String terrain;
-    private String surface_water;
-    private String population;
-    private List<String> residents;
-    private List<String> films;
+    @Schema(description = "Name of this planet") private String name;
+    @Schema(description = "Rotation period in standard hours, as a string") private String rotation_period;
+    @Schema(description = "Orbital period in standard days, as a string") private String orbital_period;
+    @Schema(description = "Diameter in kilometers, as a string") private String diameter;
+    @Schema(description = "Climate(s), comma-separated") private String climate;
+    @Schema(description = "Gravity, where \"1 standard\" is Earth-like, e.g. \"1 standard\", \"2.5 standard\"") private String gravity;
+    @Schema(description = "Terrain type(s), comma-separated") private String terrain;
+    @Schema(description = "Percentage of the surface covered by water, as a string") private String surface_water;
+    @Schema(description = "Average population; \"unknown\" when not recorded") private String population;
+    @Schema(description = "URLs of the people resources that live on this planet") private List<String> residents;
+    @Schema(description = "URLs of the film resources this planet appeared in") private List<String> films;
+    @Schema(description = "ISO 8601 timestamp of when this resource was created")
     private String created;
+    @Schema(description = "ISO 8601 timestamp of when this resource was last edited")
     private String edited;
+    @Schema(description = "Canonical URL of this resource, built from the request's base URL")
     private String url;
 
     public Planet() {

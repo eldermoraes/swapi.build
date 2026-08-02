@@ -3,23 +3,28 @@ package com.eldermoraes.film;
 import java.util.List;
 import com.eldermoraes.SWObject;
 import io.quarkus.runtime.annotations.RegisterForReflection;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 @RegisterForReflection
+@Schema(description = "A single Star Wars film")
 public class Film extends SWObject {
 
-    private String title;
-    private int episode_id;
-    private String opening_crawl;
-    private String director;
-    private String producer;
-    private String release_date;
-    private List<String> characters;
-    private List<String> planets;
-    private List<String> starships;
-    private List<String> vehicles;
-    private List<String> species;
+    @Schema(description = "Title of this film") private String title;
+    @Schema(description = "Episode number of this film in the saga") private int episode_id;
+    @Schema(description = "Opening crawl text at the beginning of this film") private String opening_crawl;
+    @Schema(description = "Director of this film") private String director;
+    @Schema(description = "Producer(s) of this film, comma-separated") private String producer;
+    @Schema(description = "Release date (ISO 8601 date) at original creator country") private String release_date;
+    @Schema(description = "URLs of the people resources that appear in this film") private List<String> characters;
+    @Schema(description = "URLs of the planet resources that appear in this film") private List<String> planets;
+    @Schema(description = "URLs of the starship resources that appear in this film") private List<String> starships;
+    @Schema(description = "URLs of the vehicle resources that appear in this film") private List<String> vehicles;
+    @Schema(description = "URLs of the species resources that appear in this film") private List<String> species;
+    @Schema(description = "ISO 8601 timestamp of when this resource was created")
     private String created;
+    @Schema(description = "ISO 8601 timestamp of when this resource was last edited")
     private String edited;
+    @Schema(description = "Canonical URL of this resource, built from the request's base URL")
     private String url;
 
     public Film() {

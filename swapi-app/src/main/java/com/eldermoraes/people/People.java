@@ -2,26 +2,31 @@ package com.eldermoraes.people;
 
 import com.eldermoraes.SWObject;
 import io.quarkus.runtime.annotations.RegisterForReflection;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 import java.util.List;
 
 @RegisterForReflection
+@Schema(description = "A person within the Star Wars universe")
 public class People extends SWObject {
 
-    private String name;
-    private String height;
-    private String mass;
-    private String hair_color;
-    private String skin_color;
-    private String eye_color;
-    private String birth_year;
-    private String gender;
-    private String homeworld;
-    private List<String> films;
-    private List<String> species;
-    private List<String> starships;
+    @Schema(description = "Name of this person") private String name;
+    @Schema(description = "Height in centimeters, as a string; \"unknown\" when not recorded") private String height;
+    @Schema(description = "Mass in kilograms, as a string; \"unknown\" when not recorded") private String mass;
+    @Schema(description = "Hair color; \"n/a\" when the person has no hair") private String hair_color;
+    @Schema(description = "Skin color") private String skin_color;
+    @Schema(description = "Eye color") private String eye_color;
+    @Schema(description = "Birth year, relative to the Battle of Yavin (BBY/ABY), e.g. \"19BBY\"") private String birth_year;
+    @Schema(description = "Gender; \"n/a\" for droids") private String gender;
+    @Schema(description = "URL of the planet resource this person was born on") private String homeworld;
+    @Schema(description = "URLs of the film resources this person appeared in") private List<String> films;
+    @Schema(description = "URLs of the species resources this person belongs to") private List<String> species;
+    @Schema(description = "URLs of the starship resources this person has piloted") private List<String> starships;
+    @Schema(description = "ISO 8601 timestamp of when this resource was created")
     private String created;
+    @Schema(description = "ISO 8601 timestamp of when this resource was last edited")
     private String edited;
+    @Schema(description = "Canonical URL of this resource, built from the request's base URL")
     private String url;
 
     public People() {

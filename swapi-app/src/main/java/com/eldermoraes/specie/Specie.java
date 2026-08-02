@@ -2,26 +2,31 @@ package com.eldermoraes.specie;
 
 import com.eldermoraes.SWObject;
 import io.quarkus.runtime.annotations.RegisterForReflection;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 import java.util.List;
 
 @RegisterForReflection
+@Schema(description = "A species in the Star Wars universe")
 public class Specie extends SWObject {
 
-    private String name;
-    private String classification;
-    private String designation;
-    private String average_height;
-    private String skin_colors;
-    private String hair_colors;
-    private String eye_colors;
-    private String average_lifespan;
-    private String homeworld;
-    private String language;
-    private List<String> people;
-    private List<String> films;
+    @Schema(description = "Name of this species") private String name;
+    @Schema(description = "Classification, e.g. \"mammal\", \"reptile\"") private String classification;
+    @Schema(description = "Designation, e.g. \"sentient\"") private String designation;
+    @Schema(description = "Average height in centimeters, as a string") private String average_height;
+    @Schema(description = "Common skin colors, comma-separated; \"none\" when skinless") private String skin_colors;
+    @Schema(description = "Common hair colors, comma-separated; \"none\" when hairless") private String hair_colors;
+    @Schema(description = "Common eye colors, comma-separated") private String eye_colors;
+    @Schema(description = "Average lifespan in standard years, as a string") private String average_lifespan;
+    @Schema(description = "URL of the planet resource this species originates from") private String homeworld;
+    @Schema(description = "Language commonly spoken by this species") private String language;
+    @Schema(description = "URLs of the people resources that belong to this species") private List<String> people;
+    @Schema(description = "URLs of the film resources this species appeared in") private List<String> films;
+    @Schema(description = "ISO 8601 timestamp of when this resource was created")
     private String created;
+    @Schema(description = "ISO 8601 timestamp of when this resource was last edited")
     private String edited;
+    @Schema(description = "Canonical URL of this resource, built from the request's base URL")
     private String url;
 
     public Specie() {

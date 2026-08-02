@@ -32,6 +32,24 @@ class OpenApiContractTest {
                 .body("paths.'/api/" + resource + "/random'.get.summary", not(emptyOrNullString()));
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"People", "Film", "Planet", "Specie", "Starship", "Vehicle"})
+    void schemaIsDescribedAndClean(String schemaName) {
+        String base = "components.schemas." + schemaName;
+        given().accept("*/*")
+        .when().get("/openapi.json")
+        .then()
+                .statusCode(200)
+                .body(base + ".description", not(emptyOrNullString()))
+                // todo campo exposto tem description
+                .body(base + ".properties.every { it.value.description != null && !it.value.description.isEmpty() }",
+                        org.hamcrest.Matchers.is(true))
+                // baseUrl e detalhe interno de serializacao, nunca parte do contrato
+                .body(base + ".properties.baseUrl", org.hamcrest.Matchers.nullValue())
+                // url sempre presente (identidade do recurso)
+                .body(base + ".properties.url.description", not(emptyOrNullString()));
+    }
+
     @org.junit.jupiter.api.Test
     void rootOperationIsDocumented() {
         given().accept("*/*")

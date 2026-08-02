@@ -2,29 +2,34 @@ package com.eldermoraes.starship;
 
 import com.eldermoraes.SWObject;
 import io.quarkus.runtime.annotations.RegisterForReflection;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 import java.util.List;
 
 @RegisterForReflection
+@Schema(description = "A starship (transport with hyperdrive) in the Star Wars universe")
 public class Starship extends SWObject {
 
-    private String name;
-    private String model;
-    private String manufacturer;
-    private String cost_in_credits;
-    private String length;
-    private String max_atmosphering_speed;
-    private String crew;
-    private String passengers;
-    private String cargo_capacity;
-    private String consumables;
-    private String hyperdrive_rating;
-    private String MGLT;
-    private String starship_class;
-    private List<String> pilots;
-    private List<String> films;
+    @Schema(description = "Common name of this starship") private String name;
+    @Schema(description = "Model or official name, e.g. \"T-65 X-wing\"") private String model;
+    @Schema(description = "Manufacturer(s), comma-separated") private String manufacturer;
+    @Schema(description = "Cost in galactic credits, as a string") private String cost_in_credits;
+    @Schema(description = "Length in meters, as a string") private String length;
+    @Schema(description = "Maximum speed in atmosphere; \"n/a\" when incapable of atmospheric flight") private String max_atmosphering_speed;
+    @Schema(description = "Number of personnel needed to run or pilot this starship") private String crew;
+    @Schema(description = "Number of non-essential people this starship can transport") private String passengers;
+    @Schema(description = "Maximum cargo capacity in kilograms, as a string") private String cargo_capacity;
+    @Schema(description = "Maximum time this starship can provide consumables for its crew") private String consumables;
+    @Schema(description = "Hyperdrive rating class") private String hyperdrive_rating;
+    @Schema(description = "Maximum speed in megalights per hour") private String MGLT;
+    @Schema(description = "Class of this starship, e.g. \"Starfighter\"") private String starship_class;
+    @Schema(description = "URLs of the people resources that have piloted this starship") private List<String> pilots;
+    @Schema(description = "URLs of the film resources this starship appeared in") private List<String> films;
+    @Schema(description = "ISO 8601 timestamp of when this resource was created")
     private String created;
+    @Schema(description = "ISO 8601 timestamp of when this resource was last edited")
     private String edited;
+    @Schema(description = "Canonical URL of this resource, built from the request's base URL")
     private String url;
 
     public Starship() {
