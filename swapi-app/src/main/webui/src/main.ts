@@ -89,7 +89,7 @@ async function navigate() {
       renderHome(container);
       break;
     case 'docs':
-      renderDocumentation(container);
+      await renderDocumentation(container);
       break;
     case 'mcp':
       renderMcp(container);
@@ -126,8 +126,14 @@ document.addEventListener('click', (e) => {
   const href = anchor.getAttribute('href');
   if (!href) return;
 
-  // Skip external links, anchor links (#), and links that open in new tabs
-  if (href.startsWith('http') || href.startsWith('#') || anchor.hasAttribute('target')) return;
+  // Skip external links, anchor links (#), downloads, and links that open in new tabs
+  if (
+    href.startsWith('http') ||
+    href.startsWith('#') ||
+    anchor.hasAttribute('target') ||
+    anchor.hasAttribute('download')
+  )
+    return;
 
   e.preventDefault();
   if (href !== window.location.pathname) {

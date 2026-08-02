@@ -1,97 +1,111 @@
-const ENDPOINTS = [
-  {
-    title: 'Root',
-    endpoints: [
-      { method: 'GET', path: '/api/', desc: 'List all available resources and their URLs.' },
-    ],
-  },
-  {
-    title: 'People',
-    endpoints: [
-      { method: 'GET', path: '/api/people/', desc: 'Get all people resources.' },
-      { method: 'GET', path: '/api/people/:id/', desc: 'Get a specific people resource by ID.' },
-      { method: 'GET', path: '/api/people/random/', desc: 'Get a random people resource.' },
-      { method: 'GET', path: '/api/people/?search=name', desc: 'Search people by name.' },
-    ],
-  },
-  {
-    title: 'Films',
-    endpoints: [
-      { method: 'GET', path: '/api/films/', desc: 'Get all film resources.' },
-      { method: 'GET', path: '/api/films/:id/', desc: 'Get a specific film resource by ID.' },
-      { method: 'GET', path: '/api/films/random/', desc: 'Get a random film resource.' },
-      { method: 'GET', path: '/api/films/?search=title', desc: 'Search films by title.' },
-    ],
-  },
-  {
-    title: 'Planets',
-    endpoints: [
-      { method: 'GET', path: '/api/planets/', desc: 'Get all planet resources.' },
-      { method: 'GET', path: '/api/planets/:id/', desc: 'Get a specific planet resource by ID.' },
-      { method: 'GET', path: '/api/planets/random/', desc: 'Get a random planet resource.' },
-      { method: 'GET', path: '/api/planets/?search=name', desc: 'Search planets by name.' },
-    ],
-  },
-  {
-    title: 'Species',
-    endpoints: [
-      { method: 'GET', path: '/api/species/', desc: 'Get all species resources.' },
-      { method: 'GET', path: '/api/species/:id/', desc: 'Get a specific species resource by ID.' },
-      { method: 'GET', path: '/api/species/random/', desc: 'Get a random species resource.' },
-      { method: 'GET', path: '/api/species/?search=name', desc: 'Search species by name.' },
-    ],
-  },
-  {
-    title: 'Starships',
-    endpoints: [
-      { method: 'GET', path: '/api/starships/', desc: 'Get all starship resources.' },
-      {
-        method: 'GET',
-        path: '/api/starships/:id/',
-        desc: 'Get a specific starship resource by ID.',
-      },
-      { method: 'GET', path: '/api/starships/random/', desc: 'Get a random starship resource.' },
-      { method: 'GET', path: '/api/starships/?search=name', desc: 'Search starships by name.' },
-    ],
-  },
-  {
-    title: 'Vehicles',
-    endpoints: [
-      { method: 'GET', path: '/api/vehicles/', desc: 'Get all vehicle resources.' },
-      { method: 'GET', path: '/api/vehicles/:id/', desc: 'Get a specific vehicle resource by ID.' },
-      { method: 'GET', path: '/api/vehicles/random/', desc: 'Get a random vehicle resource.' },
-      { method: 'GET', path: '/api/vehicles/?search=name', desc: 'Search vehicles by name.' },
-    ],
-  },
-];
+import { fetchOpenApiSpec } from '../api';
+import { escapeHtml } from '../utils';
+import type { OpenApiOperation, OpenApiSchemaObj, OpenApiSpec } from '../types';
 
-export function renderDocumentation(container: HTMLElement): void {
+// tag OpenAPI -> nome do schema em components.schemas
+const TAG_SCHEMA: Record<string, string> = {
+  People: 'People',
+  Films: 'Film',
+  Planets: 'Planet',
+  Species: 'Specie',
+  Starships: 'Starship',
+  Vehicles: 'Vehicle',
+};
+
+// Ordem de exibição: Root primeiro, demais na ordem declarada na spec
+function orderedTags(spec: OpenApiSpec): string[] {
+  const declared = (spec.tags ?? []).map((t) => t.name);
+  const seen = new Set<string>();
+  for (const item of Object.values(spec.paths)) {
+    for (const tag of item.get?.tags ?? []) seen.add(tag);
+  }
+  const ordered = declared.filter((t) => seen.has(t));
+  for (const t of seen) if (!ordered.includes(t)) ordered.push(t);
+  return ordered.includes('Root') ? ['Root', ...ordered.filter((t) => t !== 'Root')] : ordered;
+}
+
+function operationsByTag(spec: OpenApiSpec, tag: string): { path: string; op: OpenApiOperation }[] {
+  return Object.entries(spec.paths)
+    .filter(([, item]) => item.get?.tags?.includes(tag))
+    .map(([path, item]) => ({ path, op: item.get! }))
+    .sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function endpointBlock(path: string, op: OpenApiOperation): string {
+  const search = op.parameters?.find((p) => p.in === 'query' && p.name === 'search');
+  const displayPath = search ? `${path}?search=${search.example ?? 'value'}` : path;
+  const desc = [op.summary, op.description].filter(Boolean).map((s) => escapeHtml(s!)).join(' — ');
+  const has404 = Boolean(op.responses['404']);
+  return `
+    <div class="endpoint-block" data-path="${escapeHtml(path)}">
+      <div class="endpoint-method">
+        <span class="method-badge">GET</span>
+        <span class="endpoint-path">${escapeHtml(displayPath)}</span>
+      </div>
+      <div class="endpoint-desc">${desc}${has404 ? ' <span class="status-note">200 / 404</span>' : ''}</div>
+    </div>`;
+}
+
+function schemaTable(name: string, schema: OpenApiSchemaObj): string {
+  const rows = Object.entries(schema.properties ?? {})
+    .map(([field, prop]) => {
+      const type = prop.type === 'array' ? `array of ${prop.items?.type ?? 'string'}` : (prop.type ?? '');
+      return `<tr>
+        <td class="schema-field">${escapeHtml(field)}</td>
+        <td class="schema-type">${escapeHtml(type)}</td>
+        <td>${escapeHtml(prop.description ?? '')}</td>
+      </tr>`;
+    })
+    .join('');
+  return `
+    <details class="schema-details">
+      <summary>${escapeHtml(name)} fields</summary>
+      <table class="schema-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </details>`;
+}
+
+export async function renderDocumentation(container: HTMLElement): Promise<void> {
+  container.innerHTML = `<div class="docs"><h1>Documentation</h1><p class="docs-intro">Loading API specification…</p></div>`;
+
+  let spec: OpenApiSpec;
+  try {
+    spec = await fetchOpenApiSpec();
+  } catch {
+    container.innerHTML = `
+      <div class="docs">
+        <h1>Documentation</h1>
+        <p class="docs-intro">Could not load the API specification right now.
+        The raw spec is available at
+        <a href="/openapi.json" target="_blank" rel="noopener noreferrer">/openapi.json</a>.</p>
+      </div>`;
+    return;
+  }
+
+  const tagDescriptions = new Map((spec.tags ?? []).map((t) => [t.name, t.description ?? '']));
+  const sections = orderedTags(spec)
+    .map((tag) => {
+      const schemaName = TAG_SCHEMA[tag];
+      const schema = schemaName ? spec.components?.schemas?.[schemaName] : undefined;
+      return `
+        <h2>${escapeHtml(tag)}</h2>
+        ${tagDescriptions.get(tag) ? `<p class="tag-desc">${escapeHtml(tagDescriptions.get(tag)!)}</p>` : ''}
+        ${operationsByTag(spec, tag).map(({ path, op }) => endpointBlock(path, op)).join('')}
+        ${schema ? schemaTable(schemaName!, schema) : ''}`;
+    })
+    .join('');
+
   container.innerHTML = `
     <div class="docs">
       <h1>Documentation</h1>
-      <p class="docs-intro">
-        The Star Wars API is a RESTful public API that provides data about the Star Wars universe.
-        All responses are returned in JSON format.
+      <p class="docs-intro">${escapeHtml(spec.info.description ?? '')}</p>
+      <p class="spec-link">
+        OpenAPI ${escapeHtml(spec.openapi)} · version ${escapeHtml(spec.info.version)} ·
+        <a href="/openapi.json" download="openapi.json">Download the spec</a> and generate a client:
+        <code>npx @openapitools/openapi-generator-cli generate -i /openapi.json -g typescript-fetch</code>
       </p>
-
-      ${ENDPOINTS.map(
-        (section) => `
-        <h2>${section.title}</h2>
-        ${section.endpoints
-          .map(
-            (ep) => `
-          <div class="endpoint-block">
-            <div class="endpoint-method">
-              <span class="method-badge">${ep.method}</span>
-              <span class="endpoint-path">${ep.path}</span>
-            </div>
-            <div class="endpoint-desc">${ep.desc}</div>
-          </div>
-        `,
-          )
-          .join('')}
-      `,
-      ).join('')}
-    </div>
-  `;
+      ${sections}
+    </div>`;
 }
