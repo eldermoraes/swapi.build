@@ -8,13 +8,17 @@ import java.util.List;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.equalTo;
 
 @QuarkusTest
 class CacheHeadersTest {
 
     private static final String EDGE_TTL = "s-maxage=31536000";
-    private static final String BROWSER_TTL = "max-age=300";
-    private static final String STALE = "stale-while-revalidate=86400";
+
+    // Valor exato exigido, travado aqui: em codigo de producao ele existe uma
+    // unica vez, na propriedade swapi.cache-control.public.
+    private static final String CACHE_CONTROL =
+            "public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400";
 
     // Dado estatico invalidado por deploy: a borda pode guardar por muito tempo.
     @Test
@@ -24,9 +28,7 @@ class CacheHeadersTest {
                 .get("/api/people/1")
         .then()
                 .statusCode(200)
-                .header("Cache-Control", containsString(EDGE_TTL))
-                .header("Cache-Control", containsString(BROWSER_TTL))
-                .header("Cache-Control", containsString(STALE));
+                .header("Cache-Control", equalTo(CACHE_CONTROL));
     }
 
     // Id inexistente so passa a existir num deploy novo, que ja invalida o cache.
@@ -60,6 +62,22 @@ class CacheHeadersTest {
                     cacheControl == null || !cacheControl.contains("s-maxage"),
                     path + " nao pode ser cacheado na borda, mas veio: " + cacheControl);
         }
+    }
+
+    // So GET/HEAD e cacheavel. Aqui so ha handlers @GET, entao um POST esbarra
+    // nos guards de metodo e de status (405) e nao recebe o header.
+    @Test
+    void nonGetResponseStaysUncached() {
+        String cacheControl = given()
+                .when()
+                        .post("/api/people")
+                .then()
+                        .statusCode(405)
+                        .extract().header("Cache-Control");
+
+        Assertions.assertTrue(
+                cacheControl == null || !cacheControl.contains("s-maxage"),
+                "POST /api/people nao pode ser cacheado na borda, mas veio: " + cacheControl);
     }
 
     // A raiz da API tambem e estatica.

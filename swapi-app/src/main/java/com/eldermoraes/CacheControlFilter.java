@@ -18,6 +18,11 @@ import java.util.List;
  * num deploy novo — e a chave de cache da Vercel inclui a deployment URL, o que
  * invalida a entrada automaticamente. Por isso o TTL da borda e alto e o do
  * browser e curto: o cache do browser NAO e invalidado por deploy.
+ *
+ * Politica deny-list: todo endpoint novo em /api nasce cacheavel na borda;
+ * endpoint nao-deterministico precisa entrar na exclusao. O header so e gravado
+ * se a resposta ainda nao tiver um Cache-Control, entao um resource pode optar
+ * por sair (ex.: no-store) setando o header ele mesmo.
  */
 @Provider
 public class CacheControlFilter implements ContainerResponseFilter {
@@ -32,7 +37,9 @@ public class CacheControlFilter implements ContainerResponseFilter {
 
     @Override
     public void filter(ContainerRequestContext request, ContainerResponseContext response) {
-        if (isCacheable(request, response)) {
+        // Nao sobrescreve um Cache-Control que o resource tenha setado de proposito.
+        if (isCacheable(request, response)
+                && !response.getHeaders().containsKey(HttpHeaders.CACHE_CONTROL)) {
             response.getHeaders().putSingle(HttpHeaders.CACHE_CONTROL, cacheControl);
         }
     }
