@@ -73,10 +73,15 @@ production: follow `docs/DEPLOY.md` exactly — preview → verify → productio
 ## 9. Verify
 
 ```bash
-curl -s https://swapi.build/openapi.json | grep -o '"version":"[^"]*"' | head -1
+curl -s https://swapi.build/openapi.json \
+  | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1
 ```
 
-Expect the version just released. Then the post-deploy checks in `docs/DEPLOY.md`.
+Expect the version just released. The whitespace in the pattern is not optional:
+the spec is served pretty-printed (`"version" : "2.1.0"`), so a `"version":"`
+pattern matches nothing and reads as a failed check when nothing is wrong.
+
+Then the post-deploy checks in `docs/DEPLOY.md`.
 
 ## Troubleshooting
 
