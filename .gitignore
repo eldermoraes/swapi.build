@@ -36,6 +36,9 @@ replay_pid*
 # Plano de migração Vercel/Cloudflare — fica só local
 docs/superpowers/plans/2026-07-23-migracao-vercel-cloudflare.md
 
+# Quarkus CLI local cache (plugin catalog etc.)
+.quarkus/
+
 # Quinoa cache
 swapi-app/.quinoa/
 

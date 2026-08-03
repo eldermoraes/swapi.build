@@ -32,13 +32,14 @@ an MCP server (Streamable HTTP) at `/mcp`.
 - **Container tooling is `podman`** (`/opt/podman/bin`), not `docker`. The podman
   machine needs 8 GB for local native builds.
 - **MCP serves stateful and stateless clients on the same `/mcp` endpoint.**
-  Streamable HTTP only. `quarkus.mcp.server.http.streamable.auto-init=true` makes
-  sessions throwaway per request, so a `Mcp-Session-Id` issued by another
-  instance is accepted instead of 404ing — Vercel has no session affinity, and
-  without this a stateful client fails intermittently. `GET /mcp` answers 405
-  (no server→client stream) and `DELETE` answers 204. The legacy HTTP+SSE
-  transport (`/mcp/sse`) is rejected on purpose. Never reintroduce
-  session-affine state, and never depend on the legacy transport.
+  Streamable HTTP only. `quarkus.mcp.server.http.streamable.auto-init=true`
+  serves an unknown or missing `Mcp-Session-Id` with a throwaway session
+  instead of 404ing — Vercel has no session affinity, and without this a
+  stateful client fails intermittently. A genuine `initialize` still creates a
+  real session that lives in one instance's heap until idle (default 30 min).
+  `GET /mcp` answers 405 (no server→client stream) and `DELETE` answers 204.
+  The legacy HTTP+SSE transport (`/mcp/sse`) is rejected on purpose. Never
+  reintroduce session-affine state, and never depend on the legacy transport.
 - **Public base URL is discovered per request** (REST via `UriInfo`, MCP via
   `HttpServerRequest`, honoring `X-Forwarded-*`). `swapi.public-base-url` is an
   optional override only — never reintroduce a hardcoded domain default.

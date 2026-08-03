@@ -152,4 +152,16 @@ class CacheHeadersTest {
                 .statusCode(200)
                 .header("Vary", nullValue());
     }
+
+    // O Vary do filtro de assets so era garantido por um comentario. Filtros
+    // quarkus.http.filter rodam antes do roteamento, entao o header aparece
+    // mesmo sem o asset existir - o que basta para travar a config.
+    @Test
+    void assetsFilterEmitsVaryOrigin() {
+        given()
+        .when()
+                .get("/assets/does-not-matter.js")
+        .then()
+                .header("Vary", containsString("Origin"));
+    }
 }

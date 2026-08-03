@@ -130,9 +130,9 @@ export function renderMcp(container: HTMLElement): void {
         <strong>Streamable HTTP — both paradigms on one endpoint.</strong>
         Clients on the stateless spec (2026-07-28) send self-contained requests: no
         <code>initialize</code> handshake, no session ids, nothing to keep alive between calls.
-        Clients on earlier revisions negotiate a session and work just as well, because sessions
-        here are throwaway — nothing is pinned to a single server instance. First-party,
-        read-only, no authentication.
+        Clients on earlier revisions negotiate a session and work just as well: this deployment
+        has no session affinity, so if a session lands on a different instance it's simply
+        issued a fresh one instead of failing. First-party, read-only, no authentication.
       </div>
     </section>
 

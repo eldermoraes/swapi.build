@@ -128,9 +128,9 @@ edge-cacheable response must carry `Vary: Origin` or the edge serves one
 origin's header to another:
 
 ```bash
-curl -sI -H 'Origin: https://evil.example' https://swapi.build/api/people/1 | grep -i '^vary'
+curl -sI -b jar.txt -H 'Origin: https://evil.example' "https://<preview-host>/api/people/1" | grep -i '^vary'
 # deve conter Origin
-curl -s -o /dev/null -w '[%header{access-control-allow-origin}]\n' https://swapi.build/api/people/1
+curl -s -o /dev/null -b jar.txt -w '[%header{access-control-allow-origin}]\n' "https://<preview-host>/api/people/1"
 # sem Origin na request: deve vir []
 ```
 
@@ -158,8 +158,9 @@ curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H 'Accept: text/html' 
 Expect `status: 200` and `1` (embedded URLs on `https://swapi.build`, scheme `https`),
 and `200 application/json` for the spec.
 Then run the MCP probe from step 2 against `https://swapi.build/mcp` (no cookie jar
-needed — the custom domain has no SSO). Re-run the foreign-session and edges probes
-against `https://swapi.build` too, without the concurrent burst.
+needed — the custom domain has no SSO). Re-run the foreign-session, edges, and
+`Origin`/`Vary` cache-poisoning probes against `https://swapi.build` too, without the
+concurrent burst.
 
 **Edge cache** — the response reaching the client shows `cache-control: public, max-age=300`:
 the CDN consumes and strips `s-maxage`/`stale-while-revalidate` before forwarding. The proof
@@ -185,6 +186,15 @@ curl -s https://swapi.build/api/people/3 | grep -c evil.example                 
 
 If either is non-zero, purge the cache immediately and add `Vary: X-Forwarded-Host` to the
 cacheable response before redeploying.
+
+### Open questions to settle on the next real deploy
+
+1. Per-request session cost: compare `time_total` of a warm `tools/call` against the historical figure, to size what `auto-init` costs.
+2. `x-vercel-cache` HIT rate on `/api/*` after `Vary: Origin` — confirm the edge still hits and that varying by `Origin` did not fragment the cache meaningfully.
+3. Whether Vercel's edge caches a response carrying `max-age` without `s-maxage` — this decides whether `Vary: Origin` on `/assets/*` and the SPA's static responses does anything at all. A local container cannot answer it.
+
+Note: `functionDefaultTimeout` is still 15s and the spec decided 60s. Once the `PATCH` below
+is applied, update the Troubleshooting row that calls 15s "a deliberate call".
 
 ## Troubleshooting
 

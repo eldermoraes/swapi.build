@@ -33,10 +33,22 @@ public class McpTransportFilter {
             {"error":"The legacy HTTP+SSE transport (spec 2024-11-05) is not \
             supported. Use the Streamable HTTP endpoint at /mcp."}""";
 
-    @RouteFilter(400)
+    // O filtro encerra a resposta (405, 204, 404), entao precisa rodar DEPOIS do
+    // handler de CORS do Quarkus, que registra na prioridade 300 (ver
+    // VertxHttpProcessor.cors -> FilterBuildItem(handler, 300); order = -1 *
+    // prioridade em VertxHttpRecorder.finalizeRouter, entao prioridade maior =
+    // executa antes). Em 400 este filtro rodava ANTES do CORS e terminava a
+    // resposta sem Access-Control-Allow-Origin; um cliente de browser via isso
+    // como erro de CORS em vez de um 405 limpo. NAO subir este numero de volta
+    // para cima de 300.
+    @RouteFilter(250)
     void filter(RoutingContext rc) {
-        String path = rc.normalizedPath();
-        if (LEGACY_SSE_PATH.equals(path) || path.startsWith(LEGACY_MESSAGES_PREFIX)) {
+        // startsWith precisa do path CRU: /mcp/messages/ (a barra final e parte
+        // do prefixo) tem que continuar batendo. Ja o equals abaixo usa o path
+        // sem a barra final, para casar tanto /mcp/sse quanto /mcp/sse/.
+        String rawPath = rc.normalizedPath();
+        String path = withoutTrailingSlash(rawPath);
+        if (LEGACY_SSE_PATH.equals(path) || rawPath.startsWith(LEGACY_MESSAGES_PREFIX)) {
             rc.response()
                     .setStatusCode(404)
                     .putHeader("Content-Type", "application/json")
@@ -51,12 +63,22 @@ public class McpTransportFilter {
         if (HttpMethod.GET.equals(method)) {
             // 405 e o que a spec 2025-03-26 prescreve para "nao ofereco stream
             // server->client", e todo cliente trata como "siga em frente".
-            rc.response().setStatusCode(405).putHeader("Allow", "POST").end();
+            // Allow lista tudo que este recurso de fato responde: POST (tool
+            // calls) e DELETE (teardown), alem do OPTIONS do preflight de CORS.
+            rc.response().setStatusCode(405).putHeader("Allow", "POST, DELETE").end();
         } else if (HttpMethod.DELETE.equals(method)) {
             // Teardown de sessao: nao ha sessao real a destruir, entao sempre ok.
             rc.response().setStatusCode(204).end();
         } else {
             rc.next();
         }
+    }
+
+    // O router do Vert.x ignora uma barra final ao casar path exato; o equals
+    // daqui nao. Sem isto, um cliente configurado com /mcp/ escapa do filtro.
+    // /mcp/messages/ (prefixo) nao e afetado: sua barra final faz parte do
+    // proprio prefixo comparado com startsWith, nao do path normalizado aqui.
+    private static String withoutTrailingSlash(String path) {
+        return path.length() > 1 && path.endsWith("/") ? path.substring(0, path.length() - 1) : path;
     }
 }
