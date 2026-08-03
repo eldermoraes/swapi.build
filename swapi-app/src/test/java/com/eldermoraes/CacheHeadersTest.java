@@ -72,4 +72,17 @@ class CacheHeadersTest {
                 .statusCode(200)
                 .header("Cache-Control", containsString(EDGE_TTL));
     }
+
+    // A spec e o contrato canonico e so muda em deploy. A pagina /docs busca
+    // esse arquivo a cada visita, entao ele e um dos paths mais requisitados.
+    @Test
+    void openApiSpecIsCacheableAtTheEdge() {
+        given()
+                .accept("*/*")
+        .when()
+                .get("/openapi.json")
+        .then()
+                .statusCode(200)
+                .header("Cache-Control", containsString(EDGE_TTL));
+    }
 }
