@@ -17,8 +17,11 @@ A implementação é executada por **subagente(s) Opus** (Agent tool, `model: op
 - Trabalhar em branch: `feature/cache-borda-resiliencia` (nunca na `main`).
 - Testes: `cd swapi-app && ./mvnw test` (porta de teste 8081). Nunca `mvn clean` com dev mode rodando.
 - Rodar a suíte **completa** antes de todo commit.
-- Header, valor exato e único em todo o projeto:
+- Header definido **uma única vez**, na propriedade `swapi.cache-control.public` do
+  `application.properties`, com o valor exato:
   `public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400`
+  O filtro JAX-RS a injeta com `@ConfigProperty`; o filtro HTTP a referencia com
+  `${swapi.cache-control.public}`. Nenhum literal do header em código Java.
 - Os seis endpoints `/random` (`people`, `films`, `planets`, `species`, `starships`, `vehicles`) **nunca** recebem `s-maxage`.
 - Nenhuma mudança de comportamento dos endpoints: status, corpo e URLs embutidas ficam idênticos. Só entra header novo.
 - **Nenhum domínio hardcoded** (invariante do projeto — o base URL é por request).
@@ -31,11 +34,12 @@ A implementação é executada por **subagente(s) Opus** (Agent tool, `model: op
 
 **Files:**
 - Create: `src/main/java/com/eldermoraes/CacheControlFilter.java`
+- Modify: `src/main/resources/application.properties`
 - Test: `src/test/java/com/eldermoraes/CacheHeadersTest.java` (create)
 
 **Interfaces:**
 - Consumes: nada.
-- Produces: `com.eldermoraes.CacheControlFilter`, com a constante package-private `static final String CACHEABLE` contendo o valor do header. A Task 2 reusa esse mesmo valor literal no `application.properties` e estende `CacheHeadersTest`.
+- Produces: a propriedade de config `swapi.cache-control.public` (definição única do header) e `com.eldermoraes.CacheControlFilter`, que a injeta com `@ConfigProperty`. A Task 2 referencia a **mesma** propriedade com `${swapi.cache-control.public}` e estende `CacheHeadersTest`.
 
 - [ ] **Step 1: Criar a branch**
 
@@ -131,7 +135,23 @@ Run: `cd swapi-app && ./mvnw test -Dtest=CacheHeadersTest`
 
 Expected: FAIL. `successfulResourceIsCacheableAtTheEdge`, `notFoundIsCacheableAtTheEdge` e `apiRootIsCacheableAtTheEdge` falham porque nenhum header `Cache-Control` é devolvido (a Vercel é que preenche o default em produção, não a app). `everyRandomEndpointStaysUncached` **passa** desde já — é o teste que protege contra regressão na Task seguinte.
 
-- [ ] **Step 4: Implementar o filtro**
+- [ ] **Step 4: Definir o header como propriedade de config**
+
+Em `src/main/resources/application.properties`, logo abaixo do bloco do filtro de assets
+(que termina em `quarkus.http.filter.assets.header."Cache-Control"=...`), acrescentar:
+
+```properties
+# Definicao UNICA do Cache-Control das respostas cacheaveis na borda.
+# O CacheControlFilter (JAX-RS, cobre /api) injeta esta propriedade com
+# @ConfigProperty; o filtro HTTP que cobre /openapi.json a referencia com
+# ${swapi.cache-control.public}. Nao duplicar o valor em lugar nenhum.
+swapi.cache-control.public=public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400
+```
+
+A vírgula no valor é segura aqui: o filtro de assets logo acima já usa um valor com
+vírgulas (`public, max-age=31536000, immutable`) e funciona em produção.
+
+- [ ] **Step 5: Implementar o filtro**
 
 Criar `src/main/java/com/eldermoraes/CacheControlFilter.java`:
 
@@ -145,6 +165,7 @@ import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.PathSegment;
 import jakarta.ws.rs.ext.Provider;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.util.List;
 
@@ -159,15 +180,18 @@ import java.util.List;
 @Provider
 public class CacheControlFilter implements ContainerResponseFilter {
 
-    static final String CACHEABLE =
-            "public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400";
-
     private static final String RANDOM = "random";
+
+    // Definicao unica em application.properties, compartilhada com o filtro HTTP
+    // que cobre /openapi.json. Package-private: o padrao Quarkus para injecao
+    // de campo sem reflexao.
+    @ConfigProperty(name = "swapi.cache-control.public")
+    String cacheControl;
 
     @Override
     public void filter(ContainerRequestContext request, ContainerResponseContext response) {
         if (isCacheable(request, response)) {
-            response.getHeaders().putSingle(HttpHeaders.CACHE_CONTROL, CACHEABLE);
+            response.getHeaders().putSingle(HttpHeaders.CACHE_CONTROL, cacheControl);
         }
     }
 
@@ -191,21 +215,25 @@ public class CacheControlFilter implements ContainerResponseFilter {
 }
 ```
 
-- [ ] **Step 5: Rodar os testes do arquivo e confirmar que passam**
+- [ ] **Step 6: Rodar os testes do arquivo e confirmar que passam**
 
 Run: `cd swapi-app && ./mvnw test -Dtest=CacheHeadersTest`
 Expected: PASS — 4 testes.
 
-- [ ] **Step 6: Rodar a suíte completa**
+Se falhar com erro de injeção (`@ConfigProperty` não resolvida), confirme que o campo
+`cacheControl` é package-private — no Quarkus, campo `private` exige `@Inject` explícito.
+
+- [ ] **Step 7: Rodar a suíte completa**
 
 Run: `cd swapi-app && ./mvnw test`
 Expected: PASS — todos os testes, incluindo os 13 arquivos que já existiam. Nenhum deles afirma nada sobre `Cache-Control`, então nada deve quebrar. Se algum quebrar, **parar e investigar** antes de commitar.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 cd /Users/eldermoraes/git/eldermoraes/swapi.build
 git add swapi-app/src/main/java/com/eldermoraes/CacheControlFilter.java \
+        swapi-app/src/main/resources/application.properties \
         swapi-app/src/test/java/com/eldermoraes/CacheHeadersTest.java
 git commit -m "feat: cache de borda nas respostas determinísticas de /api
 
@@ -228,7 +256,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 - Test: `src/test/java/com/eldermoraes/CacheHeadersTest.java:modify` (adicionar um teste)
 
 **Interfaces:**
-- Consumes: o valor do header definido na Task 1 (`CacheControlFilter.CACHEABLE`), repetido literalmente no properties — o `quarkus.http.filter` não lê constantes Java.
+- Consumes: a propriedade `swapi.cache-control.public`, definida na Task 1 no `application.properties`. Esta task a **referencia**, não a redefine.
 - Produces: `GET /openapi.json` devolvendo o header. Nada depende disso adiante.
 
 - [ ] **Step 1: Escrever o teste que falha**
@@ -257,17 +285,22 @@ Expected: FAIL — a rota não passa por filtro JAX-RS, então o `CacheControlFi
 
 - [ ] **Step 3: Adicionar o filtro HTTP**
 
-Em `src/main/resources/application.properties`, logo abaixo do bloco do filtro de assets (que termina em `quarkus.http.filter.assets.header."Cache-Control"=...`), acrescentar:
+Em `src/main/resources/application.properties`, logo abaixo da propriedade
+`swapi.cache-control.public` criada na Task 1, acrescentar:
 
 ```properties
 # A spec OpenAPI so muda em deploy -> cacheavel na borda como os dados da API.
 # Rota servida pela extensao smallrye-openapi, fora do @ApplicationPath("/api"):
 # nao passa por ContainerResponseFilter, entao o header vem do filtro HTTP.
+# Referencia a MESMA propriedade que o CacheControlFilter injeta — nao duplicar o valor.
 quarkus.http.filter.openapi.matches=/openapi\\.json
-quarkus.http.filter.openapi.header."Cache-Control"=public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400
+quarkus.http.filter.openapi.header."Cache-Control"=${swapi.cache-control.public}
 ```
 
-Atenção ao `\\.`: `matches` é regex e, em `.properties`, a contrabarra precisa ser escapada — o valor que chega à regex é `/openapi\.json`.
+Dois pontos de atenção:
+
+- `\\.`: `matches` é regex e, em `.properties`, a contrabarra precisa ser escapada — o valor que chega à regex é `/openapi\.json`.
+- `${swapi.cache-control.public}` é expansão de propriedade do MicroProfile Config. Se o teste do Step 4 falhar mostrando o header com o texto `${...}` literal em vez do valor expandido, **pare e reporte** — não resolva duplicando o literal, que é justamente o que esta task existe para evitar.
 
 - [ ] **Step 4: Rodar o teste e confirmar que passa**
 
