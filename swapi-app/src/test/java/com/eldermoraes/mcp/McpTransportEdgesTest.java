@@ -71,4 +71,17 @@ class McpTransportEdgesTest {
                 .statusCode(404)
                 .body(containsString("/mcp"));
     }
+
+    @Test
+    void mcpAnswersCorsPreflightSoBrowserClientsCanConnect() {
+        given()
+                .header("Origin", "https://app.example")
+                .header("Access-Control-Request-Method", "POST")
+                .header("Access-Control-Request-Headers", "content-type,mcp-session-id")
+        .when()
+                .options("/mcp")
+        .then()
+                .statusCode(200)
+                .header("Access-Control-Allow-Origin", containsString("app.example"));
+    }
 }

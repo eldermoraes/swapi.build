@@ -9,6 +9,7 @@ import java.util.List;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.nullValue;
 
 @QuarkusTest
 class CacheHeadersTest {
@@ -102,5 +103,53 @@ class CacheHeadersTest {
         .then()
                 .statusCode(200)
                 .header("Cache-Control", containsString(EDGE_TTL));
+    }
+
+    // O filtro CORS ecoa o Origin da request e nao emite Vary. Sem Vary a borda
+    // serve a variante de um origin (ou a variante sem origin) para outro
+    // cliente — CORS quebrado de forma intermitente, e ACAO de terceiro preso
+    // na borda por um ano.
+    @Test
+    void cacheableResponseVariesByOrigin() {
+        given()
+                .header("Origin", "https://app.example")
+        .when()
+                .get("/api/people/1")
+        .then()
+                .statusCode(200)
+                .header("Vary", containsString("Origin"));
+    }
+
+    @Test
+    void cacheableNotFoundAlsoVariesByOrigin() {
+        given()
+        .when()
+                .get("/api/people/9999")
+        .then()
+                .statusCode(404)
+                .header("Vary", containsString("Origin"));
+    }
+
+    @Test
+    void openApiSpecVariesByOrigin() {
+        given()
+        .when()
+                .get("/openapi.json")
+        .then()
+                .statusCode(200)
+                .header("Vary", containsString("Origin"));
+    }
+
+    // O Vary entra no MESMO if do Cache-Control: o ramo nao-cacheavel nao pode
+    // ganhar Vary de carona, senao a decisao "random nao e cacheavel" fica
+    // acoplada a decisao de CORS.
+    @Test
+    void nonCacheableRandomDoesNotGetVary() {
+        given()
+        .when()
+                .get("/api/people/random")
+        .then()
+                .statusCode(200)
+                .header("Vary", nullValue());
     }
 }
