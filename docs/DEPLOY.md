@@ -187,14 +187,22 @@ curl -s https://swapi.build/api/people/3 | grep -c evil.example                 
 If either is non-zero, purge the cache immediately and add `Vary: X-Forwarded-Host` to the
 cacheable response before redeploying.
 
-### Open questions to settle on the next real deploy
+### Questions settled on the 2026-08-03 production deploy
 
-1. Per-request session cost: compare `time_total` of a warm `tools/call` against the historical figure, to size what `auto-init` costs.
-2. `x-vercel-cache` HIT rate on `/api/*` after `Vary: Origin` — confirm the edge still hits and that varying by `Origin` did not fragment the cache meaningfully.
-3. Whether Vercel's edge caches a response carrying `max-age` without `s-maxage` — this decides whether `Vary: Origin` on `/assets/*` and the SPA's static responses does anything at all. A local container cannot answer it.
+1. **Per-request cost of `auto-init`:** a warm `tools/call` measured 0.19–0.36s over five
+   runs (~0.26s median), in line with the historical warm-instance figure. Serving every
+   call with a session costs nothing measurable at this scale.
+2. **`Vary: Origin` did not fragment the `/api/*` cache:** six distinct paths all went
+   `MISS` → `HIT` on the second request. Varying by `Origin` is safe here because clients
+   that send no `Origin` — curl, servers, MCP — share one entry.
+3. **The edge *does* cache a response carrying `max-age` without `s-maxage`:** verified on
+   `/assets/index-*.js` (`cache-control: public, max-age=31536000, immutable`, no
+   `s-maxage`), which went `MISS` → `HIT`. So `Vary: Origin` on the SPA's static responses
+   is load-bearing, not decorative — without it the edge could serve one origin's
+   `Access-Control-Allow-Origin` to another. A local container could not answer this.
 
-Note: `functionDefaultTimeout` is still 15s and the spec decided 60s. Once the `PATCH` below
-is applied, update the Troubleshooting row that calls 15s "a deliberate call".
+Note: `functionDefaultTimeout` is **60s** since 2026-08-03, as the spec had decided. It is a
+project setting (`resourceConfig`), applied by `PATCH` without a redeploy — see Troubleshooting.
 
 ## Troubleshooting
 
@@ -209,5 +217,6 @@ is applied, update the Troubleshooting row that calls 15s "a deliberate call".
 | 403 on every path of `swapi.build`, answered in ~0.07s with `x-vercel-mitigated: deny` | Automatic mitigation blocked the source IP (typical after a load test). The app is **not** down: check with `curl https://swapi-build.vercel.app/api/people/1` (200) or hit the public domain from another IP. It expires on its own; IP `bypass` rules don't exist on the Hobby plan. **Do not redeploy.** |
 | `x-vercel-cache: MISS` always, on a path that isn't `/random` | The `CacheControlFilter` isn't applying the header. Check `curl -sI <host>/api/people/1 \| grep -i cache-control` — it must contain `max-age=300` (the edge strips `s-maxage` before the client sees it). Remember `GET` and `HEAD` are separate cache entries. |
 | A wrong response "frozen" at the edge (1-year TTL) | Purge: dashboard → project → **CDN** → **Caches** → **Purge**, `*` for the whole project. Prefer **Invalidate** over **Delete** (Delete revalidates in the foreground and risks a cache stampede). A new deployment also clears it, since the cache key includes the deployment URL. |
-| First request after a deploy takes ~11s | Container cold start (image pull + boot). Measured 10.9s on 2026-08-03. Edge cache makes the function idle more, so cold starts now hit the uncached `/random` endpoints more often than before. |
-| `504` / `FUNCTION_INVOCATION_TIMEOUT` on the first request after a deploy | The cold start (~11s measured) exceeded `functionDefaultTimeout`, currently **15s** — a deliberate call, but the margin is only ~4s. Fix without redeploying: `PATCH /v9/projects/swapi-build` with `resourceConfig` `{"fluid":true,"functionDefaultRegions":["iad1"],"functionDefaultTimeout":60}`. Takes effect immediately. |
+| First request after a deploy takes ~11s | Container cold start (image pull + boot). Measured 10.9s on 2026-08-03. Edge cache makes the function idle more, so cold starts now hit the uncached `/random` endpoints more often than before. The first external request after the second 2026-08-03 deploy took only 1.67s, but that is **not** a counter-measurement: nothing rules out a platform health check having booted the instance first. Treat ~11s as the number to budget against. |
+| `Error: fetch failed` / `"reason": "deploy_failed"` from the CLI mid-build | The CLI lost its log stream — **the remote build usually keeps running**. Do not paste the `retry deploy` command the CLI suggests: that starts a second native build in parallel. Get the deployment id from the CLI output (or `list_deployments`) and poll `GET /v13/deployments/<id>` until `readyState` leaves `BUILDING`. Seen on 2026-08-03: the CLI errored out, the build finished `READY` normally, and the preview verified clean. |
+| `504` / `FUNCTION_INVOCATION_TIMEOUT` on the first request after a deploy | The cold start (~11s measured) exceeded `functionDefaultTimeout`, now **60s** since 2026-08-03 — the earlier 15s left only ~4s of margin. Read the current value with `GET /v9/projects/swapi-build`; change it with `PATCH` and the same `resourceConfig` shape (`{"fluid":true,"functionDefaultRegions":["iad1"],"functionDefaultTimeout":60}`). It is a project setting: it takes effect immediately, without a redeploy. |
