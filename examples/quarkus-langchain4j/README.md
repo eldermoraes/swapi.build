@@ -1,59 +1,186 @@
-# swapi-assistant
+# swapi.build assistant — Quarkus + LangChain4j
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+A small Quarkus application that answers natural-language Star Wars questions using
+only facts it fetched from [swapi.build](https://swapi.build). It reaches the same data
+two ways: `POST /ask/mcp` gets its tools from the remote **MCP server** at
+`https://swapi.build/mcp`, and `POST /ask/api` gets them from local `@Tool` beans
+calling the **REST API**. Both share one system prompt, so the only variable is where
+the tools come from — which is the whole point of the example.
 
-If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
+## Prerequisites
 
-## Running the application in dev mode
+- **Java 25** (`maven.compiler.release=25`).
+- **[Ollama](https://ollama.com)** with the model `gemma4:31b-cloud` pulled.
+  The `-cloud` suffix matters: these models run on Ollama's hosted infrastructure, not
+  on your machine, so they require `ollama signin` and network access. Quarkus Dev
+  Services talks to a local Ollama daemon on port `11434` and that daemon proxies to
+  the hosted model. See [Switching models](#switching-models) to run fully local instead.
+- **Network access to `swapi.build`** for both paths (and for the `live` tests).
 
-You can run your application in dev mode that enables live coding using:
+No Maven install needed — the wrapper is included.
 
-```shell script
+## Run
+
+```bash
 ./mvnw quarkus:dev
 ```
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
+The app listens on **port 8090** (`quarkus.http.port=8090`), so the Dev UI is at
+<http://localhost:8090/q/dev/>.
 
-## Packaging and running the application
+Ask the same question through both paths:
 
-The application can be packaged using:
-
-```shell script
-./mvnw package
+```bash
+curl -s -X POST http://localhost:8090/ask/mcp -H 'Content-Type: application/json' \
+  -d '{"question":"Which planet is Luke Skywalker from, and what is its climate?"}'
 ```
 
-It produces the `quarkus-run.jar` file in the `target/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/quarkus-app/lib/` directory.
-
-The application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
-
-If you want to build an _über-jar_, execute the following command:
-
-```shell script
-./mvnw package -Dquarkus.package.jar.type=uber-jar
+```bash
+curl -s -X POST http://localhost:8090/ask/api -H 'Content-Type: application/json' \
+  -d '{"question":"Which planet is Luke Skywalker from, and what is its climate?"}'
 ```
 
-The application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
+What we got on one run — quoted verbatim, **not** output you should expect to match:
 
-## Creating a native executable
-
-You can create a native executable using:
-
-```shell script
-./mvnw package -Dnative
+```json
+{"path":"mcp","answer":"Luke Skywalker is from Tatooine, which has an arid climate."}
 ```
 
-Or, if you don't have GraalVM installed, you can run the native executable build in a container using:
-
-```shell script
-./mvnw package -Dnative -Dquarkus.native.container-build=true
+```json
+{"path":"api","answer":"Luke Skywalker is from the planet Tatooine, which has an arid climate."}
 ```
 
-You can then execute your native executable with: `./target/swapi-assistant-1.0.0-SNAPSHOT-runner`
+Even with `quarkus.langchain4j.ollama.chat-model.temperature=0`, the wording moves
+between runs: a second run produced the same two sentences with the paths swapped. The
+*content* was stable across runs — Tatooine, arid, two chained tool calls with identical
+arguments — but the phrasing is not, and nothing in the test suite asserts on it. Do not
+build anything that depends on the exact string.
 
-If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
+**On timing:** the first `/ask/mcp` call took about **9.6 s** and later ones about
+**1.5 s**. That gap is the MCP handshake against `swapi.build/mcp`, which happens once,
+lazily, on the first call — not a standing cost of the MCP path. MCP is not six times
+slower than REST here.
 
-## Related Guides
+## The two paths, side by side
 
-- REST ([guide](https://quarkus.io/guides/rest)): A Jakarta REST implementation utilizing build time processing and Vert.x. This extension is not compatible with the quarkus-resteasy extension, or any of the extensions that depend on it.
-- REST Jackson ([guide](https://quarkus.io/guides/rest#json-serialisation)): Jackson serialization support for Quarkus REST. This extension is not compatible with the quarkus-resteasy extension, or any of the extensions that depend on it
+|  | MCP path (`POST /ask/mcp`) | REST path (`POST /ask/api`) |
+|---|---|---|
+| Tool source | remote MCP server, discovered at runtime | local `@Tool` beans |
+| Config | 2 lines in `application.properties` (`transport-type`, `url`) | 1 line (`quarkus.rest-client.swapi-api.url`) |
+| Java you write | one annotation: `@McpToolBox("swapi")` on `Archivist.ask` | `SwapiClient` (4 methods) + `SwapiTools` (4 `@Tool` methods with hand-written descriptions, plus 404 handling) |
+| Tool code | **none** | ~100 lines across two classes |
+| Tool descriptions | written by the server | written by you, and you own their accuracy |
+| System prompt | `Prompts.SYSTEM_MESSAGE` | `Prompts.SYSTEM_MESSAGE` (the same constant, not a copy) |
+
+Both answered the same question from live tool output. The point, plainly: **consuming a
+remote MCP server from Quarkus is configuration, not code.** The server describes its own
+capabilities, so there is nothing to keep in sync when it changes.
+
+### The tool surfaces are genuinely different
+
+This is not only about lines of code. The two paths present different tool designs to the
+model, and it shows up in tokens:
+
+- The MCP server advertises four *generic* tools — `sw_list`, `sw_get`, `sw_random`,
+  `sw_search` — each parameterized by a `resource` enum (`PEOPLE`, `PLANETS`, `FILMS`,
+  `SPECIES`, `STARSHIPS`, `VEHICLES`). One call shape covers six resources.
+  First-call prompt evaluation: **579 tokens**.
+- The REST path declares four *narrow* tools — `searchPeople`, `person`, `searchPlanets`,
+  `planet` — one per operation, each with a hand-written description.
+  First-call prompt evaluation: **635 tokens**.
+
+Same answer, different tool-surface design, measurably different prompt cost. The MCP
+server's enum-parameterized shape is the more compact of the two even though it covers
+far more of the API.
+
+## How it works
+
+1. A `POST /ask/...` request hits `AskResource`, which calls one of the two AI services
+   (`Archivist` or `RestArchivist`).
+2. On the MCP path, the MCP client performs its `initialize` + `tools/list` handshake the
+   first time its bean is created — **not** at Quarkus startup. That is why the first
+   request is slow and why the offline test suite can boot without touching the network.
+3. The model receives the tool list and picks calls. The canonical question needs **two
+   chained calls**: find the character, then look up their homeworld.
+4. The model is *told* how to chain, in two places. `Prompts.SYSTEM_MESSAGE` says "look up
+   a character first, then look up their home planet", and on the REST path the `planet`
+   tool description spells out the id rule with a worked example: a homeworld of
+   `https://swapi.build/api/planets/1` means `id` 1. It did not have to infer that
+   convention — the descriptions state it, which is exactly why they are worth writing
+   carefully.
+5. Observed on the run above:
+
+   ```
+   # MCP path
+   sw_search {"query":"Luke Skywalker","resource":"PEOPLE"}
+   sw_get    {"id":1,"resource":"PLANETS"}
+
+   # REST path
+   searchPeople {"name":"Luke Skywalker"}
+   planet       {"id":1}
+   ```
+
+`SwapiTools` translates a `404` into a readable JSON error instead of letting it abort the
+AI call, so a wrong id guess is something the model can recover from. Only `404` is
+translated; every other failure still propagates.
+
+## Switching models
+
+One property:
+
+```properties
+quarkus.langchain4j.ollama.chat-model.model-name=gemma4:31b-cloud
+```
+
+Any tool-calling model works — for example `gpt-oss:20b` or `qwen3.5:35b`, both of which
+run fully locally and need neither `ollama signin` nor a network round trip to a hosted
+model. **Tool calling is required.** A model without it cannot run this example at all:
+there is no fallback path that answers from the model's own knowledge, by design.
+
+## Pointing at a local swapi.build
+
+`application.properties` ships the override commented out:
+
+```properties
+quarkus.langchain4j.mcp.swapi.url=https://swapi.build/mcp
+# Point at a locally running swapi.build instead:
+# quarkus.langchain4j.mcp.swapi.url=http://localhost:5432/mcp
+```
+
+`5432` is swapi-app's dev port. For the REST path, point
+`quarkus.rest-client.swapi-api.url` at `http://localhost:5432/api` the same way.
+
+## Tests
+
+```bash
+./mvnw test          # offline: no network, no model
+./mvnw test -Dgroups=live   # hits the public MCP server and REST API
+```
+
+**What the offline suite covers.** `ArchivistWiringTest` boots Quarkus, which builds both
+AI-service proxies and validates `@McpToolBox("swapi")` against the configured client. It
+then injects the `McpClient`, which triggers a real MCP handshake — against
+`McpStubServer`, a local stub bound to that one test class via
+`@QuarkusTestResource(..., restrictToAnnotatedClass = true)`. The stub advertises exactly
+one tool, so if the URL override ever leaked and the suite started talking to the real
+server, the assertion fails loudly. The Ollama dev service is off under `%test`, so no
+container starts and no model is pulled.
+
+**What the live suite covers.** `McpConnectivityTest` asserts the real server still lists
+`sw_list`, `sw_get`, `sw_random` and `sw_search`, and hard-fails if its URL was retargeted
+at a stub. `SwapiToolsLiveTest` calls the REST tools against `swapi.build` and checks the
+404 handling.
+
+**What nothing covers.** There is no automated test of the `/ask/mcp` or `/ask/api` HTTP
+endpoints, and **no test calls the model**. End-to-end behaviour was verified by hand with
+the curl commands above. That is a deliberate limit: model output is not stable enough to
+assert on (see [Run](#run)), and a test that needed a signed-in cloud model would not be
+runnable by most readers.
+
+## Links
+
+- [swapi.build](https://swapi.build) — the API this example consumes
+- [swapi.build/docs/mcp](https://swapi.build/docs/mcp) — MCP server docs and client setup
+- [Quarkus LangChain4j](https://docs.quarkiverse.io/quarkus-langchain4j/dev/index.html) —
+  extension docs, including [MCP client support](https://docs.quarkiverse.io/quarkus-langchain4j/dev/mcp.html)
+- [Model Context Protocol](https://modelcontextprotocol.io)

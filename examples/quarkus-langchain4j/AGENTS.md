@@ -19,7 +19,7 @@ Skipping any of these steps is a violation. NEVER implement a feature by hand-co
 1. **Use quarkus_skills BEFORE writing any code or tests** -- it contains extension-specific patterns, testing approaches, and common pitfalls that prevent mistakes. Skills may also list **Available Dev MCP Tools** specific to each extension (e.g. OpenAPI schema retrieval, scheduler job management) -- use these via `quarkus_callTool`. Call this EVERY time you are about to add or modify a feature, not just at project creation. When returning to an existing project, query for the `quarkus-update` skill to check if the Quarkus version is up-to-date.
 2. **Use quarkus_searchDocs for Quarkus documentation** -- do NOT use generic documentation tools (Context7, web search). The Quarkus doc search is version-aware and more accurate.
 3. **Use quarkus_searchTools to discover Dev MCP tools** on the running app for testing, config changes, and extension management. The tool list is **dynamic** -- it changes when extensions are added or removed. Re-call `quarkus_searchTools` after any extension change to discover newly available tools. Note: some extension-specific tools are also documented in the skills output (see step 1).
-4. **Use quarkus_callTool to invoke Dev MCP tools** -- run tests, add extensions, update configuration. Do NOT run Maven/Gradle commands manually.
+4. **Use quarkus_callTool to invoke Dev MCP tools** -- add extensions, update configuration, inspect the running app. Exception: run tests with `./mvnw` (see [Testing](#testing)).
 5. **After code changes, trigger a reload** via `quarkus_callTool` with toolName `devui-logstream_forceRestart`. Do NOT restart the app manually.
 6. **After pom.xml / build.gradle changes** (adding dependencies or extensions), you MUST do a full `quarkus_stop` + `quarkus_start` cycle. A `forceRestart` only recompiles source files -- it does NOT re-resolve dependencies.
 
@@ -36,20 +36,22 @@ Skipping any of these steps is a violation. NEVER implement a feature by hand-co
 
 ## Testing
 
-If your agent supports subagents, run tests in a **subagent** so the main conversation stays responsive:
+This project uses the Maven wrapper directly, because the suite is split by JUnit tag and
+that split is configured in `pom.xml` (surefire `excludedGroups`, cleared by the
+`explicit-groups` profile whenever `-Dgroups` is passed). The Dev MCP test runner does not
+honour `-Dgroups`, so it cannot run the `live` half.
 
-```
-If supported, use the Agent tool to launch a subagent with this prompt:
-  "Run the Quarkus tests for project <projectDir> using quarkus_callTool
-   with toolName 'devui-testing_runTests'. Analyze the results and report
-   which tests passed, failed, or errored. If tests fail, include the
-   failure messages and suggest fixes."
+```bash
+./mvnw test                 # offline suite: no network, no model
+./mvnw test -Dgroups=live   # live suite: hits swapi.build (MCP server + REST API)
 ```
 
-- Use `devui-testing_runTests` to run all tests.
-- Use `devui-testing_runTest` with arguments `{"className":"com.example.MyTest"}` to run a specific test class.
-- Do NOT run Maven/Gradle test commands manually -- the Dev MCP test tools handle compilation, hot reload, and result reporting.
-- After fixing test failures, re-run tests (via a subagent if supported) to verify the fix.
+- The default suite must stay offline. Anything that needs `swapi.build` or a model goes
+  behind `@Tag("live")`.
+- Any test resource that overrides `quarkus.langchain4j.mcp.swapi.url` must use
+  `restrictToAnnotatedClass = true`, or it retargets the live gate at the stub. See the
+  comments in `application.properties` and `ArchivistWiringTest`.
+- After fixing test failures, re-run both suites to verify the fix.
 - **NEVER run `mvn clean` or `gradle clean` while dev mode is running** -- it deletes `target/test-classes` and breaks the test runner with no automatic recovery.
 - If the test runner gets stuck returning "Tests already in progress", do a full `quarkus_stop` + `quarkus_start` cycle to reset the test runner state.
 

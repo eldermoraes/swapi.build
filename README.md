@@ -156,6 +156,12 @@ Or Bob panel → MCP tab → **Edit Global MCP**. Bob detects the tools automati
 > provision the container; subsequent calls are fast, whether your client is stateless or
 > session-based).
 
+### Example client
+
+[`examples/quarkus-langchain4j`](examples/quarkus-langchain4j) — a Quarkus + LangChain4j
+assistant that answers natural-language questions using the MCP tools above, with the same
+questions answered through the REST API side by side for comparison.
+
 ## Project Structure
 
 ```
