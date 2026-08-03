@@ -6,9 +6,9 @@ export function renderAbout(container: HTMLElement): void {
       <section class="about-section">
         <h2>What is this?</h2>
         <p>
-          SWAPI (Star Wars API) is a free, open-source REST API that serves all the Star Wars data you could ever want:
-          People, Films, Planets, Species, Starships, and Vehicles. All available in JSON format, ready to be consumed
-          by your applications.
+          SWAPI (Star Wars API) is a free, open-source REST API and MCP server that serves all the Star Wars data you
+          could ever want: People, Films, Planets, Species, Starships, and Vehicles. All available in JSON format, ready
+          to be consumed by your applications and your AI agents.
         </p>
       </section>
 
