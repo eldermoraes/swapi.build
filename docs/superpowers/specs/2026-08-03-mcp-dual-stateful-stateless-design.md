@@ -281,6 +281,18 @@ parcialmente um risco criado pelo cache — mas subir o timeout ataca a causa.
   stateless).
 - `README.md` — a seção MCP diz "stateless (spec 2026-07-28)"; passa a declarar
   que qualquer cliente Streamable HTTP funciona.
+- **Texto público do site** (`swapi-app/src/main/webui/src/pages/mcp.ts`,
+  `privacy.ts`, `home.ts`) — acrescentado em 2026-08-03, ao escrever o plano.
+  Quatro afirmações de que o servidor é stateless-only e que "não há session
+  ids", incluindo a **política de privacidade**: *"There are no sessions and no
+  server-side state tied to you or your agent."* É falso hoje (o servidor emite
+  `Mcp-Session-Id`) e continua falso depois do `auto-init` — o que muda é que a
+  sessão passa a ser descartável, não que ela deixe de existir. A redação nova
+  precisa ser exata: sessão só em memória, guardando apenas versão de protocolo
+  e nome do cliente que o próprio cliente mandou, nunca escrita em disco,
+  descartada quando ociosa. Uma imprecisão em política de privacidade não é
+  detalhe de copy — e a avaliação de 2026-07-31 registra que política de
+  privacidade pública é pré-requisito do Claude Connectors Directory.
 
 **Não muda:** `SwapiTools.java` e as quatro tools; os services; o `Dockerfile.vercel`;
 o pipeline de deploy.
