@@ -41,6 +41,11 @@ public class CacheControlFilter implements ContainerResponseFilter {
         if (isCacheable(request, response)
                 && !response.getHeaders().containsKey(HttpHeaders.CACHE_CONTROL)) {
             response.getHeaders().putSingle(HttpHeaders.CACHE_CONTROL, cacheControl);
+            // O filtro CORS ecoa o Origin da request e nao emite Vary. Sem isto a
+            // borda serviria o Access-Control-Allow-Origin de um origin para
+            // outro — e a variante sem Origin para um cliente de browser.
+            // add, nao putSingle: preserva um Vary que ja exista (ex.: Accept-Encoding).
+            response.getHeaders().add(HttpHeaders.VARY, "Origin");
         }
     }
 

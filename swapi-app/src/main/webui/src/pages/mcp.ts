@@ -127,10 +127,12 @@ export function renderMcp(container: HTMLElement): void {
       <h2>Endpoint</h2>
       ${code('endpoint', 'plain', ENDPOINT)}
       <div class="spec-callout">
-        <strong>Built on the stateless MCP spec (2026-07-28).</strong>
-        Every request is self-contained — no <code>initialize</code> handshake, no session ids,
-        nothing to keep alive between calls. That makes it a natural fit for serverless clients
-        and for live demos that must never break. First-party, read-only, no authentication.
+        <strong>Streamable HTTP — both paradigms on one endpoint.</strong>
+        Clients on the stateless spec (2026-07-28) send self-contained requests: no
+        <code>initialize</code> handshake, no session ids, nothing to keep alive between calls.
+        Clients on earlier revisions negotiate a session and work just as well: this deployment
+        has no session affinity, so if a session lands on a different instance it's simply
+        issued a fresh one instead of failing. First-party, read-only, no authentication.
       </div>
     </section>
 
@@ -177,9 +179,10 @@ export function renderMcp(container: HTMLElement): void {
 
     <section class="mcp-trouble">
       <h2>Troubleshooting</h2>
-      <p>The server scales to zero when idle. If the very first connection attempt fails or times out,
-      retry once — the native binary starts in tens of milliseconds (the platform may take a bit longer
-      to provision the container) and stateless requests are immune after that.</p>
+      <p>The server scales to zero when idle. The native binary starts in tens of milliseconds, but
+      provisioning the container takes several seconds, so the very first call after an idle period is
+      slow — retry once if it times out. Subsequent calls are fast, whether your client is stateless
+      or session-based.</p>
       <p>Probing <code>/mcp</code> with raw <code>curl</code>? Stateless requests must include the
       <code>MCP-Protocol-Version</code>, <code>Mcp-Method</code> and <code>Mcp-Name</code> headers —
       MCP clients send these automatically.</p>
