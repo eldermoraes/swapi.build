@@ -77,19 +77,25 @@ SID=$(curl -s -D - -o /dev/null -b jar.txt -X POST "https://<preview-host>/mcp" 
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"1.0"}}}' \
   | tr -d '\r' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
-test -n "$SID" || { echo "FAIL: no session id issued"; false; }
-for i in $(seq 1 12); do
-  ( curl -s -o /dev/null -w '%{http_code}\n' -b jar.txt -X POST "https://<preview-host>/mcp" \
-      -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-      -H "Mcp-Session-Id: $SID" \
-      -d '{"jsonrpc":"2.0","id":'$i',"method":"tools/list"}' ) &
-done | sort | uniq -c
+if [ -z "$SID" ]; then
+  echo "FAIL: no session id issued - do not read the burst below as a pass"
+else
+  for i in $(seq 1 12); do
+    ( curl -s -o /dev/null -w '%{http_code}\n' -b jar.txt -X POST "https://<preview-host>/mcp" \
+        -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+        -H "Mcp-Session-Id: $SID" \
+        -d '{"jsonrpc":"2.0","id":'$i',"method":"tools/list"}' ) &
+  done | sort | uniq -c
+fi
 # esperado: 12 200
 ```
 
 The empty-SID guard matters: with `auto-init` on, a request carrying an empty or
-missing session id also returns 200, so a failed extraction would print `12 200`
-and look like a pass without ever having sent a real session id.
+missing session id also returns 200, so a failed extraction would otherwise print
+`12 200` and look like a pass without ever having sent a real session id. The
+`if`/`else` skips the burst entirely on failure rather than relying on `set -e`
+or `exit`, which would be wrong in a runbook block an operator pastes into their
+own interactive shell.
 
 Run the concurrent burst against the **preview only** — bursts are what trip the
 Vercel IP mitigation documented in Troubleshooting.
