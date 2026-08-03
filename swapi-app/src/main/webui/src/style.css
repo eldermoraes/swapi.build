@@ -910,3 +910,75 @@ a:hover {
   color: var(--accent);
   white-space: nowrap;
 }
+
+/* Try it — inline request runner on each endpoint block */
+.try-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0 1rem 0.85rem;
+}
+
+.try-input {
+  flex: 0 1 12rem;
+  max-width: 12rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.try-button {
+  padding: 0.4rem 1rem;
+  font-size: 0.8rem;
+}
+
+.try-result {
+  margin: 0 1rem 0.85rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.try-status {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+
+.try-status:last-child {
+  border-bottom: none;
+}
+
+.try-json {
+  margin: 0;
+  padding: 0.75rem;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.7;
+  max-height: 24rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.try-json .json-key {
+  color: var(--json-key);
+}
+.try-json .json-string {
+  color: var(--json-string);
+}
+.try-json .json-number {
+  color: var(--json-number);
+}
+.try-json .json-bool {
+  color: var(--json-bool);
+}
+.try-json .json-null {
+  color: var(--json-null);
+}

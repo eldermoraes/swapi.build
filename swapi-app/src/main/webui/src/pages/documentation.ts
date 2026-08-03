@@ -1,4 +1,5 @@
 import { fetchOpenApiSpec } from '../api';
+import { highlightJson } from '../json-highlight';
 import { escapeHtml } from '../utils';
 import type { OpenApiOperation, OpenApiSchemaObj, OpenApiSpec } from '../types';
 
@@ -33,9 +34,24 @@ function operationsByTag(spec: OpenApiSpec, tag: string): { path: string; op: Op
 
 function endpointBlock(path: string, op: OpenApiOperation): string {
   const search = op.parameters?.find((p) => p.in === 'query' && p.name === 'search');
+  const idParam = op.parameters?.find((p) => p.in === 'path' && p.name === 'id');
   const displayPath = search ? `${path}?search=${search.example ?? 'value'}` : path;
   const desc = [op.summary, op.description].filter(Boolean).map((s) => escapeHtml(s!)).join(' — ');
   const has404 = Boolean(op.responses['404']);
+
+  const inputs = [
+    idParam
+      ? `<input class="input-field try-input" name="id" type="number" min="1"
+           placeholder="id" value="${escapeHtml(String(idParam.example ?? '1'))}"
+           aria-label="${escapeHtml(idParam.description ?? 'id')}">`
+      : '',
+    search
+      ? `<input class="input-field try-input" name="search" type="text"
+           placeholder="search (optional)" value=""
+           aria-label="${escapeHtml(search.description ?? 'search')}">`
+      : '',
+  ].join('');
+
   return `
     <div class="endpoint-block" data-path="${escapeHtml(path)}">
       <div class="endpoint-method">
@@ -43,6 +59,11 @@ function endpointBlock(path: string, op: OpenApiOperation): string {
         <span class="endpoint-path">${escapeHtml(displayPath)}</span>
       </div>
       <div class="endpoint-desc">${desc}${has404 ? ' <span class="status-note">200 / 404</span>' : ''}</div>
+      <form class="try-form">
+        ${inputs}
+        <button type="submit" class="btn try-button">Try it</button>
+      </form>
+      <div class="try-result" hidden></div>
     </div>`;
 }
 
@@ -108,4 +129,35 @@ export async function renderDocumentation(container: HTMLElement): Promise<void>
       </p>
       ${sections}
     </div>`;
+
+  container.querySelectorAll<HTMLFormElement>('.try-form').forEach((form) => {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const block = form.closest<HTMLElement>('.endpoint-block')!;
+      const result = block.querySelector<HTMLElement>('.try-result')!;
+      const idInput = form.querySelector<HTMLInputElement>('input[name="id"]');
+      const searchInput = form.querySelector<HTMLInputElement>('input[name="search"]');
+
+      let url = block.dataset.path!;
+      if (idInput) url = url.replace('{id}', encodeURIComponent(idInput.value || '1'));
+      if (searchInput?.value) url += `?search=${encodeURIComponent(searchInput.value)}`;
+
+      result.hidden = false;
+      result.innerHTML = '<p class="try-status">Loading…</p>';
+      try {
+        const res = await fetch(url);
+        const statusLine = `<p class="try-status">GET ${escapeHtml(url)} → HTTP ${res.status}</p>`;
+        const text = await res.text();
+        let bodyHtml: string;
+        try {
+          bodyHtml = `<pre class="try-json">${highlightJson(JSON.parse(text))}</pre>`;
+        } catch {
+          bodyHtml = `<pre class="try-json">${escapeHtml(text)}</pre>`; // 404 devolve text/plain
+        }
+        result.innerHTML = statusLine + bodyHtml;
+      } catch {
+        result.innerHTML = '<p class="try-status">Network error — check your connection</p>';
+      }
+    });
+  });
 }
