@@ -92,6 +92,31 @@ and `200 application/json` for the spec.
 Then run the MCP probe from step 2 against `https://swapi.build/mcp` (no cookie jar
 needed — the custom domain has no SSO).
 
+**Edge cache** — the response reaching the client shows `cache-control: public, max-age=300`:
+the CDN consumes and strips `s-maxage`/`stale-while-revalidate` before forwarding. The proof
+the edge stored it is `x-vercel-cache` going `MISS` → `HIT` on a second request to the same
+path. Note the cache key includes the HTTP method, so a `GET` and a `HEAD` on the same path
+are separate entries — don't read the first `HEAD` MISS as a failure.
+
+```bash
+curl -sI https://swapi.build/api/people/1 | grep -i 'x-vercel-cache'   # MISS
+curl -sI https://swapi.build/api/people/1 | grep -i 'x-vercel-cache'   # HIT
+curl -sI https://swapi.build/api/people/random | grep -i 'x-vercel-cache'  # MISS, sempre
+```
+
+**Cache poisoning probe** — responses embed absolute URLs built from the per-request host,
+and `X-Forwarded-Host` is *not* part of the cache key. Vercel overwrites the header (verified
+2026-08-03: plain spoof, RFC 7239 `Forwarded`, and a duplicated header were all ignored), so
+this is a regression check:
+
+```bash
+curl -s -H 'X-Forwarded-Host: evil.example' https://swapi.build/api/people/3 | grep -c evil.example  # 0
+curl -s https://swapi.build/api/people/3 | grep -c evil.example                                      # 0
+```
+
+If either is non-zero, purge the cache immediately and add `Vary: X-Forwarded-Host` to the
+cacheable response before redeploying.
+
 ## Troubleshooting
 
 | Symptom | Cause / fix |
@@ -102,3 +127,7 @@ needed — the custom domain has no SSO).
 | Transient 404 on first stateful MCP connect | Serverless cold start. Retry resolves it. |
 | Quinoa build fails on Vercel with local artifacts | `swapi-app/.vercelignore` must exclude `dist/` and `target/`. |
 | 202 responses from the API | Legacy quirk retired 2026-08-01 — current builds return 200; a 202 means an old deployment is live. |
+| 403 on every path of `swapi.build`, answered in ~0.07s with `x-vercel-mitigated: deny` | Automatic mitigation blocked the source IP (typical after a load test). The app is **not** down: check with `curl https://swapi-build.vercel.app/api/people/1` (200) or hit the public domain from another IP. It expires on its own; IP `bypass` rules don't exist on the Hobby plan. **Do not redeploy.** |
+| `x-vercel-cache: MISS` always, on a path that isn't `/random` | The `CacheControlFilter` isn't applying the header. Check `curl -sI <host>/api/people/1 \| grep -i cache-control` — it must contain `max-age=300` (the edge strips `s-maxage` before the client sees it). Remember `GET` and `HEAD` are separate cache entries. |
+| A wrong response "frozen" at the edge (1-year TTL) | Purge: dashboard → project → **CDN** → **Caches** → **Purge**, `*` for the whole project. Prefer **Invalidate** over **Delete** (Delete revalidates in the foreground and risks a cache stampede). A new deployment also clears it, since the cache key includes the deployment URL. |
+| First request after a deploy takes ~11s | Container cold start (image pull + boot). Measured 10.9s on 2026-08-03. Keep `functionDefaultTimeout` comfortably above it — see the note in `docs/superpowers/specs/2026-08-03-cache-borda-resiliencia-design.md`. Edge cache makes the function idle more, so cold starts hit the uncached `/random` endpoints more often than before. |
