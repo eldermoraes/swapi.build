@@ -2,7 +2,7 @@
 
 swapi.build — Star Wars API (Quarkus 3 / Java 25, native image) with a Quinoa/Vite
 frontend, deployed as a Vercel container function behind Cloudflare DNS. Also serves
-an MCP server (Streamable HTTP, stateless) at `/mcp`.
+an MCP server (Streamable HTTP) at `/mcp`.
 
 ## Development cycle (in this order — do not skip steps)
 

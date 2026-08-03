@@ -73,12 +73,13 @@ concurrent calls on one session must all return 200; before `auto-init` this
 returned 33–58% `404`:
 
 ```bash
-SID=$(curl -s -D - -o /dev/null -X POST https://swapi.build/mcp \
+SID=$(curl -s -D - -o /dev/null -b jar.txt -X POST "https://<preview-host>/mcp" \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"1.0"}}}' \
-  | tr -d '\r' | awk -F': ' '/^mcp-session-id/{print $2}')
+  | tr -d '\r' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
+test -n "$SID" || { echo "FAIL: no session id issued"; false; }
 for i in $(seq 1 12); do
-  ( curl -s -o /dev/null -w '%{http_code}\n' -X POST https://swapi.build/mcp \
+  ( curl -s -o /dev/null -w '%{http_code}\n' -b jar.txt -X POST "https://<preview-host>/mcp" \
       -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
       -H "Mcp-Session-Id: $SID" \
       -d '{"jsonrpc":"2.0","id":'$i',"method":"tools/list"}' ) &
@@ -86,13 +87,18 @@ done | sort | uniq -c
 # esperado: 12 200
 ```
 
-Run this against the **preview**, not production: bursts of concurrent requests
-are what trip the Vercel IP mitigation documented below.
+The empty-SID guard matters: with `auto-init` on, a request carrying an empty or
+missing session id also returns 200, so a failed extraction would print `12 200`
+and look like a pass without ever having sent a real session id.
+
+Run the concurrent burst against the **preview only** — bursts are what trip the
+Vercel IP mitigation documented in Troubleshooting.
 
 **MCP foreign session** — a session id that never existed must still be served:
 
 ```bash
-curl -s -o /dev/null -w 'foreign session: %{http_code}\n' -X POST https://swapi.build/mcp \
+curl -s -o /dev/null -w 'foreign session: %{http_code}\n' -b jar.txt \
+  -X POST "https://<preview-host>/mcp" \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -H 'Mcp-Session-Id: never-existed' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
@@ -102,8 +108,13 @@ curl -s -o /dev/null -w 'foreign session: %{http_code}\n' -X POST https://swapi.
 **MCP edges:**
 
 ```bash
-curl -s -o /dev/null -w 'GET /mcp: %{http_code}\n' https://swapi.build/mcp        # 405
-curl -s -o /dev/null -w 'GET /mcp/sse: %{http_code}\n' https://swapi.build/mcp/sse # 404
+curl -s -o /dev/null -w 'GET /mcp: %{http_code}\n' -b jar.txt "https://<preview-host>/mcp"
+# esperado: 405
+curl -s -o /dev/null -w 'GET /mcp/sse: %{http_code}\n' -b jar.txt "https://<preview-host>/mcp/sse"
+# esperado: 404
+curl -s -b jar.txt -X POST "https://<preview-host>/mcp/messages/never-existed" \
+  -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+# esperado: 404 com corpo JSON mencionando /mcp
 ```
 
 **Cache poisoning via `Origin`** — CORS echoes the request `Origin`, so every
@@ -141,7 +152,8 @@ curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H 'Accept: text/html' 
 Expect `status: 200` and `1` (embedded URLs on `https://swapi.build`, scheme `https`),
 and `200 application/json` for the spec.
 Then run the MCP probe from step 2 against `https://swapi.build/mcp` (no cookie jar
-needed — the custom domain has no SSO).
+needed — the custom domain has no SSO). Re-run the foreign-session and edges probes
+against `https://swapi.build` too, without the concurrent burst.
 
 **Edge cache** — the response reaching the client shows `cache-control: public, max-age=300`:
 the CDN consumes and strips `s-maxage`/`stale-while-revalidate` before forwarding. The proof

@@ -153,7 +153,8 @@ Or Bob panel → MCP tab → **Edit Global MCP**. Bob detects the tools automati
 
 > The server scales to zero when idle — if the very first connection attempt fails, retry once
 > (the native binary starts in tens of milliseconds; the platform may take a bit longer to
-> provision the container, and stateless requests are immune after that).
+> provision the container; subsequent calls are fast, whether your client is stateless or
+> session-based).
 
 ## Project Structure
 
@@ -222,7 +223,7 @@ The app runs on [Vercel](https://vercel.com/) as a native (GraalVM/Mandrel) cont
 ## Tech Stack
 
 - **Runtime:** [Quarkus 3.33](https://quarkus.io/) on Java 25 with Virtual Threads
-- **MCP server:** [Quarkiverse MCP Server](https://docs.quarkiverse.io/quarkus-mcp-server/dev/index.html) — Streamable HTTP, stateless spec 2026-07-28
+- **MCP server:** [Quarkiverse MCP Server](https://docs.quarkiverse.io/quarkus-mcp-server/dev/index.html) — Streamable HTTP, stateless and session-based clients
 - **Serialization:** Jakarta REST + JSON-B
 - **Native image:** GraalVM via Mandrel builder
 - **Frontend:** TypeScript + [Vite](https://vite.dev/), served by Quinoa
