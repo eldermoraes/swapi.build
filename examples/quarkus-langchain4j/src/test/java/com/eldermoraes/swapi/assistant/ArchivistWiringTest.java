@@ -16,8 +16,15 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Booting Quarkus builds the CDI container, the MCP client and the AI-service
- * proxy, so a green run proves the wiring without calling a model.
+ * Proves the MCP path is wired without calling a model.
+ *
+ * <p>Booting Quarkus builds the CDI container and the AI-service proxy, which is
+ * what validates {@code @McpToolBox("swapi")} against the configured client. It
+ * does not open a connection: the MCP client dials the server when its bean is
+ * first created, and in the test profile the health check that would force that
+ * at boot is disabled. Injecting {@code McpClient} below is therefore what
+ * triggers the handshake -- against {@link McpStubServer}, so the run stays
+ * offline.
  *
  * <p>{@code restrictToAnnotatedClass = true} is load-bearing: the stub overrides
  * {@code quarkus.langchain4j.mcp.swapi.url}, and by default that override would

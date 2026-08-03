@@ -16,9 +16,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Minimal in-process MCP server for offline tests. The Quarkus MCP client
- * connects during startup, so without this the test suite would depend on the
- * public swapi.build server being reachable.
+ * Minimal in-process MCP server for offline tests. The Quarkus MCP client dials
+ * the server the first time its bean is created -- not when Quarkus boots -- so
+ * a test that injects {@code McpClient} performs a real handshake. This stub is
+ * what that handshake talks to, so the suite does not depend on the public
+ * swapi.build server being reachable.
  *
  * <p>Wire it with
  * {@code @QuarkusTestResource(value = McpStubServer.class, restrictToAnnotatedClass = true)}:
