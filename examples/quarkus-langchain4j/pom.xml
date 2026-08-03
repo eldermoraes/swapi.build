@@ -19,8 +19,9 @@
         <skipITs>true</skipITs>
         <surefire-plugin.version>3.5.4</surefire-plugin.version>
         <!-- Tests tagged "live" hit the public swapi.build server and are excluded
-             from the default suite. The "live" profile below flips this so that
-             `./mvnw test -Dgroups=live` runs exactly those tests. -->
+             from the default suite. The "explicit-groups" profile below clears this
+             whenever -Dgroups is passed, so `./mvnw test -Dgroups=live` (or any
+             compound expression) runs exactly the tags the caller asked for. -->
         <excluded.groups>live</excluded.groups>
     </properties>
 
@@ -141,14 +142,18 @@
     </build>
 
     <profiles>
-        <!-- Activated by `./mvnw test -Dgroups=live`: drops the default "live"
-             exclusion so the network-dependent tests can actually be selected. -->
+        <!-- Activated by the mere presence of -Dgroups=... (any value, including
+             compound tag expressions like `live,slow`). Naming tags explicitly means
+             the caller has chosen what to run, so the default "live" exclusion must
+             stop overriding that choice: surefire applies excludedGroups on top of
+             groups, so leaving it set would silently yield "Tests run: 0" plus
+             BUILD SUCCESS. Do not re-add a <value> element here: that couples
+             activation to one literal tag and re-arms exactly that trap. -->
         <profile>
-            <id>live</id>
+            <id>explicit-groups</id>
             <activation>
                 <property>
                     <name>groups</name>
-                    <value>live</value>
                 </property>
             </activation>
             <properties>
