@@ -56,10 +56,11 @@ between runs: a second run produced the same two sentences with the paths swappe
 arguments — but the phrasing is not, and nothing in the test suite asserts on it. Do not
 build anything that depends on the exact string.
 
-**On timing:** the first `/ask/mcp` call took about **9.6 s** and later ones about
-**1.5 s**. That gap is the MCP handshake against `swapi.build/mcp`, which happens once,
-lazily, on the first call — not a standing cost of the MCP path. MCP is not six times
-slower than REST here.
+**On timing:** the MCP handshake against `swapi.build/mcp` happens once, lazily, on the
+first `/ask/mcp` call — not at Quarkus startup, and not again on later calls. So the first
+call carries a one-time cost that the rest of the session does not. How large that cost is
+next to the model's own latency is not something one run can tell you, and this example
+does not measure it.
 
 ## The two paths, side by side
 
@@ -88,8 +89,9 @@ This is not only about lines of code. The two paths hand the model different too
   resource types.
 
 That difference is measurable. Asking the canonical question through both endpoints in one
-dev-mode session, with `-Dquarkus.langchain4j.ollama.log-responses=true`, the first model
-call of each path — the one that carries the tool schemas but no tool results yet — reports:
+dev-mode session, with `-Dquarkus.langchain4j.ollama.log-responses=true`, every model call
+of each path reports its prompt token count. The first call carries the tool schemas and no
+tool results yet; the later two carry the schemas plus the conversation so far:
 
 | Path | 1st call | 2nd call | 3rd call | Total prompt tokens |
 |---|---|---|---|---|
@@ -119,7 +121,8 @@ difference, not as constants.)
    (`Archivist` or `RestArchivist`).
 2. On the MCP path, the MCP client performs its `initialize` + `tools/list` handshake the
    first time its bean is created — **not** at Quarkus startup. That is why the first
-   request is slow and why the offline test suite can boot without touching the network.
+   request pays for the handshake and why the offline test suite can boot without touching
+   the network.
 3. The model receives the tool list and picks calls. The canonical question needs **two
    chained calls**: find the character, then look up their homeworld.
 4. The model is *told* how to chain, in two places. `Prompts.SYSTEM_MESSAGE` says "look up
@@ -165,10 +168,13 @@ there is no fallback path that answers from the model's own knowledge, by design
 quarkus.langchain4j.mcp.swapi.url=https://swapi.build/mcp
 # Point at a locally running swapi.build instead:
 # quarkus.langchain4j.mcp.swapi.url=http://localhost:5432/mcp
+
+quarkus.rest-client.swapi-api.url=https://swapi.build/api
+# Point at a locally running swapi.build instead:
+# quarkus.rest-client.swapi-api.url=http://localhost:5432/api
 ```
 
-`5432` is swapi-app's dev port. For the REST path, point
-`quarkus.rest-client.swapi-api.url` at `http://localhost:5432/api` the same way.
+`5432` is swapi-app's dev port. Uncomment one line to move one path, or both to move both.
 
 ## Tests
 
