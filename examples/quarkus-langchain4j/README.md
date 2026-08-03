@@ -98,9 +98,11 @@ call of each path — the one that carries the tool schemas but no tool results 
 
 Both paths take three model round trips and two tool calls to answer, so those rows line
 up step for step. **The MCP tool surface is the more expensive prompt here** — 208 tokens
-more on the first call, and it stays ahead at every step because the larger tool schemas
-sit in the conversation for the whole exchange. The `resource` enum is not free: six enum
-values across four tools costs more than four narrow signatures with one-line descriptions.
+more on the first call, and it stays ahead at every step, since the tool schemas sit in the
+conversation for the whole exchange. This one paired run measures the delta but cannot
+attribute it: the two surfaces differ in more than one way at once (generic `resource`-enum
+signatures versus narrow ones, and server-written descriptions versus hand-written ones),
+so it does not isolate which of those the 208 tokens came from.
 
 So the trade is not "MCP is cheaper". It is: the MCP path costs **more prompt tokens and
 no code**, and what it buys is coverage — the same four tools reach six resource types,
