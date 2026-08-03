@@ -22,9 +22,28 @@ public class McpTransportFilter {
 
     private static final String MCP_PATH = "/mcp";
 
+    // NOVAS -- MCP_PATH ja existe, vindo da Task 2
+    private static final String LEGACY_SSE_PATH = "/mcp/sse";
+    private static final String LEGACY_MESSAGES_PREFIX = "/mcp/messages/";
+
+    // Transporte legado 2024-11-05: o stream SSE e os POSTs em /mcp/messages/<id>
+    // precisam cair na mesma instancia, e nesta topologia isso nao acontece.
+    // Rejeitar explicitamente e melhor que fazer o handshake e morrer em silencio.
+    private static final String LEGACY_GONE = """
+            {"error":"The legacy HTTP+SSE transport (spec 2024-11-05) is not \
+            supported. Use the Streamable HTTP endpoint at /mcp."}""";
+
     @RouteFilter(400)
     void filter(RoutingContext rc) {
-        if (!MCP_PATH.equals(rc.normalizedPath())) {
+        String path = rc.normalizedPath();
+        if (LEGACY_SSE_PATH.equals(path) || path.startsWith(LEGACY_MESSAGES_PREFIX)) {
+            rc.response()
+                    .setStatusCode(404)
+                    .putHeader("Content-Type", "application/json")
+                    .end(LEGACY_GONE);
+            return;
+        }
+        if (!MCP_PATH.equals(path)) {
             rc.next();
             return;
         }

@@ -48,4 +48,26 @@ class McpTransportEdgesTest {
         .then()
                 .statusCode(204);
     }
+
+    @Test
+    void legacySseTransportIsRejectedWithAPointerToStreamableHttp() {
+        given()
+                .accept("text/event-stream")
+        .when()
+                .get("/mcp/sse")
+        .then()
+                .statusCode(404)
+                .body(containsString("/mcp"));
+    }
+
+    @Test
+    void legacyMessageEndpointIsRejected() {
+        given()
+                .contentType("application/json")
+                .body("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}")
+        .when()
+                .post("/mcp/messages/whatever-id")
+        .then()
+                .statusCode(404);
+    }
 }
