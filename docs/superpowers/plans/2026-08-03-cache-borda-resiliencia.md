@@ -429,6 +429,27 @@ curl -sI -b jar.txt "https://<preview-host>/openapi.json" | grep -i 'cache-contr
 # esperado: s-maxage=31536000
 ```
 
+**Probe adversarial de envenenamento de cache** (recomendado pelo review final). O corpo
+das respostas embute URLs absolutas montadas a partir do host descoberto por request, e o
+`X-Forwarded-Host` **não** faz parte da chave de cache da Vercel. Se a plataforma repassasse
+o header mandado pelo cliente, uma requisição gravaria no cache do host legítimo um corpo
+apontando para outro domínio — preso lá até o próximo deploy.
+
+Verificado em produção em 03/08/2026 contra a borda real: a Vercel **sobrescreve** o header
+(spoof simples, `Forwarded` RFC 7239 e header duplicado foram todos ignorados; com `Host`
+spoofado ela nem roteia). O probe fica aqui como verificação de regressão:
+
+```bash
+curl -s -b jar.txt -H 'X-Forwarded-Host: evil.example' "https://<preview-host>/api/people/1" | grep -c evil.example
+# esperado: 0
+curl -s -b jar.txt "https://<preview-host>/api/people/1" | grep -c evil.example
+# esperado: 0 (a entrada de cache do host legitimo nao foi envenenada)
+```
+
+Se o primeiro der ≠ 0: **não promover para produção**. Mitigação: devolver
+`Vary: X-Forwarded-Host` junto com o `Cache-Control` (a Vercel usa `Vary` como parte da
+chave), ou allowlist de host no `BaseUrlFilter`.
+
 - [ ] **Step 5: Verificações padrão do runbook no preview**
 
 Rodar as checagens de REST, OpenAPI, cold start e probe MCP do `docs/DEPLOY.md` passo 2. As URLs embutidas devem apontar para o host do preview com `https` — se o cache tivesse misturado hosts, apareceria aqui.
@@ -461,6 +482,7 @@ Acrescentar à tabela de Troubleshooting do `docs/DEPLOY.md`:
 ```markdown
 | 403 em todos os paths de `swapi.build`, resposta em ~0,07s com `x-vercel-mitigated: deny` | Mitigação automática bloqueou o IP de origem (típico após teste de carga). A app **não** caiu: confira com `curl https://swapi-build.vercel.app/api/people/1` (200) ou pelo domínio público a partir de outro IP. Expira sozinha; regras de IP `bypass` não existem no plano Hobby. Não redeployar. |
 | `x-vercel-cache: MISS` sempre, em path que não é `/random` | O `CacheControlFilter` não está aplicando o header. Confira `curl -sI <host>/api/people/1 \| grep -i cache-control` — deve conter `s-maxage=31536000`. |
+| Resposta errada "congelada" na borda (TTL de 1 ano) | Purgar: dashboard → projeto → **CDN** → **Caches** → **Purge**, usando `*` para o projeto inteiro. Prefira **Invalidate** a **Delete** (Delete revalida em foreground e pode causar cache stampede). Um deploy novo também resolve, por usar outra chave de cache. |
 ```
 
 ```bash
