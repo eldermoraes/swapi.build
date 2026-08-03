@@ -23,6 +23,18 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
   GitHub Release, deploy.
 - Retroactive git tags `v1.1` … `v2.1.0` and matching GitHub Releases.
 - Tests keeping the pom version, the changelog and the published OpenAPI version in sync.
+- Vercel Web Analytics and Speed Insights on the site. Both features had been enabled
+  on the project but collected nothing, because no script on the page ever reported a
+  pageview; the SPA now injects them from `src/main.ts`. Their scripts are served by
+  the Vercel edge at `/_vercel/*`, and the edge only routes those paths on deployments
+  created after the features were enabled.
+
+### Changed
+
+- The GitHub repository is connected to the Vercel project, which cleared the
+  dashboard's "Missing Git Source". Automatic git deployments are disabled in the
+  root `vercel.json` (`git.deploymentEnabled: false`): with `rootDirectory` unset,
+  a git-triggered build runs from the repo root and fails. Deploys stay CLI-only.
 
 ## [2.1.0] - 2026-08-03
 
