@@ -1,0 +1,270 @@
+# MCP: suporte simultâneo a clientes stateful e stateless
+
+**Data:** 2026-08-03
+**Status:** Aguardando aprovação
+
+## Problema
+
+O `/mcp` do swapi.build atende clientes stateless (spec `2026-07-28`) com
+confiabilidade total e clientes stateful (Streamable HTTP `2025-03-26` a
+`2025-11-25`) **de forma intermitente e quebrada**. A causa não é a spec nem a
+extensão: é a topologia de deploy.
+
+A sessão MCP vive num `ConcurrentMap` dentro de
+`io.quarkiverse.mcp.server.runtime.ConnectionManager`, na heap de **uma**
+instância (confirmado por `javap` no jar 2.0.0.Beta3). O Vercel escala o
+container horizontalmente e não oferece sticky sessions. Um `Mcp-Session-Id`
+emitido pela instância A, quando roteado para a instância B, produz
+`404 Mcp session not found`.
+
+Medições em produção (2026-08-03, antes de qualquer mudança):
+
+| Cenário | Resultado |
+|---|---|
+| Cliente stateless, 12 e 24 requests concorrentes | 100% HTTP 200 |
+| `initialize` stateful (`2025-06-18`) | 200 + `Mcp-Session-Id` |
+| 5 `tools/call` sequenciais na mesma sessão | 5× 200 (instância quente) |
+| 12 `tools/call` concorrentes, mesma sessão — rodada 1 | 7× 200, **5× 404** |
+| 12 `tools/call` concorrentes, mesma sessão — rodada 2 | 4× 200, **8× 404** |
+| `GET /mcp/sse` (legado `2024-11-05`) → `POST` no endpoint anunciado | **404** |
+
+O mesmo transporte legado funciona perfeitamente em instância única (validado em
+dev mode local), o que confirma que o defeito é exclusivamente topológico.
+
+Isso corrige duas afirmações existentes no repositório:
+
+- `docs/DEPLOY.md` atribui o sintoma a cold start (*"Transient 404 on first
+  stateful MCP connect — serverless cold start. Retry resolves it."*). Não é
+  cold start: é ausência de afinidade de instância. Piora sob concorrência, e
+  agentes chamam tools em paralelo.
+- `CLAUDE.md` e a avaliação de 2026-07-31 registram "stateless; nunca padrões
+  stateful". A extensão nunca implementou stateless como modo exclusivo — o
+  servidor aceita stateful hoje, e o faz mal. A regra descrevia uma intenção,
+  não o comportamento.
+
+## Decisão
+
+Habilitar o modo `auto-init` da extensão e sanear as bordas do endpoint, de
+forma que **todo** cliente Streamable HTTP — de `2025-03-26` a `2026-07-28` —
+funcione de verdade, e que clientes do transporte legado falhem de imediato e
+com clareza em vez de travar.
+
+Esta é a solução recomendada pelo próprio mantenedor da extensão. A issue
+[#876](https://github.com/quarkiverse/quarkus-mcp-server/issues/876) pede
+exatamente uma flag `stateless=true` (como o `Stateless = true` do SDK C#);
+mkouba preferiu corrigir o `auto-init` (PR #878) a criar config nova, e o autor
+da issue confirmou que resolve — *"allows us to scale beyond a single replica"*,
+testado com Claude Code. Citação do mantenedor: *"Just
+`quarkus.mcp.server.http.streamable.auto-init=true` should be enough."*
+
+O custo declarado é criar e destruir uma sessão descartável por request, que o
+mantenedor chama de workaround ineficiente. **No swapi.build esse custo é
+irrelevante:** as quatro tools são read-only puras e não usam nenhum recurso de
+sessão (sem sampling, elicitation, roots, progress, subscriptions). Não existe
+estado a preservar, logo não existe estado a perder.
+
+### 1. `auto-init`
+
+```properties
+quarkus.mcp.server.http.streamable.auto-init=true
+```
+
+Efeito validado localmente na nossa app (dev mode, sem alterar arquivos):
+
+| Cenário | Default | Com `auto-init` |
+|---|---|---|
+| `POST` com session id desconhecido | 404 | **200** |
+| `POST` sem session id nenhum | 404 | **200** |
+| 12 concorrentes, 12 session ids desconhecidos distintos | — | **12× 200** |
+| `initialize` continua devolvendo `Mcp-Session-Id` | sim | **sim** |
+| Handshake stateful completo (`initialize` → `initialized` → `tools/list`) | ok | **ok**, negocia `2025-06-18` |
+| Cliente stateless `2026-07-28` | ok | **ok** |
+
+Um cliente stateful bem-comportado não percebe diferença alguma; um cliente que
+cai em outra instância passa a funcionar em vez de receber 404.
+
+### 2. `GET /mcp` → 405, `DELETE /mcp` → 204
+
+Com `auto-init` ligado, `GET` e `DELETE` com sessão estrangeira **continuam
+respondendo 404** (medido). Isso é pior que inútil: pela spec `2025-03-26` o
+servidor **pode** responder `405` a um `GET` quando não oferece stream
+server→client, e todo cliente trata 405 como "sem stream, siga em frente". Um
+404, ao contrário, é legitimamente interpretável como "a sessão morreu" — e
+pode derrubar a conexão inteira de um cliente que só queria abrir o stream
+opcional.
+
+Como não emitimos nenhuma mensagem server→client, `405` é a resposta correta e
+incondicional. `DELETE` (teardown de sessão) passa a `204`: idempotente, sempre
+bem-sucedido, porque não há sessão real a destruir.
+
+Implementação: um `@RouteFilter` Vert.x que curto-circuita esses dois métodos em
+`/mcp` antes das rotas da extensão.
+
+### 3. `/mcp/sse` legado: rejeição explícita
+
+O transporte HTTP+SSE (`2024-11-05`) é irrecuperável nesta topologia: exige que
+o stream SSE aberto e os `POST` subsequentes em `/mcp/messages/<id>` caiam na
+mesma instância. Hoje o endpoint está exposto, faz o handshake e **morre em
+silêncio** — o pior comportamento possível.
+
+O mesmo filtro passa a responder `404` com corpo JSON informativo em
+`GET /mcp/sse` e `POST /mcp/messages/*`, apontando para `/mcp`. Um cliente
+legado falha na conexão, e um humano depurando lê o motivo.
+
+Escolha de `404` em vez de `501`/`410`: é o código que os clientes MCP já
+tratam como "transporte indisponível" nos seus caminhos de fallback. `410 Gone`
+seria semanticamente mais preciso, mas nenhum cliente o trata de forma especial.
+
+### 4. CORS
+
+O log de startup avisa hoje:
+
+```
+WARN  Cross-Origin Resource Sharing (CORS) filter must be enabled for
+Streamable HTTP MCP server endpoints with `quarkus.http.cors.enabled=true`
+```
+
+Sem isso, nenhum cliente MCP que rode em browser consegue conectar.
+
+```properties
+quarkus.http.cors.enabled=true
+quarkus.http.cors.origins=*
+```
+
+`*` (e não uma lista) porque a API é aberta por projeto. É seguro aqui
+justamente porque não há credenciais envolvidas: sem auth, sem cookies, sem
+`Access-Control-Allow-Credentials` — o wildcard não expõe nada que um request
+server-side já não obtenha.
+
+**Este é o único item com raio de alcance além do `/mcp`:** o filtro CORS do
+Quarkus é global, então o `/api/*` também passa a aceitar requests
+cross-origin. Isso é desejável e não é uma concessão de segurança — a API é
+pública, read-only, sem auth e sem cookies; qualquer um já pode consumi-la
+server-side. O ganho é direto: apps de demo em browser passam a poder chamar o
+swapi.build via `fetch`, que é exatamente o público do projeto.
+
+## Alternativas rejeitadas
+
+- **Só `auto-init`, sem saneamento de bordas.** Resolve o caminho `POST`, que é
+  onde as tool calls acontecem, com uma linha. Rejeitada porque deixa o `GET`
+  com 404 ambíguo (risco de o cliente abortar a sessão) e deixa o `/mcp/sse`
+  enganando clientes legados. O incremento de esforço é um único filtro.
+
+- **Host stateful dedicado para o transporte legado.** Segundo deploy
+  single-instance (Fly.io / Railway / Cloud Run com `min-instances=1`) em
+  `mcp-legacy.swapi.build`, servindo `2024-11-05` com sessões reais. É a única
+  coisa que entregaria compatibilidade máxima *literal*. Rejeitada: cria segunda
+  topologia e segundo pipeline de deploy, contraria o princípio "um container, um
+  deploy" do `CLAUDE.md`, e serve um transporte deprecated com desligamento
+  previsto e público próximo de zero. Se algum dia um cliente legado real
+  aparecer, esta é a saída — e o `404` explícito da decisão 3 é o que vai fazer
+  esse cliente aparecer, em vez de falhar em silêncio.
+
+- **Estado de sessão compartilhado (Redis / Infinispan).** A issue
+  [#510](https://github.com/quarkiverse/quarkus-mcp-server/issues/510) (SPI de
+  `ConnectionManager`) foi fechada sem solução; o mantenedor recusou o PR #614
+  por incompletude — `McpConnectionBase` guarda objetos não-serializáveis
+  (`HttpServerResponse` para SSE) e `ResponseHandlers`/cancelamento precisariam
+  de SPI própria. Não existe caminho suportado, e para nós não haveria o que
+  compartilhar.
+
+- **Sticky sessions na borda.** Vercel não oferece afinidade de sessão para
+  functions, e o Cloudflare está DNS-only (nuvem cinza) — não há edge onde
+  aplicar a regra.
+
+## Escopo
+
+**Muda:**
+- `swapi-app/src/main/resources/application.properties` — `auto-init`, CORS, e
+  atualização do comentário que hoje afirma "stateless auto-detectado".
+- Novo: `swapi-app/src/main/java/com/eldermoraes/mcp/McpTransportFilter.java` —
+  o `@RouteFilter` das decisões 2 e 3.
+- `CLAUDE.md` — o fato não-negociável "MCP server is stateless Streamable HTTP.
+  Never use legacy SSE or stateful patterns" passa a descrever o comportamento
+  real: os dois paradigmas no mesmo endpoint, sessões descartáveis por request,
+  transporte legado rejeitado de propósito.
+- `docs/DEPLOY.md` — corrigir a linha de troubleshooting que culpa cold start, e
+  acrescentar um probe stateful à verificação pós-deploy (hoje só existe probe
+  stateless).
+- `README.md` — a seção MCP diz "stateless (spec 2026-07-28)"; passa a declarar
+  que qualquer cliente Streamable HTTP funciona.
+
+**Não muda:** `SwapiTools.java` e as quatro tools; os services; o `Dockerfile.vercel`;
+o pipeline de deploy.
+
+**Fora de escopo:**
+- Rate limiting / Vercel Firewall. Vale registrar como risco conhecido: um
+  agente fazendo tool calls em paralelo pode tropeçar na mitigação automática da
+  Vercel (`x-vercel-mitigated: deny`), observada neste projeto. Decisão
+  operacional separada.
+- Contribuição upstream propondo que `GET`/`DELETE` respondam 405/204 quando
+  `auto-init` está ligado, em vez de 404. Patch pequeno e defensável, bom
+  encaixe com atuação na comunidade Quarkus, mas não é caminho crítico —
+  o filtro local resolve independentemente.
+- Publicação em diretórios/registries e MCP Apps, já fora de escopo desde a
+  avaliação de 2026-07-31.
+
+## Riscos e incertezas
+
+1. **O `@RouteFilter` é a única peça não validada.** Todo o resto desta spec foi
+   medido. Filtros Vert.x no Quarkus rodam antes das rotas regulares, e as rotas
+   da extensão são registradas via `HttpMcpServerRecorder` — a expectativa é que
+   o filtro consiga curto-circuitar. Se não conseguir, o plano de implementação
+   precisa de um passo de investigação antes de escrever o filtro, e o fallback é
+   entregar só a config (`auto-init` + CORS), que já resolve o caminho crítico.
+2. **`auto-init` é oficialmente um workaround**, com deprecação prometida "quando
+   o modo stateless for codificado na spec". Na prática ele é a ponte para
+   clientes pre-`2026-07-28`: o dia em que ele desaparecer é o dia em que não
+   precisamos mais dele. Se desaparecer antes disso, voltamos ao estado atual —
+   que é o comportamento de hoje, não uma regressão nova.
+3. **Continuamos em beta.** Não há release mais recente que a `2.0.0.Beta3`
+   (10/07/2026). Checar por Beta4/CR/GA no momento da implementação.
+4. **Custo por request.** Criar e destruir uma sessão por request tem custo
+   diferente de zero. Não medimos o impacto em latência; o plano deve incluir uma
+   comparação de `time_total` antes/depois no preview, para que a decisão fique
+   baseada em número e não em suposição.
+
+## Testes
+
+TDD, teste falhando primeiro. O ponto central é que o teste que hoje **não
+existe** é justamente o que pega a regressão: um `POST` com session id
+desconhecido.
+
+- **Instância estrangeira (o teste que faltava):** `POST /mcp` com
+  `Mcp-Session-Id: <valor inventado>` e um `tools/call` válido → 200 com Luke
+  Skywalker no corpo. Falha com 404 na config atual. Via rest-assured, não
+  McpAssured — o McpAssured gerencia a sessão e por isso nunca reproduz o bug.
+- **Sem session id nenhum:** mesmo `POST` sem o header → 200.
+- **Handshake stateful completo não regride:** `initialize` devolve
+  `Mcp-Session-Id` e negocia a versão pedida; `notifications/initialized` → 202;
+  `tools/list` → 200 com as 4 tools.
+- **Bordas:** `GET /mcp` → 405 (com e sem sessão válida); `DELETE /mcp` → 204.
+- **Legado rejeitado:** `GET /mcp/sse` → 404 com corpo JSON mencionando `/mcp`;
+  `POST /mcp/messages/qualquer-coisa` → 404.
+- **CORS:** request com `Origin` estranho em `/mcp` e em `/api/people/1` →
+  `Access-Control-Allow-Origin` presente.
+- **Regressão:** `SwapiToolsTest`, `SwapiStatelessTest`,
+  `SwapiBaseUrlDiscoveryTest`, `SwapiBaseUrlOverrideTest`, `OpenApiSpecTest` e a
+  suíte REST seguem verdes. Suíte completa antes de cada commit.
+
+## Verificação pós-deploy
+
+Além dos checks atuais do `docs/DEPLOY.md`, no preview e em produção:
+
+1. **Probe stateful de ponta a ponta:** `initialize`, capturar o
+   `Mcp-Session-Id`, e disparar 12 `tools/call` **concorrentes** com ele.
+   Esperado: 12× 200. Hoje esse mesmo teste dá 33–58% de 404 — é a prova direta
+   da correção.
+2. **Probe com sessão inventada:** `POST` com `Mcp-Session-Id` que nunca
+   existiu → 200.
+3. **Bordas:** `GET /mcp` → 405; `GET /mcp/sse` → 404.
+4. **Stateless não regrediu:** o probe do `DEPLOY.md` (com
+   `io.modelcontextprotocol/clientCapabilities`, que é obrigatório na Beta3 —
+   omitir devolve 400).
+5. **Cliente real:** `claude mcp add --transport http swapi-build
+   https://swapi.build/mcp`, listar e chamar uma tool.
+6. **Latência:** `time_total` do `tools/call` antes e depois, para dimensionar o
+   custo da sessão por request.
+
+Rodar a rajada concorrente **contra o preview**, não contra produção — 24
+requests paralelos são suficientes para chamar atenção do firewall da Vercel.
