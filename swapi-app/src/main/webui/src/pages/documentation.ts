@@ -3,15 +3,14 @@ import { highlightJson } from '../json-highlight';
 import { escapeHtml } from '../utils';
 import type { OpenApiOperation, OpenApiSchemaObj, OpenApiSpec } from '../types';
 
-// tag OpenAPI -> nome do schema em components.schemas
-const TAG_SCHEMA: Record<string, string> = {
-  People: 'People',
-  Films: 'Film',
-  Planets: 'Planet',
-  Species: 'Specie',
-  Starships: 'Starship',
-  Vehicles: 'Vehicle',
-};
+const SCHEMA_REF_PREFIX = '#/components/schemas/';
+
+// main.ts roteia só `/docs` para esta página (`/docs/mcp` é outra) — usado para
+// abortar a pintura quando o usuário navegou durante o fetch da spec.
+function isDocsRoute(): boolean {
+  const parts = window.location.pathname.split('/').filter(Boolean);
+  return parts.length === 1 && parts[0] === 'docs';
+}
 
 // Ordem de exibição: Root primeiro, demais na ordem declarada na spec
 function orderedTags(spec: OpenApiSpec): string[] {
@@ -32,11 +31,28 @@ function operationsByTag(spec: OpenApiSpec, tag: string): { path: string; op: Op
     .sort((a, b) => a.path.localeCompare(b.path));
 }
 
+// O nome do schema vem da própria spec: primeiro $ref das respostas da tag
+// (direto nas operações by-id, dentro de `items` nas de lista).
+function schemaNameForTag(operations: { op: OpenApiOperation }[]): string | undefined {
+  for (const { op } of operations) {
+    for (const response of Object.values(op.responses)) {
+      for (const media of Object.values(response.content ?? {})) {
+        const ref = media.schema?.$ref ?? media.schema?.items?.$ref;
+        if (ref?.startsWith(SCHEMA_REF_PREFIX)) return ref.slice(SCHEMA_REF_PREFIX.length);
+      }
+    }
+  }
+  return undefined;
+}
+
 function endpointBlock(path: string, op: OpenApiOperation): string {
   const search = op.parameters?.find((p) => p.in === 'query' && p.name === 'search');
   const idParam = op.parameters?.find((p) => p.in === 'path' && p.name === 'id');
   const displayPath = search ? `${path}?search=${search.example ?? 'value'}` : path;
-  const desc = [op.summary, op.description].filter(Boolean).map((s) => escapeHtml(s!)).join(' — ');
+  const desc = [op.summary, op.description]
+    .filter(Boolean)
+    .map((s) => escapeHtml(s!))
+    .join(' — ');
   const has404 = Boolean(op.responses['404']);
 
   const inputs = [
@@ -63,14 +79,15 @@ function endpointBlock(path: string, op: OpenApiOperation): string {
         ${inputs}
         <button type="submit" class="btn try-button">Try it</button>
       </form>
-      <div class="try-result" hidden></div>
+      <div class="try-result" aria-live="polite" hidden></div>
     </div>`;
 }
 
 function schemaTable(name: string, schema: OpenApiSchemaObj): string {
   const rows = Object.entries(schema.properties ?? {})
     .map(([field, prop]) => {
-      const type = prop.type === 'array' ? `array of ${prop.items?.type ?? 'string'}` : (prop.type ?? '');
+      const type =
+        prop.type === 'array' ? `array of ${prop.items?.type ?? 'string'}` : (prop.type ?? '');
       return `<tr>
         <td class="schema-field">${escapeHtml(field)}</td>
         <td class="schema-type">${escapeHtml(type)}</td>
@@ -95,6 +112,7 @@ export async function renderDocumentation(container: HTMLElement): Promise<void>
   try {
     spec = await fetchOpenApiSpec();
   } catch {
+    if (!isDocsRoute()) return; // navegou durante o fetch: não sobrescrever a página nova
     container.innerHTML = `
       <div class="docs">
         <h1>Documentation</h1>
@@ -105,16 +123,19 @@ export async function renderDocumentation(container: HTMLElement): Promise<void>
     return;
   }
 
+  if (!isDocsRoute()) return; // navegou durante o fetch: não sobrescrever a página nova
+
   const tagDescriptions = new Map((spec.tags ?? []).map((t) => [t.name, t.description ?? '']));
   const sections = orderedTags(spec)
     .map((tag) => {
-      const schemaName = TAG_SCHEMA[tag];
+      const operations = operationsByTag(spec, tag);
+      const schemaName = schemaNameForTag(operations);
       const schema = schemaName ? spec.components?.schemas?.[schemaName] : undefined;
       return `
         <h2>${escapeHtml(tag)}</h2>
         ${tagDescriptions.get(tag) ? `<p class="tag-desc">${escapeHtml(tagDescriptions.get(tag)!)}</p>` : ''}
-        ${operationsByTag(spec, tag).map(({ path, op }) => endpointBlock(path, op)).join('')}
-        ${schema ? schemaTable(schemaName!, schema) : ''}`;
+        ${operations.map(({ path, op }) => endpointBlock(path, op)).join('')}
+        ${schema && schemaName ? schemaTable(schemaName, schema) : ''}`;
     })
     .join('');
 

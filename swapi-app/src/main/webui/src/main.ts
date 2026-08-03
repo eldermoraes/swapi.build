@@ -79,6 +79,7 @@ async function navigate() {
 
   const container = document.getElementById('main-content')!;
   const route = getRoute();
+  const path = window.location.pathname;
   updateActiveNav();
 
   const title = getPageTitle(route);
@@ -112,6 +113,9 @@ async function navigate() {
     default:
       renderHome(container);
   }
+
+  // Render assíncrono pode terminar depois de outra navegação: não roubar foco/anúncio da página nova
+  if (window.location.pathname !== path) return;
 
   window.scrollTo(0, 0);
   container.focus();

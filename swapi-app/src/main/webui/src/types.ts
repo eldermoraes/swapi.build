@@ -101,7 +101,18 @@ export interface OpenApiParameter {
   name: string;
   in: 'path' | 'query';
   description?: string;
-  example?: string;
+  // a spec emite números nos `id` de path e strings nos exemplos de query
+  example?: string | number;
+}
+
+export interface OpenApiSchemaRef {
+  $ref?: string;
+  items?: { $ref?: string };
+}
+
+export interface OpenApiResponse {
+  description?: string;
+  content?: Record<string, { schema?: OpenApiSchemaRef }>;
 }
 
 export interface OpenApiOperation {
@@ -109,7 +120,7 @@ export interface OpenApiOperation {
   description?: string;
   tags?: string[];
   parameters?: OpenApiParameter[];
-  responses: Record<string, { description?: string }>;
+  responses: Record<string, OpenApiResponse>;
 }
 
 export interface OpenApiSchemaObj {

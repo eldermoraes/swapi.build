@@ -37,6 +37,22 @@ curl -sL -c jar.txt "<shareable-url-with-_vercel_share>" -o /dev/null
 curl -s -b jar.txt "https://<preview-host>/api/people/1"
 ```
 
+**OpenAPI** — the spec must be served by the backend, not intercepted by Quinoa:
+
+```bash
+curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H 'Accept: text/html' \
+  -b jar.txt https://<preview-host>/openapi.json
+# esperado: 200 application/json (Quinoa não pode engolir a rota)
+```
+
+**Cold start** — after any deploy that changes Quarkus extensions (e.g.
+`smallrye-openapi`), measure and record the cold start of the first request so the
+extension's impact stays tracked:
+
+```bash
+curl -s -o /dev/null -w 'cold start: %{time_total}s\n' -b jar.txt "https://<preview-host>/api/people/1"
+```
+
 **MCP** — stateless probe wire format (all headers and `_meta` keys are required;
 `Mcp-Name` must match the tool name):
 
@@ -67,9 +83,12 @@ without a tty.
 ```bash
 curl -s -o /dev/null -w 'status: %{http_code}\n' https://swapi.build/api/people/1
 curl -s https://swapi.build/api/people/1 | grep -c 'https://swapi.build/api/people/1'
+curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H 'Accept: text/html' https://swapi.build/openapi.json
+# esperado: 200 application/json (Quinoa não pode engolir a rota)
 ```
 
-Expect `status: 200` and `1` (embedded URLs on `https://swapi.build`, scheme `https`).
+Expect `status: 200` and `1` (embedded URLs on `https://swapi.build`, scheme `https`),
+and `200 application/json` for the spec.
 Then run the MCP probe from step 2 against `https://swapi.build/mcp` (no cookie jar
 needed — the custom domain has no SSO).
 
