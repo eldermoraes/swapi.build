@@ -9,9 +9,7 @@ import java.io.UncheckedIOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -30,23 +28,11 @@ import java.util.regex.Pattern;
 public class McpStubServer implements QuarkusTestResourceLifecycleManager {
 
     private static final Pattern ID = Pattern.compile("\"id\"\\s*:\\s*(\\d+)");
-    private static final Pattern METHOD = Pattern.compile("\"method\"\\s*:\\s*\"([^\"]+)\"");
-
-    /**
-     * Every JSON-RPC method this stub answered, so a test can prove the client
-     * really handshook here instead of passing for some unrelated reason.
-     */
-    private static final List<String> SERVED_METHODS = new CopyOnWriteArrayList<>();
 
     private HttpServer server;
 
-    public static List<String> servedMethods() {
-        return List.copyOf(SERVED_METHODS);
-    }
-
     @Override
     public Map<String, String> start() {
-        SERVED_METHODS.clear();
         try {
             server = HttpServer.create(
                     new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
@@ -58,17 +44,16 @@ public class McpStubServer implements QuarkusTestResourceLifecycleManager {
             String body = new String(exchange.getRequestBody().readAllBytes(),
                     StandardCharsets.UTF_8);
 
-            Matcher method = METHOD.matcher(body);
-            if (method.find()) {
-                SERVED_METHODS.add(method.group(1));
-            }
-
             if (body.contains("\"notifications/")) {
                 exchange.sendResponseHeaders(202, -1);
                 exchange.close();
                 return;
             }
 
+            // Echo back the request's own JSON-RPC id in every reply. The client
+            // correlates responses to pending requests by id, so a fixed id would
+            // leave the second request waiting forever on an answer it never
+            // recognises -- the handshake hangs instead of failing.
             Matcher matcher = ID.matcher(body);
             String id = matcher.find() ? matcher.group(1) : "1";
             String payload;

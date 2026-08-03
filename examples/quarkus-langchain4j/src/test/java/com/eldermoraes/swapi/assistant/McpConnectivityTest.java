@@ -26,9 +26,12 @@ class McpConnectivityTest {
     McpClient swapi;
 
     /**
-     * The URL the client will actually dial. A local stub (see McpStubServer)
-     * exposes the same four tool names, so without this the gate could pass
-     * while touching no network at all.
+     * The URL the client will actually dial, asserted on below. This is a
+     * production gate, and the only thing that makes it one is the target: a
+     * profile override or a test resource that retargets the client at a local
+     * stub (see {@link McpStubServer}) would leave every other assertion here
+     * passing while nothing reached the network. Checking the URL is what keeps
+     * that from happening quietly.
      */
     @ConfigProperty(name = "quarkus.langchain4j.mcp.swapi.url")
     String mcpUrl;

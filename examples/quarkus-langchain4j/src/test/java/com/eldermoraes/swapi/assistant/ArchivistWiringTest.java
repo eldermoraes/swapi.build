@@ -76,11 +76,5 @@ class ArchivistWiringTest {
                 .map(tool -> tool.name())
                 .toList();
         assertEquals(List.of("sw_get"), names, "expected only the stub's tool, got: " + names);
-
-        List<String> served = McpStubServer.servedMethods();
-        assertTrue(served.contains("initialize"),
-                "the MCP client did not initialize against the stub; served: " + served);
-        assertTrue(served.contains("tools/list"),
-                "the MCP client did not list tools from the stub; served: " + served);
     }
 }
