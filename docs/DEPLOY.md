@@ -45,6 +45,20 @@ curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H 'Accept: text/html' 
 # esperado: 200 application/json (Quinoa não pode engolir a rota)
 ```
 
+**Analytics / Speed Insights** — os dois scripts são servidos pela borda em
+`/_vercel/*`, e o `enable-spa-routing` do Quinoa responde `index.html` com 200 em
+qualquer caminho desconhecido. Sem checar o *content type* uma coleta quebrada é
+indistinguível de uma funcionando:
+
+```bash
+for p in insights speed-insights; do
+  curl -s -o /dev/null -w "$p: %{http_code} %{content_type}\n" -b jar.txt \
+    "https://<preview-host>/_vercel/$p/script.js"
+done
+# esperado: 200 application/javascript nos dois
+# text/html = a borda não interceptou; o Analytics NÃO está coletando
+```
+
 **Cold start** — after any deploy that changes Quarkus extensions (e.g.
 `smallrye-openapi`), measure and record the cold start of the first request so the
 extension's impact stays tracked:
@@ -153,10 +167,17 @@ curl -s -o /dev/null -w 'status: %{http_code}\n' https://swapi.build/api/people/
 curl -s https://swapi.build/api/people/1 | grep -c 'https://swapi.build/api/people/1'
 curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H 'Accept: text/html' https://swapi.build/openapi.json
 # esperado: 200 application/json (Quinoa não pode engolir a rota)
+for p in insights speed-insights; do
+  curl -s -o /dev/null -w "$p: %{http_code} %{content_type}\n" "https://swapi.build/_vercel/$p/script.js"
+done
+# esperado: 200 application/javascript nos dois
 ```
 
 Expect `status: 200` and `1` (embedded URLs on `https://swapi.build`, scheme `https`),
 and `200 application/json` for the spec.
+The Analytics check is only half the proof: also load `https://swapi.build` in a real
+browser and confirm the pageview lands in the dashboard. The script can be served
+correctly and still report nowhere.
 Then run the MCP probe from step 2 against `https://swapi.build/mcp` (no cookie jar
 needed — the custom domain has no SSO). Re-run the foreign-session, edges, and
 `Origin`/`Vary` cache-poisoning probes against `https://swapi.build` too, without the
@@ -209,6 +230,8 @@ project setting (`resourceConfig`), applied by `PATCH` without a redeploy — se
 | Symptom | Cause / fix |
 |---|---|
 | `Expected VCR image registry vcr.vercel.com: <detect>` | Deploy ran from the repo root. Re-run from `swapi-app/`. |
+| A `git push` triggered a Vercel build | The GitHub repo has been linked to the project since 2026-08-03. Auto-deploy is off via `git.deploymentEnabled: false` in the **root** `vercel.json` — if a build fired, that file was removed or the setting was overridden in the dashboard. Note the build would fail anyway: `rootDirectory` is `null`, so it builds from the repo root (row above). |
+| Dashboard shows zero visitors although the site has traffic | `/_vercel/insights/script.js` is being answered by the SPA fallback (`200 text/html`) instead of the edge, so nothing ever reports. Check with the content-type curl in step 4. Enabling Web Analytics does **not** retrofit existing deployments — the route only appears in deployments created after `webAnalytics.enabledAt` (`GET /v9/projects/swapi-build`). A redeploy is the fix. |
 | `vercel promote` hangs or `User force closed the prompt` | Interactive confirmation without tty. Use `vercel deploy --prod` instead. |
 | 403 on `*.vercel.app` URLs | Team SSO protection. Use a `_vercel_share` bypass link + cookie jar. |
 | 404 `Mcp session not found` on a stateful MCP call | **Not a cold start.** Sessions live in one instance's heap and Vercel has no session affinity, so the call landed on a different replica. Fixed by `quarkus.mcp.server.http.streamable.auto-init=true`; if it reappears, that property is off in the running deployment. |
