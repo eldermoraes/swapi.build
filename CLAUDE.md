@@ -31,8 +31,14 @@ an MCP server (Streamable HTTP, stateless) at `/mcp`.
   202 quirk was retired on 2026-08-01 — no external clients depended on it).
 - **Container tooling is `podman`** (`/opt/podman/bin`), not `docker`. The podman
   machine needs 8 GB for local native builds.
-- **MCP server is stateless Streamable HTTP (spec 2026-07-28).** Never use legacy
-  SSE or stateful patterns.
+- **MCP serves stateful and stateless clients on the same `/mcp` endpoint.**
+  Streamable HTTP only. `quarkus.mcp.server.http.streamable.auto-init=true` makes
+  sessions throwaway per request, so a `Mcp-Session-Id` issued by another
+  instance is accepted instead of 404ing — Vercel has no session affinity, and
+  without this a stateful client fails intermittently. `GET /mcp` answers 405
+  (no server→client stream) and `DELETE` answers 204. The legacy HTTP+SSE
+  transport (`/mcp/sse`) is rejected on purpose. Never reintroduce
+  session-affine state, and never depend on the legacy transport.
 - **Public base URL is discovered per request** (REST via `UriInfo`, MCP via
   `HttpServerRequest`, honoring `X-Forwarded-*`). `swapi.public-base-url` is an
   optional override only — never reintroduce a hardcoded domain default.

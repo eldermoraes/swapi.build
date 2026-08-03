@@ -68,6 +68,57 @@ curl -s -b jar.txt -X POST "https://<preview-host>/mcp" \
 
 Expect `isError: false` and embedded URLs on the preview host.
 
+**MCP stateful** — the probe that catches the instance-affinity bug. Twelve
+concurrent calls on one session must all return 200; before `auto-init` this
+returned 33–58% `404`:
+
+```bash
+SID=$(curl -s -D - -o /dev/null -X POST https://swapi.build/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"1.0"}}}' \
+  | tr -d '\r' | awk -F': ' '/^mcp-session-id/{print $2}')
+for i in $(seq 1 12); do
+  ( curl -s -o /dev/null -w '%{http_code}\n' -X POST https://swapi.build/mcp \
+      -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+      -H "Mcp-Session-Id: $SID" \
+      -d '{"jsonrpc":"2.0","id":'$i',"method":"tools/list"}' ) &
+done | sort | uniq -c
+# esperado: 12 200
+```
+
+Run this against the **preview**, not production: bursts of concurrent requests
+are what trip the Vercel IP mitigation documented below.
+
+**MCP foreign session** — a session id that never existed must still be served:
+
+```bash
+curl -s -o /dev/null -w 'foreign session: %{http_code}\n' -X POST https://swapi.build/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'Mcp-Session-Id: never-existed' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+# esperado: 200
+```
+
+**MCP edges:**
+
+```bash
+curl -s -o /dev/null -w 'GET /mcp: %{http_code}\n' https://swapi.build/mcp        # 405
+curl -s -o /dev/null -w 'GET /mcp/sse: %{http_code}\n' https://swapi.build/mcp/sse # 404
+```
+
+**Cache poisoning via `Origin`** — CORS echoes the request `Origin`, so every
+edge-cacheable response must carry `Vary: Origin` or the edge serves one
+origin's header to another:
+
+```bash
+curl -sI -H 'Origin: https://evil.example' https://swapi.build/api/people/1 | grep -i '^vary'
+# deve conter Origin
+curl -s -o /dev/null -w '[%header{access-control-allow-origin}]\n' https://swapi.build/api/people/1
+# sem Origin na request: deve vir []
+```
+
+If `Vary` is missing, purge the cache before going further.
+
 ## 3. Production deploy
 
 ```bash
@@ -124,7 +175,7 @@ cacheable response before redeploying.
 | `Expected VCR image registry vcr.vercel.com: <detect>` | Deploy ran from the repo root. Re-run from `swapi-app/`. |
 | `vercel promote` hangs or `User force closed the prompt` | Interactive confirmation without tty. Use `vercel deploy --prod` instead. |
 | 403 on `*.vercel.app` URLs | Team SSO protection. Use a `_vercel_share` bypass link + cookie jar. |
-| Transient 404 on first stateful MCP connect | Serverless cold start. Retry resolves it. |
+| 404 `Mcp session not found` on a stateful MCP call | **Not a cold start.** Sessions live in one instance's heap and Vercel has no session affinity, so the call landed on a different replica. Fixed by `quarkus.mcp.server.http.streamable.auto-init=true`; if it reappears, that property is off in the running deployment. |
 | Quinoa build fails on Vercel with local artifacts | `swapi-app/.vercelignore` must exclude `dist/` and `target/`. |
 | 202 responses from the API | Legacy quirk retired 2026-08-01 — current builds return 200; a 202 means an old deployment is live. |
 | 403 on every path of `swapi.build`, answered in ~0.07s with `x-vercel-mitigated: deny` | Automatic mitigation blocked the source IP (typical after a load test). The app is **not** down: check with `curl https://swapi-build.vercel.app/api/people/1` (200) or hit the public domain from another IP. It expires on its own; IP `bypass` rules don't exist on the Hobby plan. **Do not redeploy.** |

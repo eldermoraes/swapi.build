@@ -33,8 +33,11 @@ export function renderPrivacy(container: HTMLElement): void {
       <section class="about-section">
         <h2>The MCP server</h2>
         <p>
-          The MCP endpoint at /mcp is stateless: each request is processed and answered, and its content
-          is not stored. There are no sessions and no server-side state tied to you or your agent.
+          The MCP endpoint at /mcp stores nothing about you or your agent, and request contents are
+          not stored. Clients on the stateless MCP revision (2026-07-28) send fully self-contained
+          requests. Clients on earlier revisions are issued a session id; that session exists only in
+          memory, holds just the protocol version and the client name your own client sent, is never
+          written to disk, and is dropped once idle.
         </p>
       </section>
 

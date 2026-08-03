@@ -48,9 +48,11 @@ The full API contract is served at [`/openapi.json`](https://swapi.build/openapi
 
 ## MCP Server
 
-swapi.build is also a remote [MCP](https://modelcontextprotocol.io) server — built on the
-**stateless MCP spec (2026-07-28)**: every request is self-contained, with no `initialize`
-handshake and no session ids. First-party, read-only, no authentication:
+swapi.build is also a remote [MCP](https://modelcontextprotocol.io) server over
+**Streamable HTTP**. Any Streamable HTTP client works: the stateless `2026-07-28`
+revision sends self-contained requests, and earlier revisions negotiate a session
+through `initialize` — both are served on the same endpoint. The legacy HTTP+SSE
+transport (`2024-11-05`) is not supported. First-party, read-only, no authentication:
 
 ```
 https://swapi.build/mcp
