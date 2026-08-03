@@ -1,6 +1,7 @@
 package com.eldermoraes.swapi.assistant;
 
 import com.eldermoraes.swapi.assistant.ai.Archivist;
+import com.eldermoraes.swapi.assistant.ai.RestArchivist;
 import dev.langchain4j.mcp.client.McpClient;
 import io.quarkiverse.langchain4j.mcp.runtime.McpClientName;
 import io.quarkus.test.common.QuarkusTestResource;
@@ -38,6 +39,9 @@ class ArchivistWiringTest {
     @Inject
     Archivist archivist;
 
+    @Inject
+    RestArchivist restArchivist;
+
     /**
      * The MCP client connects when this bean is first created, not when Quarkus
      * starts, so injecting it here is what makes the handshake happen offline.
@@ -52,6 +56,11 @@ class ArchivistWiringTest {
     @Test
     void mcpArchivistIsWired() {
         assertNotNull(archivist);
+    }
+
+    @Test
+    void restArchivistIsWired() {
+        assertNotNull(restArchivist);
     }
 
     @Test

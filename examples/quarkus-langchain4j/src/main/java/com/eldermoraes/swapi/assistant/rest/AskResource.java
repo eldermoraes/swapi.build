@@ -1,6 +1,7 @@
 package com.eldermoraes.swapi.assistant.rest;
 
 import com.eldermoraes.swapi.assistant.ai.Archivist;
+import com.eldermoraes.swapi.assistant.ai.RestArchivist;
 import com.eldermoraes.swapi.assistant.dto.Answer;
 import com.eldermoraes.swapi.assistant.dto.Question;
 import jakarta.inject.Inject;
@@ -18,9 +19,18 @@ public class AskResource {
     @Inject
     Archivist archivist;
 
+    @Inject
+    RestArchivist restArchivist;
+
     @POST
     @Path("/mcp")
     public Answer viaMcp(Question question) {
         return new Answer("mcp", archivist.ask(question.question()));
+    }
+
+    @POST
+    @Path("/api")
+    public Answer viaApi(Question question) {
+        return new Answer("api", restArchivist.ask(question.question()));
     }
 }
