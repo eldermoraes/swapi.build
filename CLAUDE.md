@@ -15,9 +15,11 @@ an MCP server (Streamable HTTP) at `/mcp`.
    every commit.
 6. **Merge** — ask the user (merge local / PR / keep branch). Run the suite again
    on the merged result.
-7. **Push** — `git push` publishes commits only. **It does not deploy.**
-8. **Deploy** — follow `docs/DEPLOY.md` exactly. Preview → verify → production.
-9. **Post-deploy verification** — the curl checks in `docs/DEPLOY.md`.
+7. **Release** — only if the change carries a version bump: changelog entry →
+   annotated tag → GitHub Release, per `docs/RELEASE.md`.
+8. **Push** — `git push` publishes commits only. **It does not deploy.**
+9. **Deploy** — follow `docs/DEPLOY.md` exactly. Preview → verify → production.
+10. **Post-deploy verification** — the curl checks in `docs/DEPLOY.md`.
 
 ## Non-negotiable facts
 
@@ -39,6 +41,11 @@ an MCP server (Streamable HTTP) at `/mcp`.
   `docs/DEPLOY.md` asserts the content type is JavaScript, not HTML.
 - **Tests:** `cd swapi-app && ./mvnw test`. Never run `mvn clean` while dev mode is
   running. Test HTTP port is 8081.
+- **A version bump is a release.** Bump → `CHANGELOG.md` entry → annotated tag →
+  GitHub Release → deploy, per `docs/RELEASE.md`. `ChangelogVersionTest` fails the
+  suite if the pom version has no changelog section, and `OpenApiVersionTest` fails
+  if `/openapi.json` stops advertising the pom version. Tags point at the **last**
+  commit of a version line, never at the bump commit.
 - **Successful GETs return HTTP 200; nonexistent ids return 404** (the historic
   202 quirk was retired on 2026-08-01 — no external clients depended on it).
 - **Container tooling is `podman`** (`/opt/podman/bin`), not `docker`. The podman

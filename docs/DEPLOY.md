@@ -8,6 +8,8 @@ Canonical deploy procedure. The Vercel project is `algorium/swapi-build`,
 - `.env` at the repo root (gitignored) with `VERCEL_API_TOKEN` and `VERCEL_TEAM_ID`.
 - `swapi-app/.vercel/project.json` exists (project already linked).
 - Full test suite green: `cd swapi-app && ./mvnw test`.
+- If this deploy carries a version bump, `docs/RELEASE.md` steps 1–7 are done
+  (changelog entry, annotated tag and GitHub Release exist).
 
 ## 1. Preview deploy
 
