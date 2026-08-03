@@ -23,4 +23,20 @@ class SwapiToolsLiveTest {
         assertTrue(tools.searchPeople("Luke").contains("Luke Skywalker"));
         assertTrue(tools.planet(1).contains("Tatooine"));
     }
+
+    /**
+     * The model guesses ids, and the API answers a bad guess with 404. That must come
+     * back as something the model can read and recover from, not as an exception that
+     * aborts the whole AI call.
+     */
+    @Test
+    void unknownIdsAreReportedToTheModelInsteadOfThrowing() {
+        String person = tools.person(9999);
+        assertTrue(person.contains("no person with id 9999"),
+                "expected a readable not-found payload, got: " + person);
+
+        String planet = tools.planet(9999);
+        assertTrue(planet.contains("no planet with id 9999"),
+                "expected a readable not-found payload, got: " + planet);
+    }
 }
