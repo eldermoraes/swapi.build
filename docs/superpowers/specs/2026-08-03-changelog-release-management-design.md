@@ -181,17 +181,31 @@ vez de detalhada e especulativa.
 
 Marcos que a issue exige que apareçam, e onde cada um cai pela regra da decisão 3:
 
-| Marco | Data | Seção |
+| Marco | Data de implementação | Seção |
 |---|---|---|
 | Migração DigitalOcean → Vercel/Cloudflare | 2026-07-23 | 1.8.1 |
-| MCP server (primeira versão) | 2026-07-31 | 1.9.0 |
-| Contrato público: 202 → 200, ids de registro, 404 | 2026-08-02 | 2.0.0 |
-| OpenAPI como fonte única + `/docs` renderizado da spec | 2026-08-02 | 2.0.x |
-| Descoberta de base-url por request | 2026-08-02 | 2.0.x |
+| MCP server (primeira versão) | 2026-07-31 | **1.8.1** |
+| Descoberta de base-url por request (MCP + REST) | 2026-08-01 | **1.9.1** |
+| Contrato público: 202 → 200, ids de registro, 404 | 2026-08-01 | **1.9.1**, declarado em 2.0.0 |
+| Base URL em contexto por request; entidades read-only | 2026-08-02 | 2.0.0 |
+| OpenAPI como fonte única + `/docs` renderizado da spec | 2026-08-02 | **2.0.2** |
 | MCP stateful + stateless no mesmo endpoint | 2026-08-03 | 2.1.0 |
 
-A alocação exata dos três itens marcados "2.0.x" sai do `git log` de cada faixa
-durante a implementação — não se chuta aqui.
+**Correção aplicada depois de ler o `git log` de cada faixa** (a versão anterior
+desta tabela dizia 2.0.0 para o contrato e "2.0.x" para o OpenAPI): neste repo os
+bumps **abriam** cada linha de trabalho em vez de fechá-la. O commit
+`chore: version 2.0.2` é o mais antigo da faixa da 2.0.2, e todo o trabalho de
+OpenAPI vem depois dele — logo, OpenAPI é 2.0.2, não "2.0.x". Pelo mesmo motivo a
+mudança de contrato (2026-08-01) cai na faixa da 1.9.1, e a 2.0.0 é o bump do dia
+seguinte que a declarou major.
+
+Para não duplicar conteúdo, cada mudança aparece **numa única seção** — a da faixa
+que a contém — e a 2.0.0 carrega uma nota explícita de que o major formaliza o
+contrato implementado na linha 1.9.1, com referência cruzada nos dois sentidos.
+
+Achado colateral: a **2.0.1 não tem conteúdo funcional nenhum**. O commit
+`2beb46c` só alinha `swapi-app/pom.xml` com o `package.json` do frontend, e a
+entrada dela vai dizer exatamente isso, em vez de fabricar substância.
 
 ### `docs/RELEASE.md`
 
