@@ -37,6 +37,15 @@ All responses are JSON. Example:
 curl http://localhost:5432/api/people/1
 ```
 
+## OpenAPI
+
+The full API contract is served at [`/openapi.json`](https://swapi.build/openapi.json)
+(OpenAPI 3.x, generated from the code — always in sync). The
+[documentation page](https://swapi.build/docs) renders from it, including a
+"try it" for every endpoint. Generate a client with, e.g.:
+
+    npx @openapitools/openapi-generator-cli generate -i https://swapi.build/openapi.json -g typescript-fetch
+
 ## MCP Server
 
 swapi.build is also a remote [MCP](https://modelcontextprotocol.io) server — built on the
