@@ -78,20 +78,38 @@ capabilities, so there is nothing to keep in sync when it changes.
 
 ### The tool surfaces are genuinely different
 
-This is not only about lines of code. The two paths present different tool designs to the
-model, and it shows up in tokens:
+This is not only about lines of code. The two paths hand the model different tool designs:
 
 - The MCP server advertises four *generic* tools — `sw_list`, `sw_get`, `sw_random`,
   `sw_search` — each parameterized by a `resource` enum (`PEOPLE`, `PLANETS`, `FILMS`,
-  `SPECIES`, `STARSHIPS`, `VEHICLES`). One call shape covers six resources.
-  First-call prompt evaluation: **579 tokens**.
+  `SPECIES`, `STARSHIPS`, `VEHICLES`). One call shape covers six resource types.
 - The REST path declares four *narrow* tools — `searchPeople`, `person`, `searchPlanets`,
-  `planet` — one per operation, each with a hand-written description.
-  First-call prompt evaluation: **635 tokens**.
+  `planet` — one per operation, each with a hand-written description, covering two
+  resource types.
 
-Same answer, different tool-surface design, measurably different prompt cost. The MCP
-server's enum-parameterized shape is the more compact of the two even though it covers
-far more of the API.
+That difference is measurable. Asking the canonical question through both endpoints in one
+dev-mode session, with `-Dquarkus.langchain4j.ollama.log-responses=true`, the first model
+call of each path — the one that carries the tool schemas but no tool results yet — reports:
+
+| Path | 1st call | 2nd call | 3rd call | Total prompt tokens |
+|---|---|---|---|---|
+| REST (4 narrow tools) | **371** | 635 | 1002 | 2008 |
+| MCP (4 generic tools) | **579** | 841 | 1207 | 2627 |
+
+Both paths take three model round trips and two tool calls to answer, so those rows line
+up step for step. **The MCP tool surface is the more expensive prompt here** — 208 tokens
+more on the first call, and it stays ahead at every step because the larger tool schemas
+sit in the conversation for the whole exchange. The `resource` enum is not free: six enum
+values across four tools costs more than four narrow signatures with one-line descriptions.
+
+So the trade is not "MCP is cheaper". It is: the MCP path costs **more prompt tokens and
+no code**, and what it buys is coverage — the same four tools reach six resource types,
+including films, species, starships and vehicles that the REST path never implemented. The
+REST path is the leaner prompt precisely because it is the narrower, hand-maintained
+surface.
+
+(Token counts come from one run of a cloud-hosted model; treat them as the shape of the
+difference, not as constants.)
 
 ## How it works
 
