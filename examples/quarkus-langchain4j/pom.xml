@@ -18,6 +18,10 @@
         <quarkus.langchain4j.platform.version>3.33.3</quarkus.langchain4j.platform.version>
         <skipITs>true</skipITs>
         <surefire-plugin.version>3.5.4</surefire-plugin.version>
+        <!-- Tests tagged "live" hit the public swapi.build server and are excluded
+             from the default suite. The "live" profile below flips this so that
+             `./mvnw test -Dgroups=live` runs exactly those tests. -->
+        <excluded.groups>live</excluded.groups>
     </properties>
 
     <dependencyManagement>
@@ -110,7 +114,7 @@
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         <maven.home>${maven.home}</maven.home>
                     </systemPropertyVariables>
-                    <excludedGroups>live</excludedGroups>
+                    <excludedGroups>${excluded.groups}</excludedGroups>
                 </configuration>
             </plugin>
             <plugin>
@@ -137,6 +141,20 @@
     </build>
 
     <profiles>
+        <!-- Activated by `./mvnw test -Dgroups=live`: drops the default "live"
+             exclusion so the network-dependent tests can actually be selected. -->
+        <profile>
+            <id>live</id>
+            <activation>
+                <property>
+                    <name>groups</name>
+                    <value>live</value>
+                </property>
+            </activation>
+            <properties>
+                <excluded.groups>none</excluded.groups>
+            </properties>
+        </profile>
         <profile>
             <id>native</id>
             <activation>
