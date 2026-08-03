@@ -1,0 +1,75 @@
+package com.eldermoraes;
+
+import io.quarkus.test.junit.QuarkusTest;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
+
+@QuarkusTest
+class CacheHeadersTest {
+
+    private static final String EDGE_TTL = "s-maxage=31536000";
+    private static final String BROWSER_TTL = "max-age=300";
+    private static final String STALE = "stale-while-revalidate=86400";
+
+    // Dado estatico invalidado por deploy: a borda pode guardar por muito tempo.
+    @Test
+    void successfulResourceIsCacheableAtTheEdge() {
+        given()
+        .when()
+                .get("/api/people/1")
+        .then()
+                .statusCode(200)
+                .header("Cache-Control", containsString(EDGE_TTL))
+                .header("Cache-Control", containsString(BROWSER_TTL))
+                .header("Cache-Control", containsString(STALE));
+    }
+
+    // Id inexistente so passa a existir num deploy novo, que ja invalida o cache.
+    // Cachear 404 e o que absorve varredura de ids.
+    @Test
+    void notFoundIsCacheableAtTheEdge() {
+        given()
+        .when()
+                .get("/api/people/9999")
+        .then()
+                .statusCode(404)
+                .header("Cache-Control", containsString(EDGE_TTL));
+    }
+
+    // Cachear /random faria a borda devolver sempre o mesmo sorteio.
+    @Test
+    void everyRandomEndpointStaysUncached() {
+        List<String> resources =
+                List.of("people", "films", "planets", "species", "starships", "vehicles");
+
+        for (String resource : resources) {
+            String path = "/api/" + resource + "/random";
+            String cacheControl = given()
+                    .when()
+                            .get(path)
+                    .then()
+                            .statusCode(200)
+                            .extract().header("Cache-Control");
+
+            Assertions.assertTrue(
+                    cacheControl == null || !cacheControl.contains("s-maxage"),
+                    path + " nao pode ser cacheado na borda, mas veio: " + cacheControl);
+        }
+    }
+
+    // A raiz da API tambem e estatica.
+    @Test
+    void apiRootIsCacheableAtTheEdge() {
+        given()
+        .when()
+                .get("/api")
+        .then()
+                .statusCode(200)
+                .header("Cache-Control", containsString(EDGE_TTL));
+    }
+}
