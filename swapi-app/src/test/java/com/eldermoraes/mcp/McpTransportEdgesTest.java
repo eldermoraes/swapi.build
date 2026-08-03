@@ -68,6 +68,7 @@ class McpTransportEdgesTest {
         .when()
                 .post("/mcp/messages/whatever-id")
         .then()
-                .statusCode(404);
+                .statusCode(404)
+                .body(containsString("/mcp"));
     }
 }
