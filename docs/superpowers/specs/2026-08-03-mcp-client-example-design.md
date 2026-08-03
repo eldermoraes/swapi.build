@@ -1,6 +1,9 @@
 # Exemplo de Client — Quarkus + LangChain4j (MCP + API) — Design
 
-**Data:** 2026-08-03 · **Aprovado pelo usuário** (modelo `gemma4:31b-cloud`, transporte stateless custom)
+**Data:** 2026-08-03 · **Status:** aguardando aprovação
+**Revisada em 2026-08-03**, depois do merge `00a8e53` ("MCP serves stateful and stateless clients on
+one endpoint", app 2.1.0). A revisão **removeu a peça central da versão anterior**: o
+`StatelessMcpTransport` custom não é mais necessário. Ver "Revisão" no fim.
 
 ## Objetivo
 
@@ -13,63 +16,42 @@ nosso MCP") e de conteúdo (blog/Reels).
 Todo o artefato — código, comentários, README, nomes — **em inglês**. Esta spec e o plano ficam em
 português, como o resto de `docs/`.
 
-## Achado técnico que definiu o desenho
+## Estado verificado do endpoint (2026-08-03, produção 2.1.0)
 
-Verificado em 03/08/2026 contra produção e contra o código dos artefatos, não inferido:
+O exemplo depende de um fato que precisa estar verificado, não suposto: o `/mcp` atende o cliente
+LangChain4j como ele é hoje. Medido contra produção:
 
-**Servidor.** `swapi.build/mcp` roda `quarkus-mcp-server-http` **2.0.0.Beta3** e aceita **apenas** o
-envelope stateless da spec 2026-07-28. O handshake clássico foi testado com reuso de conexão TCP
-comprovado (`Re-using existing connection`): `initialize` responde 200 mas **não devolve
-`Mcp-Session-Id`**, e o `tools/list` seguinte falha com
-`-32601 "The first message from the client must be initialize"`. O servidor não guarda estado algum.
+| Cenário | Resultado |
+|---|---|
+| `initialize` negociando `2025-11-25` | 200 + header `mcp-session-id` |
+| `notifications/initialized` em conexão nova, com sessão | 202 |
+| `tools/list` e `tools/call` em conexão nova, com sessão | 200, payload correto (Luke Skywalker) |
+| `tools/list` com `Mcp-Session-Id` inválido (efeito do `auto-init=true`) | 200 |
+| `tools/list` sem `Mcp-Session-Id` nenhum | 200 |
+| Envelope stateless `2026-07-28` (`Mcp-Method`/`Mcp-Name`/`_meta`) | 200, sem regressão |
 
-**Cliente.** `dev.langchain4j:langchain4j-mcp`, versão mais recente do Maven Central
-(**1.18.1-beta28**): constantes de protocolo apenas `2024-11-05` e `2025-11-25`, transporte baseado
-em `Mcp-Session-Id`, **zero** ocorrências de `Mcp-Method`/`Mcp-Name`. Não fala o envelope stateless.
+`dev.langchain4j:langchain4j-mcp` (1.18.x-beta28, o mais recente no Central) fala exatamente
+`2025-11-25` com transporte baseado em `Mcp-Session-Id` — que é o que o servidor negocia e serve.
+Logo o exemplo usa o caminho **declarativo padrão**, sem plumbing.
 
-**Sem saída pelo servidor.** A doc da extensão MCP server (branch `main`) afirma auto-detecção dos
-dois paradigmas no mesmo endpoint, mas isso não está em release: `maven-metadata.xml` de
-`io.quarkiverse.mcp:quarkus-mcp-server-http` dá `latest = release = 2.0.0.Beta3`. Não existe GA para
-subir.
-
-**Consequência:** nenhum client da era 2025-11-25 — incluindo qualquer app LangChain4j — consegue
-consumir `swapi.build/mcp` hoje sem implementar o envelope novo. Decisão do usuário: **não agir**
-sobre esse gap fora do exemplo (a postura stateless-only é intencional; os clients acompanharão a
-spec). Fica registrado aqui apenas como contexto do desenho.
-
-## Wire format stateless (provado contra produção)
-
-```
-POST https://swapi.build/mcp
-Headers: Content-Type: application/json
-         Accept: application/json, text/event-stream
-         MCP-Protocol-Version: 2026-07-28
-         Mcp-Method: <método JSON-RPC>          # obrigatório em toda request
-         Mcp-Name: <nome da tool>               # obrigatório em tools/call
-Body:    {"jsonrpc":"2.0","id":N,"method":"...","params":{ ..., "_meta":{
-           "io.modelcontextprotocol/protocolVersion":"2026-07-28",
-           "io.modelcontextprotocol/clientInfo":{"name":"...","version":"..."},
-           "io.modelcontextprotocol/clientCapabilities":{}
-         }}}
-```
-
-`tools/list` assim devolveu as 4 tools; `tools/call` com `Mcp-Name: sw_get` e
-`arguments {resource: PEOPLE, id: 1}` devolveu Luke Skywalker. Ausência de `Mcp-Method` →
-`-32020 Missing required header: Mcp-Method`; ausência de `_meta` → `-32602`; ausência de `Mcp-Name`
-em `tools/call` → `-32020 Missing required header: Mcp-Name`.
+Por que isso é seguro na topologia da Vercel (sem afinidade de instância): `auto-init=true` serve um
+`Mcp-Session-Id` desconhecido com sessão descartável em vez de 404, e as 4 tools do swapi.build são
+read-only e sem estado entre chamadas — nenhuma delas depende da sessão que a atendeu. O detalhamento
+está em `docs/superpowers/specs/2026-08-03-mcp-dual-stateful-stateless-design.md`.
 
 ## Decisões (com o usuário)
 
 1. **Caso de uso: Star Wars Archive Assistant.** Perguntas em linguagem natural sobre um catálogo
    remoto — a forma mais comum de assistente em produção (perguntar sobre produtos/clientes/estoque
-   e o LLM consulta a API da empresa). Exemplo canônico do README exige **duas tool calls
+   e o LLM consulta a API da empresa). O exemplo canônico do README exige **duas tool calls
    encadeadas** ("Which planet is Luke Skywalker from, and how hot is it?" → `sw_search(PEOPLE)` →
    `sw_get(PLANETS)`), o que demonstra tool calling multi-step de verdade, não um hello-tool.
 2. **Dois caminhos lado a lado**, mesma pergunta, mesmos prompts: `POST /ask/mcp` (tools vindas do
    MCP server remoto) e `POST /ask/api` (tools locais sobre REST client). O README compara: no
-   caminho MCP não se escreve schema de tool nenhum — o servidor descreve as próprias capacidades.
-3. **Transporte stateless custom** para o caminho MCP (uma classe), em vez de esperar release ou
-   mexer no servidor.
+   caminho MCP não se escreve cliente, nem tool, nem schema — o servidor descreve as próprias
+   capacidades; o caminho API mostra exatamente o que o MCP poupou.
+3. **Caminho MCP 100% declarativo:** `@McpToolBox("swapi")` + duas properties. Sem transporte
+   custom, sem `toolProviderSupplier` (ver "Revisão").
 4. **Modelo: `gemma4:31b-cloud`** via Ollama. Tool calling verificado em 03/08/2026: devolveu
    `tool_calls` com `{"resource":"PEOPLE","id":1}` corretos em ~0,4 s.
 5. **Alvo MCP: produção** (`https://swapi.build/mcp`) por padrão; override para
@@ -92,76 +74,97 @@ examples/quarkus-langchain4j/
   README.md
   .gitignore
   src/main/java/com/eldermoraes/swapi/assistant/
-    ai/Archivist.java              # @RegisterAiService(toolProviderSupplier = SwapiMcpToolProvider.class)
-    ai/RestArchivist.java          # @RegisterAiService(tools = SwapiTools.class)
-    mcp/StatelessMcpTransport.java # implements McpTransport — a única peça de plumbing
-    mcp/SwapiMcpToolProvider.java  # Supplier<ToolProvider>: DefaultMcpClient -> McpToolProvider
-    client/SwapiClient.java        # @RegisterRestClient para /api
-    tools/SwapiTools.java          # @Tool beans delegando ao SwapiClient
-    dto/Answer.java                # record (resposta do endpoint)
-    rest/AskResource.java          # POST /ask/mcp · POST /ask/api
+    ai/Archivist.java          # @RegisterAiService + @McpToolBox("swapi")
+    ai/RestArchivist.java      # @RegisterAiService(tools = SwapiTools.class)
+    client/SwapiClient.java    # @RegisterRestClient para /api
+    tools/SwapiTools.java      # @Tool beans delegando ao SwapiClient
+    dto/Answer.java            # record devolvido pelos endpoints
+    rest/AskResource.java      # POST /ask/mcp · POST /ask/api
   src/main/resources/application.properties
   src/test/java/com/eldermoraes/swapi/assistant/
-    StatelessMcpTransportTest.java # headers + _meta (sem rede, sem modelo)
-    AssistantWiringTest.java       # smoke de CDI/AI service (sem modelo)
+    AssistantWiringTest.java   # smoke de CDI/AI service (sem modelo, sem rede)
+    McpStubServer.java         # QuarkusTestResourceLifecycleManager (stub MCP local)
 ```
 
-### `StatelessMcpTransport`
+Oito arquivos de projeto. As duas classes de plumbing MCP da versão anterior deixaram de existir.
 
-Implementa `dev.langchain4j.mcp.client.transport.McpTransport` com JDK `HttpClient` (zero
-dependência nova, funciona em native):
+### Configuração relevante
 
-- `initialize(...)` → POST real de `initialize`; o servidor responde 200 e o cliente lê
-  `Mcp-Session-Id` como `Optional`, então a ausência não quebra nada.
-- `executeOperationWithResponse(...)` → injeta os três headers stateless e o `_meta`; deriva
-  `Mcp-Method` do campo `method` da mensagem JSON-RPC e `Mcp-Name` de `params.name` quando presente.
-- `executeOperationWithoutResponse(...)` → **no-op**. Notificações como `notifications/initialized`
-  são rejeitadas por servidor stateless; engoli-las é o comportamento correto aqui.
-- `start(...)` → no-op (sem canal SSE subsidiário). `checkHealth()` → sem verificação remota.
-  `onFailure(...)` → guarda o callback.
+```properties
+quarkus.langchain4j.mcp.swapi.transport-type=streamable-http
+quarkus.langchain4j.mcp.swapi.url=https://swapi.build/mcp
+# quarkus.langchain4j.mcp.swapi.url=http://localhost:5432/mcp   # servidor local
 
-### Consequência assumida e documentada
+quarkus.rest-client.swapi.url=https://swapi.build/api
 
-Como o `@McpToolBox` só funciona com o tool provider automático da extensão, o caminho MCP usa
-`toolProviderSupplier`. O README explica em duas frases que esse é o preço do gap de spec e que, no
-dia em que o `langchain4j-mcp` falar 2026-07-28, o exemplo colapsa para duas properties + uma
-annotation — o que reforça a mensagem em vez de enfraquecê-la.
+quarkus.langchain4j.ollama.chat-model.model-id=gemma4:31b-cloud
+```
+
+### Prompts
+
+Os dois AI services compartilham o mesmo `@SystemMessage`: responder **somente** com base no
+resultado das tools, e dizer que não sabe quando as tools não trouxerem a informação. Isso é o que
+torna o exemplo uma demonstração de *grounding*, e não de memória do modelo sobre Star Wars.
 
 ## Testes (TDD)
 
-1. **`StatelessMcpTransportTest`** — o teste que protege a peça nova. Teste JUnit puro (sem
-   `@QuarkusTest`): sobe um stub `com.sun.net.httpserver.HttpServer` em porta efêmera, executa
-   `tools/list` e `tools/call` pelo transporte e afirma sobre a request capturada:
-   `MCP-Protocol-Version`, `Mcp-Method` correto por operação, `Mcp-Name` presente só em `tools/call`,
-   e as três chaves de `_meta` no corpo. Sem rede externa, sem modelo, sem boot do Quarkus.
-2. **`AssistantWiringTest`** — `@QuarkusTest` que injeta `Archivist` e `RestArchivist` e afirma que
-   os proxies existem. Bootar o Quarkus constrói o container CDI e os proxies dos AI services, então
-   verde já prova wiring sem chamar modelo e sem Ollama rodando.
-3. Teste com modelo vivo (Ollama + MCP de produção) entra **comentado, opt-in**, com instrução no
+1. **`AssistantWiringTest`** — `@QuarkusTest` que injeta `Archivist` e `RestArchivist` e afirma que
+   os proxies existem. Bootar o Quarkus constrói o container CDI, o cliente MCP e os proxies dos AI
+   services, então verde prova o wiring sem chamar modelo.
+2. **`McpStubServer`** — `QuarkusTestResourceLifecycleManager` que sobe um
+   `com.sun.net.httpserver.HttpServer` em porta efêmera respondendo `initialize` (com
+   `Mcp-Session-Id`) e `tools/list` com uma tool, e sobrescreve
+   `quarkus.langchain4j.mcp.swapi.url` para apontar nele. Motivo: a extensão conecta o cliente MCP no
+   startup, então sem stub a suíte passaria a depender de rede e do swapi.build no ar. Com o stub, o
+   teste é determinístico e offline — e ainda documenta o handshake que o cliente faz.
+3. Health check do cliente MCP desligado no perfil de teste
+   (`%test.quarkus.langchain4j.mcp.health.enabled=false`), porque o readiness check da extensão
+   pingaria o servidor real.
+4. Teste com modelo vivo (Ollama + MCP de produção) entra **comentado, opt-in**, com instrução no
    README.
 
-O exemplo **não declara client MCP nomeado** em `application.properties` (o `DefaultMcpClient` é
-construído em código pelo `SwapiMcpToolProvider`), então não há health check da extensão exigindo o
-servidor no ar — e `quarkus.langchain4j.mcp.health.enabled` não é necessário. A extensão
-`langchain4j-mcp` entra apenas para trazer `dev.langchain4j:langchain4j-mcp` na versão do BOM e o
-registro para native image.
+Comando da suíte: `cd examples/quarkus-langchain4j && ./mvnw test`.
 
 ## README do exemplo (em inglês)
 
-Rodar em 3 comandos; os dois curls lado a lado com a mesma pergunta; explicação do que o MCP poupa;
-a nota do gap de spec e do transporte custom; como trocar de modelo (`gemma4:31b-cloud` → local ou
-OpenAI); nota de que modelo `-cloud` exige `ollama signin` e rede. Link para o exemplo no README
-raiz do swapi.build.
+Rodar em 3 comandos; os dois curls lado a lado com a mesma pergunta; a comparação MCP × API
+(quantas linhas cada caminho custou); como trocar de modelo (`gemma4:31b-cloud` → local ou OpenAI);
+nota de que modelo `-cloud` exige `ollama signin` e rede. Link para o exemplo no README raiz do
+swapi.build.
 
 ## Fora de escopo
 
 Observabilidade, RAG, agentes/multi-agente, guardrails, UI, autenticação, native build do exemplo,
-CI para o exemplo, e qualquer mudança no `swapi-app` (inclusive o gap de compatibilidade MCP).
+CI para o exemplo, e qualquer mudança no `swapi-app`.
+
+## Revisão de 2026-08-03 (o que mudou e por quê)
+
+A versão anterior desta spec foi escrita algumas horas antes do merge `00a8e53` e partia de um
+bloqueio real, medido na época: `swapi.build/mcp` (então 2.0.0.Beta3 sem `auto-init`) **não emitia
+`Mcp-Session-Id`** e rejeitava a segunda request de um cliente com sessão, mesmo com reuso de conexão
+TCP comprovado — enquanto o `langchain4j-mcp` mais recente não falava o envelope stateless
+`2026-07-28`. Dali saíam duas classes de plumbing (`StatelessMcpTransport`,
+`SwapiMcpToolProvider`), o abandono do `@McpToolBox` e um teste dedicado ao wire format.
+
+Com o `auto-init=true` em produção, o cliente stateful passou a ser atendido de ponta a ponta
+(medições na tabela acima). Consequências:
+
+- **Removidos:** `mcp/StatelessMcpTransport.java`, `mcp/SwapiMcpToolProvider.java` e
+  `StatelessMcpTransportTest`. O `toolProviderSupplier` sai; entra `@McpToolBox("swapi")`.
+- **Removida** a ressalva do README sobre "o preço do gap de spec".
+- **Acrescentado** o stub MCP de teste, que na versão anterior não fazia sentido (o transporte custom
+  seria testado diretamente).
+- **Mantidos** sem alteração: caso de uso, dois caminhos, modelo, alvo, interface, escopo, ausência
+  de observabilidade.
+
+O exemplo ficou mais curto e mais fiel ao que se deve ensinar: consumir um MCP server remoto em
+Quarkus é configuração, não código.
 
 ## Riscos
 
 | Risco | Mitigação |
 |---|---|
-| `McpTransport` é API beta (`1.18.x-beta28`) e pode mudar de assinatura | Uma classe isolada, com teste próprio; o gap desaparece quando o cliente suportar a spec |
+| Sessão MCP sem afinidade de instância na Vercel | `auto-init=true` cobre; tools read-only não dependem de sessão. Verificado com sessão inválida e sem sessão |
+| A extensão conecta o cliente MCP no startup → suíte dependeria de rede | Stub MCP local no perfil de teste (`McpStubServer`) + health check desligado |
 | Modelo `-cloud` exige `ollama signin` e rede | Documentado no README, com alternativa local |
-| Qualidade da resposta depende do tool calling do modelo | Prompt curto e tools genéricas; verificado que o modelo chama a tool certa |
+| Qualidade da resposta depende do tool calling do modelo | Prompt curto, tools genéricas, tool calling verificado com o modelo escolhido |
