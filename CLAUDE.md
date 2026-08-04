@@ -15,9 +15,11 @@ an MCP server (Streamable HTTP) at `/mcp`.
    every commit.
 6. **Merge** — ask the user (merge local / PR / keep branch). Run the suite again
    on the merged result.
-7. **Push** — `git push` publishes commits only. **It does not deploy.**
-8. **Deploy** — follow `docs/DEPLOY.md` exactly. Preview → verify → production.
-9. **Post-deploy verification** — the curl checks in `docs/DEPLOY.md`.
+7. **Release** — only if the change carries a version bump: changelog entry →
+   annotated tag → GitHub Release, per `docs/RELEASE.md`.
+8. **Push** — `git push` publishes commits only. **It does not deploy.**
+9. **Deploy** — follow `docs/DEPLOY.md` exactly. Preview → verify → production.
+10. **Post-deploy verification** — the curl checks in `docs/DEPLOY.md`.
 
 ## Non-negotiable facts
 
@@ -25,8 +27,25 @@ an MCP server (Streamable HTTP) at `/mcp`.
   it fails with `Expected VCR image registry vcr.vercel.com: <detect>` (the
   `container` framework can't find the Dockerfile). See `docs/DEPLOY.md`.
 - **There is no git-push auto-deploy.** Deploys are CLI-only (`npx vercel deploy`).
+  Since 2026-08-03 the GitHub repo *is* linked to the Vercel project, so this now
+  holds by explicit configuration rather than by absence of a connection: the root
+  `vercel.json` carries `git.deploymentEnabled: false`. Never remove it without
+  first setting `rootDirectory` to `swapi-app` — with `rootDirectory: null` a
+  git-triggered build runs from the repo root and hits the failure above.
+- **Web Analytics and Speed Insights are enabled on the project** and injected by
+  the SPA (`@vercel/analytics` / `@vercel/speed-insights` in `src/main.ts`). Their
+  scripts live at `/_vercel/insights/*` and `/_vercel/speed-insights/*`, served by
+  the Vercel edge. `quarkus.quinoa.enable-spa-routing=true` answers *any* unknown
+  path with `index.html` and HTTP 200, so if the edge ever stops intercepting
+  those paths the collection breaks **silently**. The curl check in
+  `docs/DEPLOY.md` asserts the content type is JavaScript, not HTML.
 - **Tests:** `cd swapi-app && ./mvnw test`. Never run `mvn clean` while dev mode is
   running. Test HTTP port is 8081.
+- **A version bump is a release.** Bump → `CHANGELOG.md` entry → annotated tag →
+  GitHub Release → deploy, per `docs/RELEASE.md`. `ChangelogVersionTest` fails the
+  suite if the pom version has no changelog section, and `OpenApiVersionTest` fails
+  if `/openapi.json` stops advertising the pom version. Tags point at the **last**
+  commit of a version line, never at the bump commit.
 - **Successful GETs return HTTP 200; nonexistent ids return 404** (the historic
   202 quirk was retired on 2026-08-01 — no external clients depended on it).
 - **Container tooling is `podman`** (`/opt/podman/bin`), not `docker`. The podman
