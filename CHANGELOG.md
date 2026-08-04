@@ -28,6 +28,16 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
   pageview; the SPA now injects them from `src/main.ts`. Their scripts are served by
   the Vercel edge at `/_vercel/*`, and the edge only routes those paths on deployments
   created after the features were enabled.
+- `examples/quarkus-langchain4j`, the first client example: a Quarkus + LangChain4j
+  assistant that answers natural-language questions about the Star Wars data, serving
+  the same question two ways for comparison. `POST /ask/mcp` takes its tools from the
+  remote MCP server — two properties and `@McpToolBox`, no tool code, no client code;
+  `POST /ask/api` takes them from local `@Tool` beans over a typed REST client. Both
+  share one system message, so the only variable is where the tools come from. Measured
+  on one run, the MCP path costs *more* prompt tokens than the hand-written one (579
+  against 371 on the first call): what it buys is broader coverage and no integration
+  code. A standalone Maven project, outside the deployed container — the deploy still
+  builds from `swapi-app/`.
 
 ### Changed
 
