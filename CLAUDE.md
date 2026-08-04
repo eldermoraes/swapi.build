@@ -41,6 +41,14 @@ an MCP server (Streamable HTTP) at `/mcp`.
   `docs/DEPLOY.md` asserts the content type is JavaScript, not HTML.
 - **Tests:** `cd swapi-app && ./mvnw test`. Never run `mvn clean` while dev mode is
   running. Test HTTP port is 8081.
+- **There are two Maven projects.** `swapi-app/` is the deployed service;
+  `examples/quarkus-langchain4j/` is a standalone client example, outside the
+  container. "Run the full suite" means both when a change touches both — the
+  example has its own suite, split by JUnit tag:
+  `cd examples/quarkus-langchain4j && ./mvnw test` (offline, no network, no model)
+  and `./mvnw test -Dgroups=live` (hits the public MCP server and REST API).
+  Its ports are `8090`/`8091`, so it can run alongside `swapi-app`. See
+  `examples/quarkus-langchain4j/AGENTS.md`.
 - **A version bump is a release.** Bump → `CHANGELOG.md` entry → annotated tag →
   GitHub Release → deploy, per `docs/RELEASE.md`. `ChangelogVersionTest` fails the
   suite if the pom version has no changelog section, and `OpenApiVersionTest` fails

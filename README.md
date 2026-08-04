@@ -195,6 +195,10 @@ swapi-app/
         utils.ts              # Shared utilities (escapeHtml)
   src/test/
     java/com/eldermoraes/     # Regression suite (REST contracts, MCP tools, forwarded headers)
+
+examples/
+  quarkus-langchain4j/        # Standalone client example, outside the deployed container
+                              # (its own Maven project and test suite)
 ```
 
 Each backend domain (film, people, planet, etc.) follows the same pattern:
