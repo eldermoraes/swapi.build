@@ -7,6 +7,7 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 @Path("/people")
@@ -19,12 +20,12 @@ public class PeopleResource {
 
     @GET
     @Path("/{id}")
-    public String person(@PathParam("id") int id) {
+    public Response person(@PathParam("id") int id) {
         return swapi.person(id);
     }
 
     @GET
-    public String search(@QueryParam("search") String name) {
+    public Response search(@QueryParam("search") String name) {
         return swapi.searchPeople(name);
     }
 }

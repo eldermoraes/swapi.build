@@ -4,6 +4,10 @@ Calling the [swapi.build](https://swapi.build) REST API from Java with a typed
 client: you declare the remote API as an interface, and Quarkus writes the HTTP
 calls for you.
 
+## Prerequisites
+
+- Java 25
+
 ## Run
 
 ```bash
@@ -40,19 +44,22 @@ endpoint, with `@Path`, `@PathParam` and `@QueryParam` describing the request.
 generates the client implementation at build time — there is no runtime proxy
 magic and nothing to wire up by hand.
 
-`PeopleResource` injects that interface with `@RestClient` and passes the JSON
-straight through, so what you get from `localhost:8080` is what swapi.build
-returned. An id the API does not have — `/people/999` — returns `404` upstream and
-surfaces here as a `500`, because mapping remote errors onto your own responses is
-a second subject this example leaves out.
+`PeopleResource` injects that interface with `@RestClient` and returns the
+client's `Response` as-is, so both the body and the status code you get from
+`localhost:8080` are what swapi.build returned. An id the API does not have —
+`/people/999` — is a `404` upstream and stays a `404` here. Two things buy that,
+with no error-mapping code: the `Response` return type carries the status along
+with the body, and one line in `application.properties`
+(`microprofile.rest.client.disable.default.mapper=true`) stops the client from
+turning error statuses into exceptions.
 
 The interface is annotated `@Produces(MediaType.APPLICATION_JSON)`, which sets
-the `Accept` header. It is needed here: a `String` return type otherwise asks
-for `text/plain` and swapi.build answers `406`, because it only serves JSON.
+the `Accept` header of the outgoing request and states on the interface that
+swapi.build serves JSON.
 
 ## Returning objects instead of JSON
 
-Replace the `String` return types with a record (or a `List<Record>`) that
+Replace the `Response` return types with a record (or a `List<Record>`) that
 mirrors the fields you care about, and add the
 `quarkus-rest-client-jackson` dependency. Quarkus then deserializes the
 response for you and the interface becomes fully typed.
