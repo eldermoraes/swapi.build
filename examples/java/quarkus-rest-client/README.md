@@ -42,7 +42,9 @@ magic and nothing to wire up by hand.
 
 `PeopleResource` injects that interface with `@RestClient` and passes the JSON
 straight through, so what you get from `localhost:8080` is what swapi.build
-returned.
+returned. An id the API does not have — `/people/999` — returns `404` upstream and
+surfaces here as a `500`, because mapping remote errors onto your own responses is
+a second subject this example leaves out.
 
 The interface is annotated `@Produces(MediaType.APPLICATION_JSON)`, which sets
 the `Accept` header. It is needed here: a `String` return type otherwise asks

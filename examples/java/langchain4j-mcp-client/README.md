@@ -32,7 +32,7 @@ Luke Skywalker is from the planet Tatooine, which has an arid climate.
 ```
 
 That is one run's output, not something to expect word for word. The model is not
-deterministic even at `temperature=0`.
+deterministic.
 
 ## How it works
 
@@ -46,7 +46,8 @@ quarkus.langchain4j.mcp.swapi.url=https://swapi.build/mcp
 `@McpToolBox("swapi")` on the `Archivist` method hands that client's tools to the model.
 The server advertises what it can do and the model picks from that list. The example
 question takes two chained calls: find the character, then fetch the home planet the
-first call returned. Nothing in this project decides that — the model does.
+first call returned. The system message asks it to call as many tools as it needs,
+but nothing here scripts which tools or in what order — the model works that out.
 
 The client connects the first time its bean is used, so the first request pays the
 handshake, not startup.

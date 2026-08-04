@@ -24,8 +24,9 @@ examples/java/langchain4j-mcp-client/    LangChain4j consumindo https://swapi.bu
 examples/java/quarkus-rest-client/       REST client tipado contra https://swapi.build/api
 ```
 
-O diretório `java/` abre espaço para exemplos em outras linguagens depois. `examples/quarkus-langchain4j`
-é apagado.
+O diretório `java/` abre espaço para exemplos em outras linguagens depois. O `examples/quarkus-langchain4j`
+antigo não existe nesta branch — ele vivia na branch do PR #5, fechado sem merge; do que sobrou em disco,
+só build output já ignorado. Nada a apagar aqui, então: os dois projetos novos nascem em `examples/java/`.
 
 Cada projeto é Maven standalone, Quarkus 3.33.3 / Java 25, fora do build e do deploy do `swapi-app`
 (o container continua sendo construído de `swapi-app/`). Tudo em inglês — código, comentários,
@@ -67,7 +68,8 @@ src/main/java/com/eldermoraes/swapi/restclient/
 src/main/resources/application.properties
 ```
 
-Extensões: `rest`, `rest-client-jackson`. Uma property aponta o client
+Extensões: `rest`, `rest-client` — sem Jackson: o JSON passa direto como `String`, e uma camada de
+mapeamento seria um segundo assunto. Uma property aponta o client
 (`quarkus.rest-client.swapi-api.url=https://swapi.build/api`).
 
 ```bash
@@ -98,7 +100,7 @@ API, nem um upgrade de extensão. Em troca, o leitor abre o projeto e vê dois a
 Cada exemplo é verificado **rodando**: `./mvnw quarkus:dev`, os curls acima, e a resposta capturada
 verbatim. O do MCP precisa de Ollama logado e rede; o do REST precisa só de rede. Uma resposta
 verbatim de cada um entra no seu README como "o que saiu numa execução", nunca como saída esperada —
-o modelo não é determinístico nem com `temperature=0`.
+o modelo não é determinístico.
 
 ## Documentação
 

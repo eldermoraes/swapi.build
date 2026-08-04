@@ -48,7 +48,6 @@ swapi-app/.quinoa/
 examples/java/*/AGENTS.md
 examples/java/*/CLAUDE.md
 examples/java/*/.mcp.json
-examples/java/*/.quarkus/
 
 # Frontend
 swapi-app/src/main/webui/node_modules/

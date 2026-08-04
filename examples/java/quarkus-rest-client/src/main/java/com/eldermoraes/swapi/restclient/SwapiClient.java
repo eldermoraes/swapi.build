@@ -15,8 +15,9 @@ import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
  * The methods return String because this example hands the JSON straight back.
  * Return a record instead and Quarkus will deserialize into it.
  *
- * @Produces sets the Accept header. Without it a String return type asks for
- * text/plain and swapi.build answers 406, because it only serves JSON.
+ * The @Produces annotation sets the Accept header. Without it a String return
+ * type asks for text/plain and swapi.build answers 406, because it only serves
+ * JSON.
  */
 @RegisterRestClient(configKey = "swapi-api")
 @Produces(MediaType.APPLICATION_JSON)

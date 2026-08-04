@@ -29,11 +29,12 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
   the Vercel edge at `/_vercel/*`, and the edge only routes those paths on deployments
   created after the features were enabled.
 - Two client examples under `examples/java/`: `langchain4j-mcp-client`, which answers
-  natural-language questions with tools discovered from the MCP server — two properties and
-  one annotation, no tool code — and `quarkus-rest-client`, which calls the REST API from
-  Java with a typed client. Each is two Java files, has one subject, and is deliberately
-  free of tests and agent configuration; neither is part of the deployed container, which
-  still builds from `swapi-app/`.
+  natural-language questions using tools discovered from the MCP server — two properties
+  wire the client, one annotation hands its tools to the model, and the project defines no
+  tools at all — and `quarkus-rest-client`, which calls the REST API from Java with a typed
+  client. Each is two Java files, has one subject, and is deliberately free of tests and
+  agent configuration; neither is part of the deployed container, which still builds from
+  `swapi-app/`.
 
 ### Changed
 

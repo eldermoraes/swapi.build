@@ -156,7 +156,7 @@ Or Bob panel → MCP tab → **Edit Global MCP**. Bob detects the tools automati
 > provision the container; subsequent calls are fast, whether your client is stateless or
 > session-based).
 
-### Client examples
+## Client examples
 
 - [`examples/java/langchain4j-mcp-client`](examples/java/langchain4j-mcp-client) — ask
   questions in natural language; the tools come from the MCP server above, so the example
