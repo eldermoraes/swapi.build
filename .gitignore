@@ -33,8 +33,10 @@ replay_pid*
 .env
 .vercel/
 
-# Plano de migração Vercel/Cloudflare — fica só local
-docs/superpowers/plans/2026-07-23-migracao-vercel-cloudflare.md
+# Specs e planos do ciclo de desenvolvimento — artefatos de processo, ficam só
+# locais: apodrecem quando versionados (o código e o histórico do git são a
+# fonte da verdade do que foi implementado)
+docs/superpowers/
 
 # Quarkus CLI local cache (plugin catalog etc.)
 .quarkus/
