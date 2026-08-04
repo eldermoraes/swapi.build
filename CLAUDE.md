@@ -7,9 +7,14 @@ an MCP server (Streamable HTTP) at `/mcp`.
 ## Development cycle (in this order — do not skip steps)
 
 1. **Brainstorm / spec** — explore, verify assumptions in code, write spec to
-   `docs/superpowers/specs/`.
+   `docs/superpowers/specs/`. **This directory is local-only and gitignored on
+   purpose** (decided 2026-08-04): specs and plans are process artifacts that rot
+   once the code moves on — the code and git history are the record of what
+   shipped. Never remove `docs/superpowers/` from `.gitignore` or commit files
+   from it.
 2. **User approval** of the spec. No implementation before this.
-3. **Implementation plan** — `docs/superpowers/plans/`, then user approval.
+3. **Implementation plan** — `docs/superpowers/plans/` (local-only, same rule as
+   the specs), then user approval.
 4. **Branch** — never implement directly on `main`.
 5. **TDD** — failing test first, then implementation. Run the full suite before
    every commit.
