@@ -17,5 +17,9 @@
     "typescript": "~5.7.0",
     "typescript-eslint": "^8.0.0",
     "vite": "^6.0.0"
+  },
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0"
   }
 }

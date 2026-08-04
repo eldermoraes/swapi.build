@@ -8,6 +8,18 @@ import { renderPrivacy } from './pages/privacy';
 import { renderTerms } from './pages/terms';
 import { cancelPending } from './api';
 import { getResourceMeta } from './constants';
+import { inject } from '@vercel/analytics';
+import { injectSpeedInsights } from '@vercel/speed-insights';
+
+// Ambos os scripts sao servidos pela borda do Vercel em /_vercel/*. Em dev o
+// Quinoa serve o Vite e esses caminhos nao existem, dai o modo explicito: sem
+// ele os scripts tentariam carregar de localhost:5173 e falhariam no console.
+// A borda so intercepta /_vercel/* quando as features estao habilitadas no
+// projeto — caso contrario o fallback de SPA do Quinoa devolve o index.html
+// com 200, e a coleta falha em silencio. Ver docs/DEPLOY.md.
+const analyticsMode = import.meta.env.PROD ? 'production' : 'development';
+inject({ mode: analyticsMode });
+injectSpeedInsights();
 
 const announcer = document.createElement('div');
 announcer.setAttribute('aria-live', 'polite');

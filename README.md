@@ -238,6 +238,13 @@ Pull requests are always welcome. Whether it's fixing a bug, improving the docs,
 4. Commit and push
 5. Open a Pull Request
 
+## Changelog and releases
+
+Release history lives in [CHANGELOG.md](CHANGELOG.md). Tagged releases are on the
+[Releases page](https://github.com/eldermoraes/swapi.build/releases). The version
+served in `/openapi.json` (`info.version`) is always the latest released version.
+The release process itself is documented in [docs/RELEASE.md](docs/RELEASE.md).
+
 ## Credits
 
 - Original [SWAPI](https://swapi.dev/) by **Paul Hallett**, maintained by **Juriy Bura**
