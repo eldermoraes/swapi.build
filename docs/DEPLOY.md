@@ -3,6 +3,23 @@
 Canonical deploy procedure. The Vercel project is `algorium/swapi-build`,
 `framework: container`, built from `swapi-app/Dockerfile.vercel`.
 
+## Automated path (default since 2026-08-05)
+
+Pushing a release tag (`v*`) — or manually dispatching **Deploy** in the Actions
+tab — runs `.github/workflows/deploy.yml`: full suite → preview deploy from
+`swapi-app/` → `scripts/verify-deploy.sh preview <url>` (all the probes below,
+including the stateful burst) → waits for **manual approval** (environment
+`production`) → production deploy → `scripts/verify-deploy.sh prod swapi.build`.
+CI authenticates against SSO-protected previews with the project's Protection
+Bypass for Automation secret (`x-vercel-protection-bypass` header) instead of a
+share link. Commit pushes never trigger it.
+
+The manual runbook below remains canonical: the workflow is an executor of this
+document, and this document wins on divergence. Use the manual path when the
+workflow is unavailable, when debugging, or for a deploy without a tag.
+`scripts/verify-deploy.sh <preview|prod> <host>` is the canonical way to run the
+probes in either path; the sections below explain what each probe proves.
+
 ## Prerequisites
 
 - `.env` at the repo root (gitignored) with `VERCEL_API_TOKEN` and `VERCEL_TEAM_ID`.
@@ -232,6 +249,8 @@ project setting (`resourceConfig`), applied by `PATCH` without a redeploy — se
 | Symptom | Cause / fix |
 |---|---|
 | `Expected VCR image registry vcr.vercel.com: <detect>` | Deploy ran from the repo root. Re-run from `swapi-app/`. |
+| The Deploy workflow sits "Waiting" after the preview job | Expected: the `production` environment requires manual approval. Review the preview probe output in the job summary, then approve in the Actions UI. |
+| CI preview probes all fail with an SSO/auth page | The Protection Bypass secret was regenerated on Vercel. Update the `VERCEL_AUTOMATION_BYPASS_SECRET` repo secret (`gh secret set`). |
 | A `git push` triggered a Vercel build | The GitHub repo has been linked to the project since 2026-08-03. Auto-deploy is off via `git.deploymentEnabled: false` in the **root** `vercel.json` — if a build fired, that file was removed or the setting was overridden in the dashboard. Note the build would fail anyway: `rootDirectory` is `null`, so it builds from the repo root (row above). |
 | Dashboard shows zero visitors although the site has traffic | `/_vercel/insights/script.js` is being answered by the SPA fallback (`200 text/html`) instead of the edge, so nothing ever reports. Check with the content-type curl in step 4. Enabling Web Analytics does **not** retrofit existing deployments — the route only appears in deployments created after `webAnalytics.enabledAt` (`GET /v9/projects/swapi-build`). A redeploy is the fix. |
 | `vercel promote` hangs or `User force closed the prompt` | Interactive confirmation without tty. Use `vercel deploy --prod` instead. |
