@@ -23,7 +23,11 @@ an MCP server (Streamable HTTP) at `/mcp`.
 7. **Release** — only if the change carries a version bump: changelog entry →
    annotated tag → GitHub Release, per `docs/RELEASE.md`.
 8. **Push** — `git push` publishes commits only. **It does not deploy.**
-9. **Deploy** — follow `docs/DEPLOY.md` exactly. Preview → verify → production.
+   Pushing a **release tag** (`v*`) is the exception: it triggers the deploy
+   workflow (`.github/workflows/deploy.yml`).
+9. **Deploy** — the tag-triggered workflow runs `docs/DEPLOY.md` for you:
+   preview → probes → manual approval in the Actions UI → production. Manual
+   fallback: follow `docs/DEPLOY.md` exactly.
 10. **Post-deploy verification** — the curl checks in `docs/DEPLOY.md`.
 
 ## Non-negotiable facts
@@ -31,12 +35,14 @@ an MCP server (Streamable HTTP) at `/mcp`.
 - **Deploy always runs from `swapi-app/`**, never from the repo root. From the root
   it fails with `Expected VCR image registry vcr.vercel.com: <detect>` (the
   `container` framework can't find the Dockerfile). See `docs/DEPLOY.md`.
-- **There is no git-push auto-deploy.** Deploys are CLI-only (`npx vercel deploy`).
-  Since 2026-08-03 the GitHub repo *is* linked to the Vercel project, so this now
-  holds by explicit configuration rather than by absence of a connection: the root
-  `vercel.json` carries `git.deploymentEnabled: false`. Never remove it without
-  first setting `rootDirectory` to `swapi-app` — with `rootDirectory: null` a
-  git-triggered build runs from the repo root and hits the failure above.
+- **There is no commit-push auto-deploy.** Deploys run via the Vercel CLI —
+  manually, or by `.github/workflows/deploy.yml` on a release-tag push (with a
+  manual gate before production). Since 2026-08-03 the GitHub repo *is* linked
+  to the Vercel project, so this now holds by explicit configuration rather
+  than by absence of a connection: the root `vercel.json` carries
+  `git.deploymentEnabled: false`. Never remove it without first setting
+  `rootDirectory` to `swapi-app` — with `rootDirectory: null` a git-triggered
+  build runs from the repo root and hits the failure above.
 - **Web Analytics and Speed Insights are enabled on the project** and injected by
   the SPA (`@vercel/analytics` / `@vercel/speed-insights` in `src/main.ts`). Their
   scripts live at `/_vercel/insights/*` and `/_vercel/speed-insights/*`, served by

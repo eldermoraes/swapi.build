@@ -1,0 +1,102 @@
+name: Deploy
+
+# Deploy é disparado por tag de release (v*) ou manualmente — nunca por push de
+# commit (git.deploymentEnabled: false na Vercel continua valendo).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+# shell: bash explícito é load-bearing: só assim o Actions invoca bash com
+# -o pipefail, e um probe reprovado à esquerda de "| tee" derruba o job.
+# O shell default (bash -e) NÃO tem pipefail.
+defaults:
+  run:
+    shell: bash
+
+env:
+  VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Full test suite
+        working-directory: swapi-app
+        run: ./mvnw test
+
+  preview:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy preview (from swapi-app/, never the repo root)
+        id: deploy
+        working-directory: swapi-app
+        env:
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+        run: |
+          set +e
+          URL=$(npx vercel deploy --token "$VERCEL_API_TOKEN" --scope algorium --yes 2>vercel-err.log)
+          STATUS=$?
+          set -e
+          if [ $STATUS -ne 0 ]; then
+            # O CLI perde o stream de log às vezes; o build remoto continua
+            # (docs/DEPLOY.md, Troubleshooting). Poll até sair de BUILDING.
+            cat vercel-err.log
+            DPL=$(curl -s "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID&limit=1" \
+              -H "Authorization: Bearer $VERCEL_API_TOKEN" | python3 -c 'import json,sys; d=json.load(sys.stdin)["deployments"][0]; print(d["uid"])')
+            echo "CLI caiu; acompanhando deployment $DPL via API"
+            for i in $(seq 1 90); do
+              STATE=$(curl -s "https://api.vercel.com/v13/deployments/$DPL?teamId=$VERCEL_ORG_ID" \
+                -H "Authorization: Bearer $VERCEL_API_TOKEN" | python3 -c 'import json,sys; print(json.load(sys.stdin)["readyState"])')
+              echo "readyState: $STATE"
+              case "$STATE" in
+                READY) break ;;
+                ERROR|CANCELED) echo "deploy falhou: $STATE"; exit 1 ;;
+                *) sleep 20 ;;
+              esac
+            done
+            [ "$STATE" = "READY" ] || { echo "timeout esperando READY"; exit 1; }
+            URL=https://$(curl -s "https://api.vercel.com/v13/deployments/$DPL?teamId=$VERCEL_ORG_ID" \
+              -H "Authorization: Bearer $VERCEL_API_TOKEN" | python3 -c 'import json,sys; print(json.load(sys.stdin)["url"])')
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Preview: $URL" >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify preview (runbook probes, incl. stateful burst)
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: ./scripts/verify-deploy.sh preview "${{ steps.deploy.outputs.url }}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  production:
+    needs: preview
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy production (from swapi-app/)
+        working-directory: swapi-app
+        env:
+          VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+        run: npx vercel deploy --prod --token "$VERCEL_API_TOKEN" --scope algorium --yes
+      - name: Verify production (runbook probes, no burst)
+        run: ./scripts/verify-deploy.sh prod swapi.build | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Manual step reminder
+        run: |
+          echo '**Passo manual restante:** abrir https://swapi.build num browser e conferir o pageview no dashboard do Analytics (script servido != coleta funcionando).' >> "$GITHUB_STEP_SUMMARY"

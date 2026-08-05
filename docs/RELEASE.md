@@ -4,9 +4,12 @@ Canonical release procedure. A release is a version number, a changelog entry, a
 tag, a GitHub Release and a deploy — in that order. Deploying without the first
 four is how a version reaches production undocumented.
 
-There is deliberately **no CI automation**: no workflow, no Release Please. The
-only failure mode that actually happens — bumping the version and forgetting the
-changelog — is caught by `ChangelogVersionTest` in the normal test run.
+Release bookkeeping is deliberately manual — no Release Please, no version-bump
+automation: the only failure mode that actually happens (bumping the version and
+forgetting the changelog) is caught by `ChangelogVersionTest` in the normal test
+run. The **deploy pipeline**, however, is automated since 2026-08-05: pushing a
+release tag triggers `.github/workflows/deploy.yml` (suite → preview + probes →
+manual approval → production). See `docs/DEPLOY.md`.
 
 ## 1. Pick the version
 
@@ -68,7 +71,11 @@ awk '/^## \[x.y.z\] - /{f=1; next} /^## /{f=0} f' CHANGELOG.md \
 ## 8. Deploy
 
 A version bump changes `info.version` in the public spec, so it must reach
-production: follow `docs/DEPLOY.md` exactly — preview → verify → production.
+production. Pushing the tag (step 6) triggers the deploy workflow: suite →
+preview deploy + runbook probes → **manual approval in the GitHub UI**
+(environment `production`) → production deploy + post-deploy verification.
+Approve at https://github.com/eldermoraes/swapi.build/actions after checking the
+preview probe output. Manual fallback: follow `docs/DEPLOY.md` step by step.
 
 ## 9. Verify
 
@@ -92,7 +99,7 @@ Then the post-deploy checks in `docs/DEPLOY.md`.
 | `ChangelogVersionTest` fails with "repo root with CHANGELOG.md not found" | The suite was run from outside the checkout. Run it from `swapi-app/`. The lookup stops at the checkout root on purpose, so a worktree never reads the parent repo's changelog. |
 | `OpenApiVersionTest` fails | Someone set `quarkus.smallrye-openapi.info-version` in `application.properties`. Remove it: the version must be inherited from the pom. |
 | `gh release create` fails with "release already exists" | The release was created earlier. Use `gh release edit vx.y.z --notes-file -` instead. |
-| Released version not visible at `/openapi.json` | The tag exists but the deploy did not run. Deploys are CLI-only — `git push` publishes commits and nothing else. See `docs/DEPLOY.md`. |
+| Released version not visible at `/openapi.json` | The tag exists but the deploy did not run — or it ran and is still waiting for the approval gate. Check the Deploy workflow in the Actions tab; a push of *commits* never deploys. See `docs/DEPLOY.md`. |
 | The GitHub Release date is wrong on the retroactive releases | Expected. `gh release create` cannot backdate, so the twelve releases created on 2026-08-03 all carry that date; only the tags are dated correctly. |
 
 ## How the retroactive history was built
