@@ -47,7 +47,7 @@ class ChangelogVersionTest {
      * purpose: a snapshot is not a release.
      */
     private static final String[] RELEASED_VERSIONS = {
-            "2.1.0", "2.0.2", "2.0.1", "2.0.0",
+            "2.2.0", "2.1.0", "2.0.2", "2.0.1", "2.0.0",
             "1.9.1", "1.9.0", "1.8.1", "1.8",
             "1.7", "1.3", "1.2", "1.1"
     };
