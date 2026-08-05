@@ -16,6 +16,8 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-08-05
+
 ### Added
 
 - `CHANGELOG.md`, reconstructed retroactively down to 1.1.
@@ -42,6 +44,13 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
   dashboard's "Missing Git Source". Automatic git deployments are disabled in the
   root `vercel.json` (`git.deploymentEnabled: false`): with `rootDirectory` unset,
   a git-triggered build runs from the repo root and fails. Deploys stay CLI-only.
+- MCP server extension `quarkus-mcp-server-http` upgraded from `2.0.0.Beta3` to
+  `2.0.0.CR1` (`quarkus-mcp-server-test` aligned). Stabilization only: the
+  underlying `mcp-server-api` reached 1.0.0 final; the Streamable HTTP options
+  (`auto-init`, `lazy-sse-init`, `dns-rebinding-check.enabled`) became true
+  runtime config, overridable per environment without a rebuild; the DNS
+  rebinding Origin check now matches hosts exactly; responses carry
+  `serverInfo` in `_meta`. The stateless `/mcp` behavior is unchanged.
 
 ## [2.1.0] - 2026-08-03
 
@@ -225,7 +234,8 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/eldermoraes/swapi.build/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/eldermoraes/swapi.build/compare/v2.0.2...v2.1.0
 [2.0.2]: https://github.com/eldermoraes/swapi.build/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/eldermoraes/swapi.build/compare/v2.0.0...v2.0.1

@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.eldermoraes</groupId>
     <artifactId>swapi-app</artifactId>
-    <version>2.1.0</version>
+    <version>2.2.0</version>
 
     <properties>
         <compiler-plugin.version>3.14.0</compiler-plugin.version>
@@ -72,12 +72,12 @@
         <dependency>
             <groupId>io.quarkiverse.mcp</groupId>
             <artifactId>quarkus-mcp-server-http</artifactId>
-            <version>2.0.0.Beta3</version>
+            <version>2.0.0.CR1</version>
         </dependency>
         <dependency>
             <groupId>io.quarkiverse.mcp</groupId>
             <artifactId>quarkus-mcp-server-test</artifactId>
-            <version>2.0.0.Beta3</version>
+            <version>2.0.0.CR1</version>
             <scope>test</scope>
         </dependency>
         <dependency>
