@@ -1,0 +1,18 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "build.swapi/star-wars",
+  "title": "Star Wars MCP",
+  "description": "The Star Wars API (SWAPI): films, people, planets, species, starships and vehicles, served as a remote MCP server over Streamable HTTP.",
+  "version": "2.2.0",
+  "websiteUrl": "https://swapi.build",
+  "repository": {
+    "url": "https://github.com/eldermoraes/swapi.build",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://swapi.build/mcp"
+    }
+  ]
+}
