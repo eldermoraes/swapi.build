@@ -90,6 +90,35 @@ pattern matches nothing and reads as a failed check when nothing is wrong.
 
 Then the post-deploy checks in `docs/DEPLOY.md`.
 
+## 10. MCP Registry (registry.modelcontextprotocol.io)
+
+The server is listed as `build.swapi/star-wars`, published from the repo-root
+`server.json`. Republishing is part of every release:
+
+1. Bump `version` in `server.json` together with the pom
+   (`ServerJsonVersionTest` fails the suite if they drift).
+2. After the production deploy is verified, publish:
+
+   ```bash
+   # login proves control of swapi.build via the apex DNS TXT record
+   # (key: ~/.config/swapi.build/mcp-registry-ed25519.pem — local only, never in the repo)
+   PRIVATE_KEY="$(openssl pkey -in ~/.config/swapi.build/mcp-registry-ed25519.pem -noout -text \
+     | grep -A3 'priv:' | tail -n +2 | tr -d ' :\n')"
+   mcp-publisher login dns --domain swapi.build --private-key "${PRIVATE_KEY}"
+   mcp-publisher publish   # run from the repo root, next to server.json
+   ```
+
+3. Verify the new version is live:
+
+   ```bash
+   curl -s 'https://registry.modelcontextprotocol.io/v0/servers?search=build.swapi/star-wars' \
+     | grep -o '"version":"[^"]*"'
+   ```
+
+Key rotation: generate a new key, replace (never add alongside) the apex TXT
+record `v=MCPv1; k=ed25519; p=...` on Cloudflare — a stale record is tried
+first and breaks login.
+
 ## Troubleshooting
 
 | Symptom | Cause / fix |
