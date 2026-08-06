@@ -47,7 +47,10 @@ class ServerJsonVersionTest {
         assertEquals("build.swapi/star-wars", json.getString("name", ""),
                 "registry name is part of the public identity — never rename casually");
         assertFalse(json.getString("title", "").isBlank(), "title is required");
-        assertFalse(json.getString("description", "").isBlank(), "description is required");
+        String description = json.getString("description", "");
+        assertFalse(description.isBlank(), "description is required");
+        assertTrue(description.length() <= 100,
+                "the registry rejects descriptions over 100 chars at publish time (422)");
     }
 
     @Test
