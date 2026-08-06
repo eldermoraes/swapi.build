@@ -16,6 +16,12 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+### Added
+
+- `server.json` manifest publishing the MCP server to the Official MCP Registry
+  as `build.swapi/star-wars` (remote, Streamable HTTP). `ServerJsonVersionTest`
+  fails the suite if it drifts from the pom version.
+
 ## [2.2.0] - 2026-08-05
 
 ### Added
