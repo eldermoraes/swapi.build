@@ -132,16 +132,13 @@
   color: var(--sw-ok);
 }
 
+/* Lives inside .sw-code, so `.sw-code pre` (0,1,1) already supplies the type,
+   padding and colour and outranks this selector (0,1,0). Only the scroll cap
+   the shared component leaves open belongs here — the rest was dead weight
+   that read as a second, divergent set of panel styles. */
 .result-body {
-  margin: 0;
-  padding: 1rem 1.2rem;
-  font-family: var(--sw-font-mono);
-  font-size: 0.8rem;
-  line-height: 1.75;
   max-height: 32rem;
-  overflow: auto;
-  white-space: pre;
-  color: var(--sw-term-text);
+  overflow-y: auto;
 }
 
 .result-body .json-key {
