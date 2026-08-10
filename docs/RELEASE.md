@@ -108,12 +108,19 @@ The server is listed as `build.swapi/star-wars`, published from the repo-root
    mcp-publisher publish   # run from the repo root, next to server.json
    ```
 
-3. Verify the new version is live:
+3. Verify the new version is live — query the server's **versions** endpoint, not
+   the search index:
 
    ```bash
-   curl -s 'https://registry.modelcontextprotocol.io/v0/servers?search=build.swapi/star-wars' \
-     | grep -o '"version":"[^"]*"'
+   curl -s 'https://registry.modelcontextprotocol.io/v0/servers/build.swapi%2Fstar-wars/versions'
    ```
+
+   Expect the version just published with `"isLatest": true`, and the previous one
+   flipped to `false`. The `%2F` is required — the unescaped name 404s.
+
+   Do **not** verify with `?search=`: its index lags a few minutes behind a publish,
+   so it keeps returning the *previous* version and reads as a failed publish when
+   nothing is wrong. Seen on 2026-08-10 with 2.2.1 (see Troubleshooting).
 
 Key rotation: generate a new key, replace (never add alongside) the apex TXT
 record `v=MCPv1; k=ed25519; p=...` on Cloudflare — a stale record is tried
@@ -130,6 +137,8 @@ first and breaks login.
 | `gh release create` fails with "release already exists" | The release was created earlier. Use `gh release edit vx.y.z --notes-file -` instead. |
 | Released version not visible at `/openapi.json` | The tag exists but the deploy did not run — or it ran and is still waiting for the approval gate. Check the Deploy workflow in the Actions tab; a push of *commits* never deploys. See `docs/DEPLOY.md`. |
 | The GitHub Release date is wrong on the retroactive releases | Expected. `gh release create` cannot backdate, so the twelve releases created on 2026-08-03 all carry that date; only the tags are dated correctly. |
+| `mcp-publisher publish` says "Successfully published", but the registry still shows the previous version | Almost certainly the `?search=` index, which lags a few minutes — it is not authoritative and the publish did work. Confirm with the `/versions` endpoint in step 10.3, which shows every version with its `isLatest`. Hit on 2026-08-10 publishing 2.2.1: `?search=` said 2.2.0 while `/versions` already had 2.2.1 as latest. |
+| `/v0/servers/build.swapi/star-wars/versions` returns 404 | The server name must be URL-encoded in the path: `build.swapi%2Fstar-wars`. |
 
 ## How the retroactive history was built
 
