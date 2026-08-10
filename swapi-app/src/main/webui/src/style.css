@@ -17,19 +17,29 @@
   gap: 1rem;
 }
 
-.browser-header h1 {
-  font-size: 1.5rem;
-  color: var(--text-primary);
-}
-
 .browser-actions {
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .search-box {
   display: flex;
   gap: 0.5rem;
+}
+
+.search-input {
+  padding: 0.45rem 0.8rem;
+  background: var(--sw-term-bg);
+  border: 1px solid var(--sw-term-border);
+  border-radius: var(--sw-radius-pill);
+  color: var(--sw-text);
+  font-family: var(--sw-font-mono);
+  font-size: 0.8rem;
+}
+
+.no-results {
+  color: var(--sw-text-sub);
 }
 
 .item-list {
@@ -39,33 +49,33 @@
 }
 
 .item-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
   padding: 1rem;
   cursor: pointer;
-  transition: border-color 0.2s;
   display: block;
+  transition: border-color var(--sw-transition);
 }
 
 .item-card:hover,
 .item-card:focus-visible {
-  border-color: var(--accent);
+  border-color: var(--sw-gold);
   outline: none;
 }
 
 .item-card .item-name {
-  font-weight: 600;
-  color: var(--text-primary);
+  font-family: var(--sw-font-display);
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sw-text);
   margin-bottom: 0.25rem;
 }
 
 .item-card .item-detail {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
+  font-family: var(--sw-font-mono);
+  font-size: 0.8rem;
+  color: var(--sw-text-dim);
 }
 
-/* Detail view */
 .detail-view {
   display: flex;
   flex-direction: column;
@@ -76,26 +86,80 @@
   display: flex;
   align-items: center;
   gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .back-btn {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
+  font-family: var(--sw-font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sw-gold);
 }
 
 .back-btn:hover {
-  color: var(--text-primary);
+  color: var(--sw-gold-hover);
 }
 
 .detail-title {
-  font-size: 1.5rem;
+  font-family: var(--sw-font-display);
+  font-size: 1.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0;
 }
 
-/* Documentation */
+/* JSON result panel (random pick, detail view) */
+.result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.9rem;
+  border-bottom: 1px solid var(--sw-term-border-soft);
+}
+
+.result-status {
+  font-family: var(--sw-font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  color: var(--sw-term-dim);
+  word-break: break-all;
+}
+
+.result-status .status-code {
+  color: var(--sw-ok);
+}
+
+.result-body {
+  margin: 0;
+  padding: 1rem 1.2rem;
+  font-family: var(--sw-font-mono);
+  font-size: 0.8rem;
+  line-height: 1.75;
+  max-height: 32rem;
+  overflow: auto;
+  white-space: pre;
+  color: var(--sw-term-text);
+}
+
+.result-body .json-key {
+  color: var(--sw-cyan);
+}
+.result-body .json-string {
+  color: var(--sw-term-string);
+}
+.result-body .json-number {
+  color: var(--sw-term-number);
+}
+.result-body .json-bool {
+  color: var(--sw-error);
+}
+.result-body .json-null {
+  color: var(--sw-text-dim);
+}
+
 /* Shared page title (display face) */
 .sw-page-title {
   font-family: var(--sw-font-display);
