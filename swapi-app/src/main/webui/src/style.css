@@ -184,28 +184,22 @@
   font-size: 0.8rem;
 }
 
-/* About page */
-.about {
-  max-width: 800px;
-}
-
-.about h1 {
-  font-size: 1.75rem;
-  margin-bottom: 1.5rem;
-}
-
+/* About / Privacy / Terms — prose pages */
 .about-section {
   margin-bottom: 2rem;
 }
 
 .about-section h2 {
-  font-size: 1.2rem;
-  color: var(--accent);
+  font-family: var(--sw-font-display);
+  font-size: 1rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sw-gold);
   margin-bottom: 0.75rem;
 }
 
 .about-section p {
-  color: var(--text-secondary);
+  color: var(--sw-text-sub);
   margin-bottom: 0.75rem;
   line-height: 1.75;
 }
@@ -215,7 +209,7 @@
 }
 
 .about-section strong {
-  color: var(--text-primary);
+  color: var(--sw-text);
 }
 
 .features-grid {
@@ -226,9 +220,6 @@
 }
 
 .feature-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
   padding: 1.25rem;
 }
 
@@ -238,19 +229,22 @@
 }
 
 .feature-card h3 {
-  font-size: 0.95rem;
+  font-family: var(--sw-font-display);
+  font-size: 1rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   margin-bottom: 0.4rem;
-  color: var(--text-primary);
+  color: var(--sw-text);
 }
 
 .feature-card p {
   font-size: 0.85rem;
-  color: var(--text-secondary);
+  color: var(--sw-text-sub);
   line-height: 1.6;
 }
 
 .about-credits {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--sw-hairline);
   padding-top: 1.5rem;
 }
 
