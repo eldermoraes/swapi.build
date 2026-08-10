@@ -16,6 +16,15 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+### Fixed
+
+- `docs/RELEASE.md` step 10.3 verified the MCP Registry publish through
+  `/v0/servers?search=`, whose index lags a few minutes behind a publish. It kept
+  reporting the previous version after a successful `mcp-publisher publish`,
+  which reads as a failed publish when nothing is wrong — hit while releasing
+  2.2.1. The step now queries `/v0/servers/build.swapi%2Fstar-wars/versions`,
+  which is authoritative and lists every version with its `isLatest`.
+
 ## [2.2.1] - 2026-08-10
 
 ### Added
