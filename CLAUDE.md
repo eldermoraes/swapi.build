@@ -50,8 +50,14 @@ an MCP server (Streamable HTTP) at `/mcp`.
   path with `index.html` and HTTP 200, so if the edge ever stops intercepting
   those paths the collection breaks **silently**. The curl check in
   `docs/DEPLOY.md` asserts the content type is JavaScript, not HTML.
-- **Tests:** `cd swapi-app && ./mvnw test`. Never run `mvn clean` while dev mode is
-  running. Test HTTP port is 8081.
+- **Tests:** `cd swapi-app && ./mvnw test` (backend) and
+  `cd swapi-app/src/main/webui && npm test` (Vitest, frontend). **CI runs both.**
+  Quinoa's `vite build` bundles the frontend during `./mvnw package` but never
+  tests it, so the separate Vitest step in `.github/workflows/ci.yml` is the only
+  thing making the frontend guards a gate — without it they pass locally and
+  block nothing. That step reads the Node version from `application.properties`;
+  never pin a second copy in the workflow. Never run `mvn clean` while dev mode
+  is running. Test HTTP port is 8081.
 - **A version bump is a release.** Bump → `CHANGELOG.md` entry → annotated tag →
   GitHub Release → deploy, per `docs/RELEASE.md`. `ChangelogVersionTest` fails the
   suite if the pom version has no changelog section, and `OpenApiVersionTest` fails
@@ -75,9 +81,11 @@ an MCP server (Streamable HTTP) at `/mcp`.
   optional override only — never reintroduce a hardcoded domain default.
 - **Frontend design system:** tokens, components and the new-page checklist live
   in `swapi-app/src/main/webui/DESIGN.md`. New pages/features must follow it —
-  tokens only (no raw hex in page styles), gold means action and cyan means data,
-  and every action is a `.sw-pill`. Frontend tests are Vitest:
-  `cd swapi-app/src/main/webui && npm test`.
+  tokens only, gold means action and cyan means data, and every action is a
+  `.sw-pill`. "Tokens only" is enforced, not trusted: `tokens.test.ts` fails on
+  any hex, `rgb()` or `hsl()` literal in a stylesheet other than `tokens.css`
+  (the starfield's white alphas are the one documented exception), and it globs
+  the stylesheets so a new file is policed the day it lands.
 
 ## Ports
 
