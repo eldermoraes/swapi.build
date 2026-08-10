@@ -96,25 +96,28 @@
 }
 
 /* Documentation */
-.docs {
-  max-width: 800px;
-}
-
-.docs h1 {
+/* Shared page title (display face) */
+.sw-page-title {
+  font-family: var(--sw-font-display);
   font-size: 1.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   margin-bottom: 0.5rem;
 }
 
 .docs .docs-intro {
-  color: var(--text-secondary);
+  color: var(--sw-text-sub);
   margin-bottom: 2rem;
 }
 
 .docs h2 {
-  font-size: 1.2rem;
+  font-family: var(--sw-font-display);
+  font-size: 1rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
   margin: 2rem 0 0.75rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--sw-hairline);
 }
 
 .docs h2:first-of-type {
@@ -123,9 +126,6 @@
 }
 
 .endpoint-block {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
   margin-bottom: 1rem;
   overflow: hidden;
 }
@@ -135,28 +135,29 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--sw-hairline);
 }
 
 .method-badge {
-  background: #238636;
-  color: #fff;
+  background: transparent;
+  border: 1px solid var(--sw-gold);
+  color: var(--sw-gold);
+  font-family: var(--sw-font-mono);
   font-size: 0.7rem;
-  font-weight: 700;
   padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-  letter-spacing: 0.5px;
+  border-radius: var(--sw-radius-chip);
+  letter-spacing: 0.12em;
 }
 
 .endpoint-path {
-  font-family: var(--font-mono);
+  font-family: var(--sw-font-mono);
   font-size: 0.85rem;
-  color: var(--text-primary);
+  color: var(--sw-text);
 }
 
 .endpoint-desc {
   padding: 0.75rem 1rem;
-  color: var(--text-secondary);
+  color: var(--sw-text-sub);
   font-size: 0.9rem;
 }
 
@@ -441,34 +442,23 @@
 }
 
 .schema-table {
-  width: 100%;
-  border-collapse: collapse;
   margin-top: 0.5rem;
   font-size: 0.85rem;
 }
 
-.schema-table th,
 .schema-table td {
-  text-align: left;
-  padding: 0.4rem 0.5rem;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-secondary);
-}
-
-.schema-table th {
-  color: var(--text-secondary);
-  font-weight: 600;
+  color: var(--sw-text-sub);
 }
 
 .schema-field {
-  font-family: var(--font-mono);
-  color: var(--text-primary);
+  font-family: var(--sw-font-mono);
+  color: var(--sw-text);
   white-space: nowrap;
 }
 
 .schema-type {
-  font-family: var(--font-mono);
-  color: var(--accent);
+  font-family: var(--sw-font-mono);
+  color: var(--sw-gold);
   white-space: nowrap;
 }
 
@@ -486,27 +476,26 @@
   max-width: 12rem;
   padding: 0.4rem 0.6rem;
   font-size: 0.8rem;
-}
-
-.try-button {
-  padding: 0.4rem 1rem;
-  font-size: 0.8rem;
+  background: var(--sw-term-bg);
+  border: 1px solid var(--sw-term-border);
+  border-radius: var(--sw-radius-chip);
+  color: var(--sw-text);
+  font-family: var(--sw-font-mono);
 }
 
 .try-result {
   margin: 0 1rem 0.85rem;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  background: var(--sw-term-bg);
+  border: 1px solid var(--sw-term-border);
+  border-radius: var(--sw-radius-panel);
   overflow: hidden;
 }
 
 .try-status {
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
+  border-bottom: 1px solid var(--sw-term-border-soft);
+  color: var(--sw-term-dim);
+  font-family: var(--sw-font-mono);
   font-size: 0.8rem;
   word-break: break-all;
 }
@@ -518,8 +507,8 @@
 .try-json {
   margin: 0;
   padding: 0.75rem;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
+  color: var(--sw-term-text);
+  font-family: var(--sw-font-mono);
   font-size: 0.8rem;
   line-height: 1.7;
   max-height: 24rem;
@@ -529,17 +518,17 @@
 }
 
 .try-json .json-key {
-  color: var(--json-key);
+  color: var(--sw-cyan);
 }
 .try-json .json-string {
-  color: var(--json-string);
+  color: var(--sw-term-string);
 }
 .try-json .json-number {
-  color: var(--json-number);
+  color: var(--sw-term-number);
 }
 .try-json .json-bool {
-  color: var(--json-bool);
+  color: var(--sw-error);
 }
 .try-json .json-null {
-  color: var(--json-null);
+  color: var(--sw-text-dim);
 }

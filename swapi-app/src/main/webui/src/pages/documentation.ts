@@ -69,7 +69,7 @@ function endpointBlock(path: string, op: OpenApiOperation): string {
   ].join('');
 
   return `
-    <div class="endpoint-block" data-path="${escapeHtml(path)}">
+    <div class="endpoint-block sw-panel" data-path="${escapeHtml(path)}">
       <div class="endpoint-method">
         <span class="method-badge">GET</span>
         <span class="endpoint-path">${escapeHtml(displayPath)}</span>
@@ -77,7 +77,7 @@ function endpointBlock(path: string, op: OpenApiOperation): string {
       <div class="endpoint-desc">${desc}${has404 ? ' <span class="status-note">200 / 404</span>' : ''}</div>
       <form class="try-form">
         ${inputs}
-        <button type="submit" class="btn try-button">Try it</button>
+        <button type="submit" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
       </form>
       <div class="try-result" aria-live="polite" hidden></div>
     </div>`;
@@ -98,7 +98,7 @@ function schemaTable(name: string, schema: OpenApiSchemaObj): string {
   return `
     <details class="schema-details">
       <summary>${escapeHtml(name)} fields</summary>
-      <table class="schema-table">
+      <table class="schema-table sw-table">
         <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -106,7 +106,7 @@ function schemaTable(name: string, schema: OpenApiSchemaObj): string {
 }
 
 export async function renderDocumentation(container: HTMLElement): Promise<void> {
-  container.innerHTML = `<div class="docs"><h1>Documentation</h1><p class="docs-intro">Loading API specification…</p></div>`;
+  container.innerHTML = `<div class="docs sw-inner-prose"><h1 class="sw-page-title">Documentation</h1><p class="docs-intro">Loading API specification…</p></div>`;
 
   let spec: OpenApiSpec;
   try {
@@ -114,8 +114,8 @@ export async function renderDocumentation(container: HTMLElement): Promise<void>
   } catch {
     if (!isDocsRoute()) return; // navegou durante o fetch: não sobrescrever a página nova
     container.innerHTML = `
-      <div class="docs">
-        <h1>Documentation</h1>
+      <div class="docs sw-inner-prose">
+        <h1 class="sw-page-title">Documentation</h1>
         <p class="docs-intro">Could not load the API specification right now.
         The raw spec is available at
         <a href="/openapi.json" target="_blank" rel="noopener noreferrer">/openapi.json</a>.</p>
@@ -140,8 +140,8 @@ export async function renderDocumentation(container: HTMLElement): Promise<void>
     .join('');
 
   container.innerHTML = `
-    <div class="docs">
-      <h1>Documentation</h1>
+    <div class="docs sw-inner-prose">
+      <h1 class="sw-page-title">Documentation</h1>
       <p class="docs-intro">${escapeHtml(spec.info.description ?? '')}</p>
       <p class="spec-link">
         OpenAPI ${escapeHtml(spec.openapi)} · version ${escapeHtml(spec.info.version)} ·
