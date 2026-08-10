@@ -16,8 +16,42 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-08-10
+
+### Added
+
+- Redesigned web UI — the "Holonet Terminal" look voted for by the audience
+  (issue #9): a full-width black shell with a framed wordmark header, a hero with
+  a greeting line over a static CSS starfield, a live terminal on the home fold
+  that queries the real API, and full-bleed resource index rows in place of the
+  old poster cards.
+- A frontend design system rather than a restyle: `src/styles/tokens.css` is the
+  single source of truth for every colour, face, radius, width and duration, and
+  `src/ui/components.ts` + `src/styles/components.css` provide the shared
+  components (pill, terminal, index rows, section label, panel, code, tabs,
+  table).
+- `swapi-app/src/main/webui/DESIGN.md` documenting the tokens, typography scale,
+  colour roles, layout and motion rules, the component inventory with usage
+  snippets, and a new-page checklist. `CLAUDE.md` points at it.
+- A Vitest + jsdom toolchain for the frontend (`npm test`, 16 tests) covering the
+  component markup, the token layer and the home page composition.
+
+### Changed
+
+- All existing pages — docs, MCP guide, about, privacy, terms and the resource
+  browser — migrated onto the design system. Page styles no longer contain raw
+  hex; `src/style.css` is now a barrel over the token, base and component layers
+  and shrank from 984 to ~570 lines.
+- Wide tables on `/docs` and `/docs/mcp` now scroll inside their own container,
+  so the page never scrolls sideways on narrow viewports.
+
 ### Fixed
 
+- The `NodeToolchainTest` version parser rejected `engines` ranges written with
+  the optional `v` prefix (`>=v12.22.7`), which npm accepts. Adding any
+  dependency that used that form — `jsdom` does, transitively — failed the suite
+  with `unparseable version`. The parser now accepts the prefix without
+  loosening the check.
 - `docs/RELEASE.md` step 10.3 verified the MCP Registry publish through
   `/v0/servers?search=`, whose index lags a few minutes behind a publish. It kept
   reporting the previous version after a successful `mcp-publisher publish`,
@@ -279,7 +313,8 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.2.1...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/eldermoraes/swapi.build/compare/v2.2.1...v2.3.0
 [2.2.1]: https://github.com/eldermoraes/swapi.build/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/eldermoraes/swapi.build/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/eldermoraes/swapi.build/compare/v2.0.2...v2.1.0
