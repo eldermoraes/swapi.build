@@ -7,8 +7,8 @@
 
   /* Text on ink */
   --sw-text: #ffffff;
-  --sw-text-sub: #b9bcc4; /* subtitles, descriptions (10.9:1 on ink) */
-  --sw-text-dim: #8a8a8a; /* footers, metadata (5.9:1 on ink) */
+  --sw-text-sub: #b9bcc4; /* subtitles, descriptions (11.05:1 on ink) */
+  --sw-text-dim: #8a8a8a; /* footers, metadata (6.08:1 on ink) */
 
   /* Brand & action — gold */
   --sw-gold: #ffe81f;
@@ -24,7 +24,7 @@
   --sw-term-border: #103247;
   --sw-term-border-soft: #0c2233;
   --sw-term-text: #d3ecf6;
-  --sw-term-dim: #4e90af; /* labels/status on term-bg (5.4:1 — AA for small text) */
+  --sw-term-dim: #4e90af; /* labels/status on term-bg (5.62:1 on term-bg — AA for small text) */
   --sw-term-string: #b9ffb0; /* JSON strings */
   --sw-term-number: #ffd28a; /* JSON numbers */
   --sw-term-glow: rgba(92, 225, 255, 0.07);
