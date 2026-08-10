@@ -8,8 +8,8 @@ interface ClientGuide {
 
 function code(id: string, lang: string, content: string): string {
   return `
-    <div class="code-block" data-copy-id="${id}">
-      <button class="copy-btn" data-copy-target="${id}" aria-live="polite" aria-label="Copy to clipboard">Copy</button>
+    <div class="code-block sw-code" data-copy-id="${id}">
+      <button class="copy-btn sw-copy" data-copy-target="${id}" aria-live="polite" aria-label="Copy to clipboard">Copy</button>
       <pre id="${id}" class="code-pre ${lang}">${content
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -118,15 +118,14 @@ const PROMPTS = [
 
 export function renderMcp(container: HTMLElement): void {
   container.innerHTML = `
-    <section class="hero">
-      <h1>MCP Server</h1>
-      <p class="subtitle">Use the Star Wars API from your AI agent.</p>
-    </section>
+    <div class="sw-inner-prose mcp-page">
+    <h1 class="sw-page-title">MCP Server</h1>
+    <p class="page-sub">Use the Star Wars API from your AI agent.</p>
 
     <section class="mcp-endpoint">
       <h2>Endpoint</h2>
       ${code('endpoint', 'plain', ENDPOINT)}
-      <div class="spec-callout">
+      <div class="spec-callout sw-panel">
         <strong>Streamable HTTP — both paradigms on one endpoint.</strong>
         Clients on the stateless spec (2026-07-28) send self-contained requests: no
         <code>initialize</code> handshake, no session ids, nothing to keep alive between calls.
@@ -138,7 +137,8 @@ export function renderMcp(container: HTMLElement): void {
 
     <section class="mcp-tools">
       <h2>Tools</h2>
-      <table class="tools-table">
+      <div class="sw-table-wrap">
+      <table class="tools-table sw-table">
         <thead><tr><th>Tool</th><th>Arguments</th><th>Returns</th></tr></thead>
         <tbody>
           <tr><td><code>sw_list</code></td><td><code>resource</code></td><td>All entities of a resource</td></tr>
@@ -147,6 +147,7 @@ export function renderMcp(container: HTMLElement): void {
           <tr><td><code>sw_search</code></td><td><code>resource</code>, <code>query</code></td><td>Name/title substring match</td></tr>
         </tbody>
       </table>
+      </div>
       <p class="guide-note"><code>resource</code> is one of <code>PEOPLE</code>, <code>FILMS</code>, <code>PLANETS</code>,
       <code>SPECIES</code>, <code>STARSHIPS</code>, <code>VEHICLES</code>. Ids are the record ids from each
       entity's <code>url</code> field (for <code>FILMS</code>, <code>1</code> = A New Hope).</p>
@@ -154,10 +155,10 @@ export function renderMcp(container: HTMLElement): void {
 
     <section class="mcp-setup">
       <h2>Connect your client</h2>
-      <div class="tabs" role="tablist" aria-label="MCP client setup">
+      <div class="tabs sw-tabs" role="tablist" aria-label="MCP client setup">
         ${GUIDES.map(
           (g, i) => `
-          <button class="tab-btn${i === 0 ? ' active' : ''}" id="tab-${g.id}" role="tab"
+          <button class="tab-btn sw-tab${i === 0 ? ' active' : ''}" id="tab-${g.id}" role="tab"
                   aria-selected="${i === 0}" aria-controls="panel-${g.id}" tabindex="${i === 0 ? 0 : -1}">
             ${g.label}
           </button>`,
@@ -174,7 +175,7 @@ export function renderMcp(container: HTMLElement): void {
 
     <section class="mcp-prompts">
       <h2>Try these prompts</h2>
-      ${PROMPTS.map((p) => `<div class="prompt-card">${p}</div>`).join('')}
+      ${PROMPTS.map((p) => `<div class="prompt-card sw-panel">${p}</div>`).join('')}
     </section>
 
     <section class="mcp-trouble">
@@ -187,6 +188,7 @@ export function renderMcp(container: HTMLElement): void {
       <code>MCP-Protocol-Version</code>, <code>Mcp-Method</code> and <code>Mcp-Name</code> headers —
       MCP clients send these automatically.</p>
     </section>
+    </div>
   `;
 
   const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('.tab-btn'));

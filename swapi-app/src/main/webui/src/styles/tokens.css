@@ -1,0 +1,59 @@
+:root {
+  /* Grounds */
+  --sw-ink: #000000; /* page ground */
+  --sw-nebula: #101322; /* hero radial glow center */
+  --sw-hairline: #1c1c1c; /* structural dividers (header, footer, sections) */
+  --sw-hairline-soft: #141414; /* row dividers inside lists */
+  --sw-surface-raised: #0d0d0d; /* hover/raised surfaces on ink (rows, panels) */
+
+  /* Text on ink */
+  --sw-text: #ffffff;
+  --sw-text-sub: #b9bcc4; /* subtitles, descriptions (11.05:1 on ink) */
+  --sw-text-dim: #8a8a8a; /* footers, metadata (6.08:1 on ink) */
+
+  /* Brand & action — gold */
+  --sw-gold: #ffe81f;
+  --sw-gold-hover: #fff389;
+  --sw-gold-dim: rgba(255, 232, 31, 0.08); /* ghost-pill hover fill */
+
+  /* Data & terminal — cyan */
+  --sw-cyan: #5ce1ff;
+  --sw-cyan-greeting: #4bd5ee; /* "A long time ago…" greeting line */
+  --sw-cyan-dim: rgba(92, 225, 255, 0.08); /* terminal-chip hover fill */
+
+  /* Terminal panel */
+  --sw-term-bg: #030a12;
+  --sw-term-border: #103247;
+  --sw-term-border-soft: #0c2233;
+  --sw-term-text: #d3ecf6;
+  --sw-term-dim: #4e90af; /* labels/status on term-bg (5.62:1 on term-bg — AA for small text) */
+  --sw-term-string: #b9ffb0; /* JSON strings */
+  --sw-term-number: #ffd28a; /* JSON numbers */
+  --sw-term-glow: rgba(92, 225, 255, 0.07);
+
+  /* Status */
+  --sw-ok: #4ade80;
+  --sw-error: #f85149;
+  --sw-error-bg: rgba(248, 81, 73, 0.1);
+  --sw-error-border: rgba(248, 81, 73, 0.4);
+
+  /* Type */
+  --sw-font-display: 'Pathway Gothic One', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
+  --sw-font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --sw-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Shape */
+  --sw-radius-pill: 999px; /* actions */
+  --sw-radius-panel: 8px; /* panels, terminal, code blocks */
+  --sw-radius-chip: 4px; /* small chips */
+
+  /* Layout widths (inner content bands on a full-width shell) */
+  --sw-width-prose: 800px;
+  --sw-width-terminal: 860px;
+  --sw-width-wide: 1200px;
+
+  /* Motion */
+  --sw-transition: 0.18s;
+
+  color-scheme: dark;
+}

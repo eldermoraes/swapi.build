@@ -1,7 +1,7 @@
 export function renderPrivacy(container: HTMLElement): void {
   container.innerHTML = `
-    <div class="about">
-      <h1>Privacy Policy</h1>
+    <div class="about sw-inner-prose">
+      <h1 class="sw-page-title">Privacy Policy</h1>
 
       <section class="about-section">
         <p><em>Last updated: August 2, 2026</em></p>

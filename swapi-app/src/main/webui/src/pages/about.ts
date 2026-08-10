@@ -1,7 +1,7 @@
 export function renderAbout(container: HTMLElement): void {
   container.innerHTML = `
-    <div class="about">
-      <h1>About</h1>
+    <div class="about sw-inner-prose">
+      <h1 class="sw-page-title">About</h1>
 
       <section class="about-section">
         <h2>What is this?</h2>
@@ -36,17 +36,17 @@ export function renderAbout(container: HTMLElement): void {
       <section class="about-section">
         <h2>What makes it different?</h2>
         <div class="features-grid">
-          <div class="feature-card">
+          <div class="feature-card sw-panel">
             <div class="feature-icon">&#9889;</div>
             <h3>Quarkus Performance</h3>
             <p>Out-of-the-box performance that speaks for itself. Supersonic, subatomic Java with no tuning required.</p>
           </div>
-          <div class="feature-card">
+          <div class="feature-card sw-panel">
             <div class="feature-icon">&#x1F9EC;</div>
             <h3>Native Compilation</h3>
             <p>Compiled ahead-of-time with GraalVM native image for instant startup and minimal memory footprint.</p>
           </div>
-          <div class="feature-card">
+          <div class="feature-card sw-panel">
             <div class="feature-icon">&#x1F9F5;</div>
             <h3>Virtual Threads</h3>
             <p>Powered by Java 21+ Virtual Threads for lightweight, high-throughput concurrency without the complexity.</p>

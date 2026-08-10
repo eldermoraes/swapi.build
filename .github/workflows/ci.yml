@@ -36,3 +36,26 @@ jobs:
       - name: Full test suite + frontend build
         working-directory: swapi-app
         run: ./mvnw package
+
+      # Maven never runs Vitest: Quinoa's `vite build` bundles the frontend, it
+      # does not test it. Without this step the frontend suite — including the
+      # "no raw colour" guard in tokens.test.ts — passes locally and gates
+      # nothing. The Node version is read from application.properties instead of
+      # pinned here, so the toolchain keeps a single source of truth.
+      - name: Resolve the pinned Node version
+        id: node
+        run: |
+          version=$(sed -n 's/^quarkus\.quinoa\.package-manager-install\.node-version=//p' \
+            swapi-app/src/main/resources/application.properties)
+          test -n "$version" || { echo "node-version not found in application.properties"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.node.outputs.version }}
+          cache: npm
+          cache-dependency-path: swapi-app/src/main/webui/package-lock.json
+      - name: Frontend tests
+        working-directory: swapi-app/src/main/webui
+        run: |
+          npm ci
+          npm test

@@ -8,16 +8,16 @@ export async function renderResourceList(container: HTMLElement, type: string): 
   const meta = getResourceMeta(type);
 
   container.innerHTML = `
-    <div class="resource-browser">
+    <div class="resource-browser sw-inner-wide">
       <div class="browser-header">
-        <h1>${meta.title}</h1>
+        <h1 class="sw-page-title">${meta.title}</h1>
         <div class="browser-actions">
           <div class="search-box">
             <label for="search-input" class="sr-only">Search ${meta.title.toLowerCase()}</label>
-            <input type="text" class="input-field" id="search-input" placeholder="Search ${meta.title.toLowerCase()}..." />
-            <button class="btn" id="search-btn">Search</button>
+            <input type="text" class="search-input" id="search-input" placeholder="Search ${meta.title.toLowerCase()}..." />
+            <button class="sw-pill sw-pill--solid sw-pill--sm" id="search-btn">Search</button>
           </div>
-          <button class="btn btn-secondary" id="random-btn">Random</button>
+          <button class="sw-pill sw-pill--ghost sw-pill--sm" id="random-btn">Random</button>
         </div>
       </div>
       <div id="resource-content" aria-live="polite">
@@ -33,7 +33,7 @@ export async function renderResourceList(container: HTMLElement, type: string): 
 
   function renderItems(items: SWResource[]) {
     if (!items || items.length === 0) {
-      contentDiv.innerHTML = '<p style="color:var(--text-secondary)">No results found.</p>';
+      contentDiv.innerHTML = '<p class="no-results">No results found.</p>';
       return;
     }
     contentDiv.innerHTML = `
@@ -46,7 +46,7 @@ export async function renderResourceList(container: HTMLElement, type: string): 
             const idMatch = url.match(/\/(\d+)\/?$/);
             const id = idMatch ? idMatch[1] : String(i + 1);
             return `
-            <a href="/resource/${type}/${id}" class="item-card">
+            <a href="/resource/${type}/${id}" class="item-card sw-panel">
               <div class="item-name">${escapeHtml(name)}</div>
               <div class="item-detail">${escapeHtml(detail)}</div>
             </a>
@@ -59,7 +59,7 @@ export async function renderResourceList(container: HTMLElement, type: string): 
 
   function showJson(data: unknown, status: number) {
     contentDiv.innerHTML = `
-      <div class="result-panel">
+      <div class="sw-code result-panel">
         <div class="result-header">
           <span class="result-status"><span class="status-code">${status}</span></span>
           <a href="/resource/${type}" class="back-btn">Back to list</a>
@@ -117,7 +117,7 @@ export async function renderResourceDetail(
   const meta = getResourceMeta(type);
 
   container.innerHTML = `
-    <div class="detail-view">
+    <div class="detail-view sw-inner-wide">
       <div class="detail-header">
         <a href="/resource/${type}" class="back-btn">&larr; ${meta.title}</a>
       </div>
@@ -136,7 +136,7 @@ export async function renderResourceDetail(
     headerEl.innerHTML += `<h1 class="detail-title">${escapeHtml(name)}</h1>`;
 
     contentDiv.innerHTML = `
-      <div class="result-panel">
+      <div class="sw-code result-panel">
         <div class="result-header">
           <span class="result-status">GET /api/${escapeHtml(type)}/${escapeHtml(id)} <span class="status-code">${status}</span></span>
         </div>

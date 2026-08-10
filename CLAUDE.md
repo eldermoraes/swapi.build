@@ -73,6 +73,11 @@ an MCP server (Streamable HTTP) at `/mcp`.
 - **Public base URL is discovered per request** (REST via `UriInfo`, MCP via
   `HttpServerRequest`, honoring `X-Forwarded-*`). `swapi.public-base-url` is an
   optional override only — never reintroduce a hardcoded domain default.
+- **Frontend design system:** tokens, components and the new-page checklist live
+  in `swapi-app/src/main/webui/DESIGN.md`. New pages/features must follow it —
+  tokens only (no raw hex in page styles), gold means action and cyan means data,
+  and every action is a `.sw-pill`. Frontend tests are Vitest:
+  `cd swapi-app/src/main/webui && npm test`.
 
 ## Ports
 

@@ -103,6 +103,36 @@ class NodeToolchainTest {
                         + "Did the lockfile format change?");
     }
 
+    /**
+     * npm's semver accepts an optional {@code v} prefix on any version literal, and
+     * the lockfile uses it ({@code saxes} declares {@code >=v12.22.7}). The parser
+     * must read it the same way npm does, or the guard above dies on a range that
+     * is perfectly legal.
+     */
+    @Test
+    void parsesVersionLiteralsWithTheOptionalVPrefix() {
+        assertTrue(SemverRange.accepts(Version.parse("22.14.0"), ">=v12.22.7"),
+                "'>=v12.22.7' must be read as 12.22.7 — the v prefix is legal semver");
+        assertFalse(SemverRange.accepts(Version.parse("10.0.0"), ">=v12.22.7"),
+                "the v prefix must not make the comparison vacuous");
+    }
+
+    /**
+     * The prefix is legal on every form, not just the ones behind a comparator.
+     * A bare {@code v18} reached the comparator dispatch, which tests
+     * {@code isDigit(charAt(0))} and threw "unsupported comparator" — turning a
+     * perfectly legal transitive dependency into a red CI run.
+     */
+    @Test
+    void parsesBareAndCaretRangesWithTheOptionalVPrefix() {
+        assertTrue(SemverRange.accepts(Version.parse("18.20.0"), "v18"),
+                "bare 'v18' means the 18.x line, exactly as bare '18' does");
+        assertFalse(SemverRange.accepts(Version.parse("20.0.0"), "v18"),
+                "bare 'v18' must still pin the major — 20.x is not 18.x");
+        assertTrue(SemverRange.accepts(Version.parse("18.20.0"), "^v18.0.0"),
+                "the prefix is legal after a caret too");
+    }
+
     // --- reading the two committed files ------------------------------------
 
     private static String declaredNodeVersion() {
@@ -145,7 +175,12 @@ class NodeToolchainTest {
             implements Comparable<Version> {
 
         static Version parse(String raw) {
-            String[] parts = raw.trim().split("\\.");
+            String cleaned = raw.trim();
+            // npm's semver allows an optional leading "v" on any version literal.
+            if (cleaned.startsWith("v") || cleaned.startsWith("V")) {
+                cleaned = cleaned.substring(1).trim();
+            }
+            String[] parts = cleaned.split("\\.");
             if (parts.length == 0 || parts.length > 3) {
                 throw new IllegalArgumentException("unparseable version: '" + raw + "'");
             }
@@ -190,6 +225,12 @@ class NodeToolchainTest {
         }
 
         private static boolean acceptsTerm(Version node, String term) {
+            // The optional "v" is legal on a bare range too ("v18"), where it never
+            // reaches Version.parse: the dispatch below asks isDigit(charAt(0)) and
+            // would reject the whole term. Strip it once, here, for every form.
+            if (term.startsWith("v") || term.startsWith("V")) {
+                term = term.substring(1).trim();
+            }
             if (term.startsWith(">=")) {
                 return node.compareTo(Version.parse(term.substring(2))) >= 0;
             }
