@@ -103,6 +103,20 @@ class NodeToolchainTest {
                         + "Did the lockfile format change?");
     }
 
+    /**
+     * npm's semver accepts an optional {@code v} prefix on any version literal, and
+     * the lockfile uses it ({@code saxes} declares {@code >=v12.22.7}). The parser
+     * must read it the same way npm does, or the guard above dies on a range that
+     * is perfectly legal.
+     */
+    @Test
+    void parsesVersionLiteralsWithTheOptionalVPrefix() {
+        assertTrue(SemverRange.accepts(Version.parse("22.14.0"), ">=v12.22.7"),
+                "'>=v12.22.7' must be read as 12.22.7 — the v prefix is legal semver");
+        assertFalse(SemverRange.accepts(Version.parse("10.0.0"), ">=v12.22.7"),
+                "the v prefix must not make the comparison vacuous");
+    }
+
     // --- reading the two committed files ------------------------------------
 
     private static String declaredNodeVersion() {
@@ -145,7 +159,12 @@ class NodeToolchainTest {
             implements Comparable<Version> {
 
         static Version parse(String raw) {
-            String[] parts = raw.trim().split("\\.");
+            String cleaned = raw.trim();
+            // npm's semver allows an optional leading "v" on any version literal.
+            if (cleaned.startsWith("v") || cleaned.startsWith("V")) {
+                cleaned = cleaned.substring(1).trim();
+            }
+            String[] parts = cleaned.split("\\.");
             if (parts.length == 0 || parts.length > 3) {
                 throw new IllegalArgumentException("unparseable version: '" + raw + "'");
             }
