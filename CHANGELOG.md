@@ -23,8 +23,8 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 - Redesigned web UI — the "Holonet Terminal" look voted for by the audience
   (issue #9): a full-width black shell with a framed wordmark header, a hero with
   a greeting line over a static CSS starfield, a live terminal on the home fold
-  that queries the real API, and full-bleed resource index rows in place of the
-  old poster cards.
+  that queries the real API, and resource index rows in place of the old poster
+  cards.
 - A frontend design system rather than a restyle: `src/styles/tokens.css` is the
   single source of truth for every colour, face, radius, width and duration, and
   `src/ui/components.ts` + `src/styles/components.css` provide the shared
@@ -33,15 +33,20 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 - `swapi-app/src/main/webui/DESIGN.md` documenting the tokens, typography scale,
   colour roles, layout and motion rules, the component inventory with usage
   snippets, and a new-page checklist. `CLAUDE.md` points at it.
-- A Vitest + jsdom toolchain for the frontend (`npm test`, 16 tests) covering the
-  component markup, the token layer and the home page composition.
+- A Vitest + jsdom toolchain for the frontend (`npm test`, 22 tests) covering the
+  component markup, the token layer and the home page composition. CI runs it
+  alongside the Maven suite.
 
 ### Changed
 
 - All existing pages — docs, MCP guide, about, privacy, terms and the resource
   browser — migrated onto the design system. Page styles no longer contain raw
-  hex; `src/style.css` is now a barrel over the token, base and component layers
-  and shrank from 984 to ~570 lines.
+  colour; `src/style.css` is now a barrel over the token, base and component
+  layers and shrank from 984 to ~570 lines.
+- CI now runs the frontend suite. `./mvnw package` builds the frontend through
+  Quinoa but never tests it, so the Vitest guards passed locally and gated
+  nothing. The workflow reads the Node version from `application.properties`
+  rather than pinning a second copy.
 - Wide tables on `/docs` and `/docs/mcp` now scroll inside their own container,
   so the page never scrolls sideways on narrow viewports.
 
@@ -50,8 +55,12 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 - The `NodeToolchainTest` version parser rejected `engines` ranges written with
   the optional `v` prefix (`>=v12.22.7`), which npm accepts. Adding any
   dependency that used that form — `jsdom` does, transitively — failed the suite
-  with `unparseable version`. The parser now accepts the prefix without
-  loosening the check.
+  with `unparseable version`. The prefix is now stripped for every form,
+  including a bare `v18`, without loosening the check.
+- The terminal's `aria-live` region was `display: none` while empty, so the
+  first EXEC mutated a region that was absent from the accessibility tree —
+  the announcement screen readers most often drop. It is now collapsed rather
+  than removed.
 - `docs/RELEASE.md` step 10.3 verified the MCP Registry publish through
   `/v0/servers?search=`, whose index lags a few minutes behind a publish. It kept
   reporting the previous version after a successful `mcp-publisher publish`,
