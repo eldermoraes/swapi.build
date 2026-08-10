@@ -33,9 +33,14 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Full test suite
+      # package, não test: com `mvnw test` o Quinoa fica desabilitado ("Quinoa is
+      # disabled by default in tests") e o gate passava verde sem nunca instalar o
+      # Node nem rodar o vite — um toolchain quebrado só aparecia no job preview,
+      # com o release já em andamento. NodeToolchainTest cobre a coerência entre o
+      # node-version e o lockfile; este passo cobre o build de verdade.
+      - name: Full test suite + frontend build
         working-directory: swapi-app
-        run: ./mvnw test
+        run: ./mvnw package
 
   preview:
     needs: test
