@@ -459,7 +459,7 @@
 }
 
 .schema-details {
-  background: #0d0d0d;
+  background: var(--sw-surface-raised);
   border: 1px solid var(--sw-hairline);
   border-radius: var(--sw-radius-panel);
   margin: 0.5rem 0 1.5rem;

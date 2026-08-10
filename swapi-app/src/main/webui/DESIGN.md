@@ -18,9 +18,14 @@ Every colour, face, radius, width and duration is a CSS custom property on
 `:root`. **Page styles never contain raw hex.** Read `tokens.css` for the full
 list; the roles below are the contract.
 
+This is enforced, not merely asked for: `src/ui/tokens.test.ts` fails the suite if
+a raw hex value appears in `base.css`, `components.css` or `style.css`. The one
+sanctioned exception is the starfield, whose twelve stars differ only by the alpha
+of pure white — depth, not a colour role.
+
 | Group          | Tokens                                                                                                                                                   |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Grounds        | `--sw-ink`, `--sw-nebula`, `--sw-hairline`, `--sw-hairline-soft`                                                                                         |
+| Grounds        | `--sw-ink`, `--sw-nebula`, `--sw-hairline`, `--sw-hairline-soft`, `--sw-surface-raised`                                                                  |
 | Text           | `--sw-text`, `--sw-text-sub`, `--sw-text-dim`                                                                                                            |
 | Brand / action | `--sw-gold`, `--sw-gold-hover`, `--sw-gold-dim`                                                                                                          |
 | Data           | `--sw-cyan`, `--sw-cyan-greeting`                                                                                                                        |

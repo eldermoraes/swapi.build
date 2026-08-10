@@ -266,7 +266,7 @@
 
 .sw-row:hover,
 .sw-row:focus-visible {
-  background: #0d0d0d;
+  background: var(--sw-surface-raised);
   border-left-color: var(--sw-gold);
   color: var(--sw-text);
 }
@@ -296,7 +296,7 @@
 
 /* Panels, code, tabs, tables — consumed by inner pages */
 .sw-panel {
-  background: #0d0d0d;
+  background: var(--sw-surface-raised);
   border: 1px solid var(--sw-hairline);
   border-radius: var(--sw-radius-panel);
 }
@@ -323,7 +323,7 @@
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
-  background: #0d0d0d;
+  background: var(--sw-surface-raised);
   border: 1px solid var(--sw-hairline);
   border-radius: var(--sw-radius-chip);
   color: var(--sw-text-dim);

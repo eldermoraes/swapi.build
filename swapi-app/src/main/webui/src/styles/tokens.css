@@ -4,6 +4,7 @@
   --sw-nebula: #101322; /* hero radial glow center */
   --sw-hairline: #1c1c1c; /* structural dividers (header, footer, sections) */
   --sw-hairline-soft: #141414; /* row dividers inside lists */
+  --sw-surface-raised: #0d0d0d; /* hover/raised surfaces on ink (rows, panels) */
 
   /* Text on ink */
   --sw-text: #ffffff;
