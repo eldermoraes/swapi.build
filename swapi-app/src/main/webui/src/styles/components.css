@@ -408,6 +408,7 @@
 @media (max-width: 640px) {
   .sw-row {
     grid-template-columns: 1fr auto;
+    padding: 0.95rem 1rem;
   }
 
   .sw-row-endpoint {
@@ -428,9 +429,5 @@
 
   .sw-section-label {
     padding: 1.8rem 1rem 0.8rem;
-  }
-
-  .sw-row {
-    padding: 0.95rem 1rem;
   }
 }
