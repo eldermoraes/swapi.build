@@ -19,8 +19,10 @@ export function renderHome(container: HTMLElement): void {
       </div>
     </section>
     <div class="sw-term-wrap">${terminalMarkup(TERM)}</div>
-    ${sectionLabel('The resources')}
-    ${indexRows(RESOURCES.map((r) => ({ title: r.title, endpoint: r.endpoint, href: `/resource/${r.key}` })))}
+    <div class="sw-band">
+      ${sectionLabel('The resources')}
+      ${indexRows(RESOURCES.map((r) => ({ title: r.title, endpoint: r.endpoint, href: `/resource/${r.key}` })))}
+    </div>
   `;
   initTerminal(container, TERM);
 }

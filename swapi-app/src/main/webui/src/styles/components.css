@@ -246,6 +246,14 @@
 }
 
 /* Index rows */
+/* Constrained content band — keeps a full-bleed-looking list aligned with the
+   terminal above it. Children carry their own horizontal padding, so the band
+   itself adds none: row text lines up with terminal text. */
+.sw-band {
+  max-width: var(--sw-width-terminal);
+  margin: 0 auto;
+}
+
 .sw-index {
   border-top: 1px solid var(--sw-hairline);
 }

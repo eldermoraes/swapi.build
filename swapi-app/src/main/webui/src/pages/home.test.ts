@@ -17,4 +17,14 @@ describe('home page (Holonet Terminal)', () => {
     expect(container.querySelectorAll('.sw-index .sw-row')).toHaveLength(6);
     expect(container.querySelector('.resource-grid')).toBeNull(); // old cards are gone
   });
+
+  it('constrains the resources band instead of letting it run full-bleed', () => {
+    const container = document.createElement('main');
+    renderHome(container);
+    const band = container.querySelector('.sw-band')!;
+    expect(band).toBeTruthy();
+    // The label and the rows travel together, so they stay aligned with the terminal above.
+    expect(band.querySelector('.sw-section-label')).toBeTruthy();
+    expect(band.querySelector('.sw-index')).toBeTruthy();
+  });
 });

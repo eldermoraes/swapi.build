@@ -91,8 +91,12 @@ falls below AA.
 - **Full-width shell**: `#main-content` has **no max-width**. Bands span
   edge-to-edge, separated by 1px `--sw-hairline` dividers.
 - **Inner content constrains itself per band**: prose → `--sw-width-prose`,
-  terminal → `--sw-width-terminal`, wide grids → `--sw-width-wide`, index rows →
-  full-bleed.
+  terminal and index rows → `--sw-width-terminal`, wide grids →
+  `--sw-width-wide`. Only the hero and its backdrop actually run edge-to-edge;
+  everything that carries text is constrained, so a single full-bleed list reads
+  as a mistake next to it. Wrap such a band in `.sw-band`, which centres it and
+  adds no padding of its own — children keep their `2rem`, which is what makes
+  row text line up with terminal text.
 - Horizontal padding: `2rem` desktop, `1rem` under 640px.
 - Spacing comes from flex/grid `gap`, not per-element margins.
 - **Wide content (tables, code, JSON) always sits in its own `overflow-x: auto`
@@ -152,7 +156,16 @@ palette.
 
 ### Index rows — `indexRows()`
 
-The full-width resource list. **Never poster cards on home.**
+The resource list. **Never poster cards on home.** Wrap it — together with its
+section label — in a `.sw-band` so it stays aligned with the terminal above
+instead of running edge-to-edge:
+
+```ts
+`<div class="sw-band">
+  ${sectionLabel('The resources')}
+  ${indexRows(rows)}
+</div>`;
+```
 
 ```ts
 indexRows([{ title: 'People', endpoint: '/api/people', href: '/resource/people' }]);
