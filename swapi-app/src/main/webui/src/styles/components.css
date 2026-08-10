@@ -182,8 +182,13 @@
   color: var(--sw-term-text);
 }
 
+/* Collapsed, not removed. `display: none` takes the aria-live region out of the
+   accessibility tree, and screen readers routinely drop the first announcement
+   of a region that was absent when the mutation happened — which is the only
+   announcement the terminal makes on a first EXEC. */
 .sw-term-out:empty {
-  display: none;
+  padding: 0;
+  max-height: 0;
 }
 
 .sw-term-status {
