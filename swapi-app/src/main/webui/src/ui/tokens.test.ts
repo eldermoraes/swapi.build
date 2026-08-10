@@ -16,8 +16,9 @@ describe('design tokens', () => {
   it.each(REQUIRED)('defines %s', (token) => {
     expect(tokens).toContain(token);
   });
-  it('keeps legacy aliases pointing at tokens', () => {
-    expect(tokens).toContain('--accent: var(--sw-gold)');
-    expect(tokens).toContain('--json-key: var(--sw-cyan)');
+  it('has retired the legacy aliases now that every page consumes tokens', () => {
+    expect(tokens).not.toContain('--accent:');
+    expect(tokens).not.toContain('--json-key:');
+    expect(tokens).not.toContain('--bg-primary:');
   });
 });

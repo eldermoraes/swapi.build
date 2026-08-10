@@ -429,7 +429,7 @@
 
 /* Documentation rendered from the OpenAPI spec */
 .spec-link {
-  color: var(--text-secondary);
+  color: var(--sw-text-sub);
   font-size: 0.9rem;
   margin-bottom: 2rem;
 }
@@ -437,43 +437,43 @@
 .spec-link code {
   display: inline-block;
   margin-top: 0.35rem;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  background: var(--sw-term-bg);
+  border: 1px solid var(--sw-term-border);
+  border-radius: var(--sw-radius-chip);
   padding: 0.2rem 0.4rem;
-  font-family: var(--font-mono);
+  font-family: var(--sw-font-mono);
   font-size: 0.85em;
   word-break: break-all;
 }
 
 .tag-desc {
-  color: var(--text-secondary);
+  color: var(--sw-text-sub);
   font-size: 0.9rem;
   margin: 0.25rem 0 0.75rem;
 }
 
 .status-note {
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
+  color: var(--sw-text-dim);
+  font-family: var(--sw-font-mono);
   font-size: 0.8em;
 }
 
 .schema-details {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  background: #0d0d0d;
+  border: 1px solid var(--sw-hairline);
+  border-radius: var(--sw-radius-panel);
   margin: 0.5rem 0 1.5rem;
   padding: 0.75rem 1rem;
 }
 
 .schema-details summary {
   cursor: pointer;
-  color: var(--text-secondary);
+  color: var(--sw-text-sub);
   font-size: 0.9rem;
 }
 
 .schema-details[open] summary {
-  color: var(--text-primary);
+  color: var(--sw-text);
   margin-bottom: 0.5rem;
 }
 

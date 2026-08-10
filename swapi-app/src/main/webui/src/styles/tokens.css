@@ -55,27 +55,3 @@
 
   color-scheme: dark;
 }
-
-/*
- * Legacy aliases — keep pages that have not been migrated yet rendering while
- * the redesign lands task by task. Task 5 trims whatever is no longer referenced.
- */
-:root {
-  --bg-primary: var(--sw-ink);
-  --bg-secondary: #0d0d0d;
-  --bg-tertiary: #121212;
-  --border: var(--sw-hairline);
-  --text-primary: var(--sw-text);
-  --text-secondary: var(--sw-text-sub);
-  --accent: var(--sw-gold);
-  --accent-dim: var(--sw-gold-dim);
-  --link: var(--sw-cyan);
-  --json-key: var(--sw-cyan);
-  --json-string: var(--sw-term-string);
-  --json-number: var(--sw-term-number);
-  --json-bool: var(--sw-error);
-  --json-null: var(--sw-text-dim);
-  --radius: var(--sw-radius-panel);
-  --font-sans: var(--sw-font-body);
-  --font-mono: var(--sw-font-mono);
-}
