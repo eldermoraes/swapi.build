@@ -64,10 +64,13 @@ describe('design tokens', () => {
   });
 
   it.each(consumerSheets)(
-    '%s declares no raw hex — tokens.css is the only source of colour',
+    '%s declares no raw colour — tokens.css is the only source of colour',
     (_name, css) => {
-      const hex = css.replace(STARFIELD_WHITE, '').match(/#[0-9a-fA-F]{3,8}\b/g);
-      expect(hex ?? []).toEqual([]);
+      // Hex is not the only way to write a colour: an rgba() literal in a
+      // consumer sheet is the same rule broken, and the hex-only guard read it
+      // as clean. Both forms are checked against the same exception.
+      const raw = css.replace(STARFIELD_WHITE, '').match(/#[0-9a-fA-F]{3,8}\b|(?:rgb|hsl)a?\(/g);
+      expect(raw ?? []).toEqual([]);
     },
   );
 });

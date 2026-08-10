@@ -221,7 +221,7 @@
 .sw-term-chips button:hover,
 .sw-term-chips button:focus-visible {
   border-color: var(--sw-cyan);
-  background: rgba(92, 225, 255, 0.08);
+  background: var(--sw-cyan-dim);
 }
 
 /* JSON inside terminal output (highlightJson emits .json-* spans) */

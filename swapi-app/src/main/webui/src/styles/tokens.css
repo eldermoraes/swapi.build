@@ -19,6 +19,7 @@
   /* Data & terminal — cyan */
   --sw-cyan: #5ce1ff;
   --sw-cyan-greeting: #4bd5ee; /* "A long time ago…" greeting line */
+  --sw-cyan-dim: rgba(92, 225, 255, 0.08); /* terminal-chip hover fill */
 
   /* Terminal panel */
   --sw-term-bg: #030a12;
