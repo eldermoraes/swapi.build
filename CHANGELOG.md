@@ -16,11 +16,41 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-08-10
+
 ### Added
 
 - `server.json` manifest publishing the MCP server to the Official MCP Registry
   as `build.swapi/star-wars` (remote, Streamable HTTP). `ServerJsonVersionTest`
   fails the suite if it drifts from the pom version.
+- `NodeToolchainTest`: cross-checks the Node version Quinoa installs against every
+  `engines.node` range in the committed `package-lock.json`. It exists because
+  `mvnw test` runs with Quinoa disabled, so no test in the suite installs Node or
+  runs vite — a Node floor too low for a bumped dependency used to pass the whole
+  suite green and only fail during the release deploy.
+
+### Changed
+
+- CI now runs on pull requests and pushes to `main` (`.github/workflows/ci.yml`).
+  Until now the suite only ran inside the release pipeline, which is tag-triggered,
+  so day-to-day work had no automated gate at all.
+- Both CI and the deploy gate run `mvnw package` instead of `mvnw test`: only
+  `package` exercises `npm install`, `tsc` and `vite build`, which is what the
+  deploy actually does. Costs about 13 seconds.
+- Node installed by Quinoa raised from 20.18.1 to 22.23.2 (LTS Jod), required by
+  the dependency upgrades below.
+
+### Security
+
+- Frontend development dependencies upgraded: `vite` 6 → 8, `eslint` 9 → 10
+  (with `@eslint/js` and `typescript-eslint` aligned as peers), and `nanoid`
+  3.3.16 → 3.3.18 via the lockfile ([GHSA-2v37-7h3g-55p8]). `npm audit` reports
+  no remaining advisories. These are development dependencies only — none ships
+  in the bundle or runs in production — but the ranges declared in `package.json`
+  still resolved to versions carrying published advisories. `typescript` stays on
+  5.7: `typescript-eslint` requires `<6.1.0`.
+
+[GHSA-2v37-7h3g-55p8]: https://github.com/advisories/GHSA-2v37-7h3g-55p8
 
 ## [2.2.0] - 2026-08-05
 
@@ -240,7 +270,8 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.2.1...HEAD
+[2.2.1]: https://github.com/eldermoraes/swapi.build/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/eldermoraes/swapi.build/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/eldermoraes/swapi.build/compare/v2.0.2...v2.1.0
 [2.0.2]: https://github.com/eldermoraes/swapi.build/compare/v2.0.1...v2.0.2
