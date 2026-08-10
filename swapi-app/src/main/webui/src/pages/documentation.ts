@@ -98,10 +98,12 @@ function schemaTable(name: string, schema: OpenApiSchemaObj): string {
   return `
     <details class="schema-details">
       <summary>${escapeHtml(name)} fields</summary>
+      <div class="sw-table-wrap">
       <table class="schema-table sw-table">
         <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
+      </div>
     </details>`;
 }
 

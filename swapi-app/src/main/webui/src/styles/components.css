@@ -377,6 +377,11 @@
   border-collapse: collapse;
 }
 
+/* Wide content always scrolls inside its own container, never the body */
+.sw-table-wrap {
+  overflow-x: auto;
+}
+
 .sw-table th,
 .sw-table td {
   text-align: left;

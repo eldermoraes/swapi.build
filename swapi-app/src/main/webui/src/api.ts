@@ -53,11 +53,17 @@ export async function fetchResources<T = unknown>(type: string): Promise<ApiResp
   return request<T[]>(`${BASE}/${type}`);
 }
 
-export async function fetchResourceById<T = unknown>(type: string, id: string): Promise<ApiResponse<T>> {
+export async function fetchResourceById<T = unknown>(
+  type: string,
+  id: string,
+): Promise<ApiResponse<T>> {
   return request<T>(`${BASE}/${type}/${id}`);
 }
 
-export async function searchResource<T = unknown>(type: string, query: string): Promise<ApiResponse<T[]>> {
+export async function searchResource<T = unknown>(
+  type: string,
+  query: string,
+): Promise<ApiResponse<T[]>> {
   return request<T[]>(`${BASE}/${type}?search=${encodeURIComponent(query)}`);
 }
 

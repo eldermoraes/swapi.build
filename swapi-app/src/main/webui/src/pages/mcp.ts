@@ -137,6 +137,7 @@ export function renderMcp(container: HTMLElement): void {
 
     <section class="mcp-tools">
       <h2>Tools</h2>
+      <div class="sw-table-wrap">
       <table class="tools-table sw-table">
         <thead><tr><th>Tool</th><th>Arguments</th><th>Returns</th></tr></thead>
         <tbody>
@@ -146,6 +147,7 @@ export function renderMcp(container: HTMLElement): void {
           <tr><td><code>sw_search</code></td><td><code>resource</code>, <code>query</code></td><td>Name/title substring match</td></tr>
         </tbody>
       </table>
+      </div>
       <p class="guide-note"><code>resource</code> is one of <code>PEOPLE</code>, <code>FILMS</code>, <code>PLANETS</code>,
       <code>SPECIES</code>, <code>STARSHIPS</code>, <code>VEHICLES</code>. Ids are the record ids from each
       entity's <code>url</code> field (for <code>FILMS</code>, <code>1</code> = A New Hope).</p>
