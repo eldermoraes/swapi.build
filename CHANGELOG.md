@@ -16,6 +16,21 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-08-14
+
+### Fixed
+
+- Every `/api` 404 now honors the published contract — `text/plain` with a
+  readable message (issue #12, reported by @Circadian-agent). Ids that don't
+  parse as a Java `int` ("abc", "1.5", "2147483648") used to fail JAX-RS
+  parameter conversion before the resource ran, so the framework's bare 404
+  answered with no content type and an empty body, contradicting the
+  `openapi.json` and README. A single `ApiNotFoundMapper`
+  (`ExceptionMapper<NotFoundException>`, scoped to `/api` by the application
+  path) now supplies the same per-resource message the resources already use
+  ("No people found with id abc"), and unmapped `/api` routes get a generic
+  "No resource found at /api/..." body instead of an empty one.
+
 ## [2.3.0] - 2026-08-10
 
 ### Added
@@ -323,6 +338,7 @@ snapshot version is not a release. -->
 - Id handling across all domains.
 
 [Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.3.0...HEAD
+[2.3.1]: https://github.com/eldermoraes/swapi.build/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/eldermoraes/swapi.build/compare/v2.2.1...v2.3.0
 [2.2.1]: https://github.com/eldermoraes/swapi.build/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/eldermoraes/swapi.build/compare/v2.1.0...v2.2.0
