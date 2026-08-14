@@ -64,6 +64,30 @@ curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H 'Accept: text/html' 
 # esperado: 200 application/json (Quinoa não pode engolir a rota)
 ```
 
+**SEO routes / social preview** — `robots.txt`, `sitemap.xml` and the OG image
+must also bypass the SPA fallback and carry request-derived absolute URLs:
+
+```bash
+curl -s -o /dev/null -w 'robots: %{http_code} %{content_type}\n' \
+  -H 'Accept: text/html' -b jar.txt https://<preview-host>/robots.txt
+# esperado: 200 text/plain (text/html = SPA engoliu)
+curl -s -o /dev/null -w 'sitemap: %{http_code} %{content_type}\n' \
+  -H 'Accept: text/html' -b jar.txt https://<preview-host>/sitemap.xml
+# esperado: 200 application/xml ou text/xml (text/html = SPA engoliu)
+curl -s -b jar.txt https://<preview-host>/robots.txt \
+  | grep -c 'Sitemap: https://<preview-host>/sitemap.xml'
+# esperado: 1
+curl -s -b jar.txt https://<preview-host>/sitemap.xml \
+  | grep -c '<loc>https://<preview-host>/docs</loc>'
+# esperado: 1
+curl -s -o /dev/null -w 'og image: %{http_code} %{content_type}\n' \
+  -b jar.txt https://<preview-host>/og-image.png
+# esperado: 200 image/png
+curl -s -b jar.txt https://<preview-host>/ \
+  | grep -E 'rel="canonical"|property="og:url"|name="twitter:card"'
+# esperado: as três linhas aparecem com URLs absolutas no host do preview
+```
+
 **Analytics / Speed Insights** — os dois scripts são servidos pela borda em
 `/_vercel/*`, e o `enable-spa-routing` do Quinoa responde `index.html` com 200 em
 qualquer caminho desconhecido. Sem checar o *content type* uma coleta quebrada é
@@ -186,6 +210,13 @@ curl -s -o /dev/null -w 'status: %{http_code}\n' https://swapi.build/api/people/
 curl -s https://swapi.build/api/people/1 | grep -c 'https://swapi.build/api/people/1'
 curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H 'Accept: text/html' https://swapi.build/openapi.json
 # esperado: 200 application/json (Quinoa não pode engolir a rota)
+curl -s -o /dev/null -w 'robots: %{http_code} %{content_type}\n' -H 'Accept: text/html' https://swapi.build/robots.txt
+curl -s -o /dev/null -w 'sitemap: %{http_code} %{content_type}\n' -H 'Accept: text/html' https://swapi.build/sitemap.xml
+curl -s https://swapi.build/robots.txt | grep -c 'Sitemap: https://swapi.build/sitemap.xml'
+curl -s https://swapi.build/sitemap.xml | grep -c '<loc>https://swapi.build/docs</loc>'
+curl -s -o /dev/null -w 'og image: %{http_code} %{content_type}\n' https://swapi.build/og-image.png
+curl -s https://swapi.build/ | grep -E 'rel="canonical"|property="og:url"|name="twitter:card"'
+# esperado: robots 200 text/plain; sitemap 200 application/xml ou text/xml; contagens 1; og image 200 image/png
 for p in insights speed-insights; do
   curl -s -o /dev/null -w "$p: %{http_code} %{content_type}\n" "https://swapi.build/_vercel/$p/script.js"
 done

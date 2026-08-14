@@ -7,7 +7,7 @@ import { renderMcp } from './pages/mcp';
 import { renderPrivacy } from './pages/privacy';
 import { renderTerms } from './pages/terms';
 import { cancelPending } from './api';
-import { getResourceMeta } from './constants';
+import { applySeoMetadata } from './seo';
 import { inject } from '@vercel/analytics';
 import { injectSpeedInsights } from '@vercel/speed-insights';
 
@@ -51,29 +51,6 @@ function getRoute(): { page: string; type?: string; id?: string } {
   return { page: 'home' };
 }
 
-function getPageTitle(route: { page: string; type?: string; id?: string }): string {
-  switch (route.page) {
-    case 'home':
-      return 'SWAPI - The Star Wars API';
-    case 'docs':
-      return 'Documentation - SWAPI';
-    case 'mcp':
-      return 'MCP Server - SWAPI';
-    case 'about':
-      return 'About - SWAPI';
-    case 'privacy':
-      return 'Privacy Policy - SWAPI';
-    case 'terms':
-      return 'Terms of Use - SWAPI';
-    case 'resource-list':
-      return `${getResourceMeta(route.type!).title} - SWAPI`;
-    case 'resource-detail':
-      return `${getResourceMeta(route.type!).title} #${route.id} - SWAPI`;
-    default:
-      return 'SWAPI - The Star Wars API';
-  }
-}
-
 function updateActiveNav() {
   const route = getRoute();
   document.querySelectorAll('.nav-link').forEach((link) => {
@@ -94,8 +71,7 @@ async function navigate() {
   const path = window.location.pathname;
   updateActiveNav();
 
-  const title = getPageTitle(route);
-  document.title = title;
+  const title = applySeoMetadata(path, window.location.origin).title;
 
   switch (route.page) {
     case 'home':

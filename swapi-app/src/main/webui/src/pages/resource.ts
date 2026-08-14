@@ -120,6 +120,7 @@ export async function renderResourceDetail(
     <div class="detail-view sw-inner-wide">
       <div class="detail-header">
         <a href="/resource/${type}" class="back-btn">&larr; ${meta.title}</a>
+        <h1 class="detail-title">${escapeHtml(`${meta.title} #${id}`)}</h1>
       </div>
       <div id="detail-content" aria-live="polite">
         <div class="loading"><div class="spinner"></div></div>
@@ -132,8 +133,8 @@ export async function renderResourceDetail(
   try {
     const { data, status } = await fetchResourceById<Record<string, unknown>>(type, id);
     const name = (data[meta.nameField] as string) || `${meta.title} #${id}`;
-    const headerEl = container.querySelector('.detail-header')!;
-    headerEl.innerHTML += `<h1 class="detail-title">${escapeHtml(name)}</h1>`;
+    const titleEl = container.querySelector('.detail-title')!;
+    titleEl.textContent = name;
 
     contentDiv.innerHTML = `
       <div class="sw-code result-panel">

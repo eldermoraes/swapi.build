@@ -50,6 +50,34 @@ else
   echo "INFO  pom.xml não encontrado; versão publicada: $version"
 fi
 
+# --- SEO routes / social preview ---------------------------------------------
+ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' -H 'Accept: text/html' "$BASE/robots.txt")
+case "$ct" in "200 text/plain"*) pass "robots.txt servido como texto ($ct)";;
+  *) fail "robots.txt content-type" "200 text/plain" "$ct (text/html = SPA engoliu)";; esac
+
+ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' -H 'Accept: text/html' "$BASE/sitemap.xml")
+case "$ct" in "200 application/xml"*|"200 text/xml"*) pass "sitemap.xml servido como XML ($ct)";;
+  *) fail "sitemap.xml content-type" "200 application/xml ou text/xml" "$ct (text/html = SPA engoliu)";; esac
+
+robots=$("${CURL[@]}" "$BASE/robots.txt")
+echo "$robots" | grep -q "Sitemap: $BASE/sitemap.xml" && pass "robots.txt aponta para sitemap no host" \
+  || fail "robots.txt Sitemap" "Sitemap: $BASE/sitemap.xml" "$(echo "$robots" | tr '\n' ' ' | head -c 160)"
+
+sitemap=$("${CURL[@]}" "$BASE/sitemap.xml")
+echo "$sitemap" | grep -q "<loc>$BASE/docs</loc>" && pass "sitemap.xml lista /docs no host" \
+  || fail "sitemap.xml /docs" "<loc>$BASE/docs</loc>" "ausente"
+
+ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' "$BASE/og-image.png")
+case "$ct" in "200 image/png"*) pass "og-image.png servido como PNG ($ct)";;
+  *) fail "og-image.png content-type" "200 image/png" "$ct";; esac
+
+home=$("${CURL[@]}" "$BASE/")
+echo "$home" | grep -q 'rel="canonical"' && echo "$home" | grep -q 'property="og:url"' && echo "$home" | grep -q 'name="twitter:card"' \
+  && pass "home HTML inclui canonical, og:url e Twitter Card" \
+  || fail "home SEO metadata" 'canonical + og:url + twitter:card' "ausente"
+echo "$home" | grep -q "content=\"$BASE/\"" && pass "home SEO usa URLs absolutas no host" \
+  || fail "home SEO URLs" "content=\"$BASE/\"" "ausente"
+
 # --- Analytics / Speed Insights --------------------------------------------
 for p in insights speed-insights; do
   ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' "$BASE/_vercel/$p/script.js")
@@ -136,6 +164,10 @@ if [ "$MODE" = "prod" ]; then
   m=$("${CURL[@]}" "$BASE/api/people/3" | grep -c evil.example)
   [ "$n" = "0" ] && [ "$m" = "0" ] && pass "poisoning X-Forwarded-Host: 0 ocorrências" \
     || fail "poisoning X-Forwarded-Host" "0 e 0" "$n e $m (PURGAR O CACHE JÁ — ver runbook)"
+  seo_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/sitemap.xml" | grep -c evil.example)
+  seo_clean=$("${CURL[@]}" "$BASE/sitemap.xml" | grep -c evil.example)
+  [ "$seo_poison" = "0" ] && [ "$seo_clean" = "0" ] && pass "poisoning SEO X-Forwarded-Host: 0 ocorrências" \
+    || fail "poisoning SEO X-Forwarded-Host" "0 e 0" "$seo_poison e $seo_clean (PURGAR O CACHE JÁ — ver runbook)"
 fi
 
 echo

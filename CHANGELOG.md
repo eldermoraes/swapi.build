@@ -16,6 +16,22 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-08-14
+
+### Added
+
+- SEO metadata for the public SPA pages (issue #8): request-derived canonical
+  URLs, route-specific descriptions, Open Graph and Twitter Card tags, JSON-LD
+  structured data, and a trademark-safe social preview image.
+- Backend-served `robots.txt` and `sitemap.xml` routes so crawlers receive real
+  text/XML responses instead of the SPA fallback.
+
+### Changed
+
+- Deploy verification now checks the SEO routes, social preview image and
+  server-rendered metadata content types alongside the existing OpenAPI and
+  Vercel Analytics probes.
+
 ## [2.3.1] - 2026-08-14
 
 ### Fixed
@@ -337,7 +353,8 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/eldermoraes/swapi.build/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/eldermoraes/swapi.build/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/eldermoraes/swapi.build/compare/v2.2.1...v2.3.0
 [2.2.1]: https://github.com/eldermoraes/swapi.build/compare/v2.2.0...v2.2.1
