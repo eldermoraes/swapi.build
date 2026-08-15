@@ -11,7 +11,7 @@ public class ApiRegressionTest {
 
     @Test
     public void peopleByIdAnswers200WithLuke() {
-        // 200 e o contrato atual (Response.ok()); o 202 historico foi aposentado em 2026-08-01
+        // 200 is the current contract (Response.ok()); the historic 202 was retired on 2026-08-01
         given().when().get("/api/people/1")
                 .then().statusCode(200)
                 .body(containsString("Luke Skywalker"));

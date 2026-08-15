@@ -11,8 +11,8 @@ public class ForwardedHeadersTest {
 
     @Test
     public void embeddedUrlsHonorForwardedHostAndProto() {
-        // Request plain antes: se o baseUrl congelar na primeira request
-        // (construtor de resource singleton), a forwarded abaixo falha.
+        // Plain request first: if the baseUrl freezes on the first request
+        // (singleton resource constructor), the forwarded one below fails.
         given()
                 .when().get("/api/people/1")
                 .then().statusCode(200)

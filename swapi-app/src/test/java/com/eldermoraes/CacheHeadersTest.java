@@ -16,12 +16,12 @@ class CacheHeadersTest {
 
     private static final String EDGE_TTL = "s-maxage=31536000";
 
-    // Valor exato exigido, travado aqui: em codigo de producao ele existe uma
-    // unica vez, na propriedade swapi.cache-control.public.
+    // Exact required value, locked down here: in production code it exists
+    // exactly once, in the swapi.cache-control.public property.
     private static final String CACHE_CONTROL =
             "public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400";
 
-    // Dado estatico invalidado por deploy: a borda pode guardar por muito tempo.
+    // Static data invalidated by deploy: the edge may hold onto it for a long time.
     @Test
     void successfulResourceIsCacheableAtTheEdge() {
         given()
@@ -32,8 +32,8 @@ class CacheHeadersTest {
                 .header("Cache-Control", equalTo(CACHE_CONTROL));
     }
 
-    // Id inexistente so passa a existir num deploy novo, que ja invalida o cache.
-    // Cachear 404 e o que absorve varredura de ids.
+    // A nonexistent id only comes into existence in a new deploy, which already
+    // invalidates the cache. Caching 404 is what absorbs id scans.
     @Test
     void notFoundIsCacheableAtTheEdge() {
         given()
@@ -44,7 +44,7 @@ class CacheHeadersTest {
                 .header("Cache-Control", containsString(EDGE_TTL));
     }
 
-    // Cachear /random faria a borda devolver sempre o mesmo sorteio.
+    // Caching /random would make the edge always return the same draw.
     @Test
     void everyRandomEndpointStaysUncached() {
         List<String> resources =
@@ -61,12 +61,12 @@ class CacheHeadersTest {
 
             Assertions.assertTrue(
                     cacheControl == null || !cacheControl.contains("s-maxage"),
-                    path + " nao pode ser cacheado na borda, mas veio: " + cacheControl);
+                    path + " must not be cached at the edge, but got: " + cacheControl);
         }
     }
 
-    // So GET/HEAD e cacheavel. Aqui so ha handlers @GET, entao um POST esbarra
-    // nos guards de metodo e de status (405) e nao recebe o header.
+    // Only GET/HEAD is cacheable. There are only @GET handlers here, so a POST
+    // hits the method and status guards (405) and does not get the header.
     @Test
     void nonGetResponseStaysUncached() {
         String cacheControl = given()
@@ -78,10 +78,10 @@ class CacheHeadersTest {
 
         Assertions.assertTrue(
                 cacheControl == null || !cacheControl.contains("s-maxage"),
-                "POST /api/people nao pode ser cacheado na borda, mas veio: " + cacheControl);
+                "POST /api/people must not be cached at the edge, but got: " + cacheControl);
     }
 
-    // A raiz da API tambem e estatica.
+    // The API root is static too.
     @Test
     void apiRootIsCacheableAtTheEdge() {
         given()
@@ -92,8 +92,8 @@ class CacheHeadersTest {
                 .header("Cache-Control", containsString(EDGE_TTL));
     }
 
-    // A spec e o contrato canonico e so muda em deploy. A pagina /docs busca
-    // esse arquivo a cada visita, entao ele e um dos paths mais requisitados.
+    // The spec is the canonical contract and only changes on deploy. The /docs
+    // page fetches this file on every visit, so it is one of the most requested paths.
     @Test
     void openApiSpecIsCacheableAtTheEdge() {
         given()
@@ -105,10 +105,10 @@ class CacheHeadersTest {
                 .header("Cache-Control", containsString(EDGE_TTL));
     }
 
-    // O filtro CORS ecoa o Origin da request e nao emite Vary. Sem Vary a borda
-    // serve a variante de um origin (ou a variante sem origin) para outro
-    // cliente — CORS quebrado de forma intermitente, e ACAO de terceiro preso
-    // na borda por um ano.
+    // The CORS filter echoes the request's Origin and emits no Vary. Without
+    // Vary the edge serves one origin's variant (or the no-origin variant) to
+    // another client — intermittently broken CORS, and a third party's ACAO
+    // stuck at the edge for a year.
     @Test
     void cacheableResponseVariesByOrigin() {
         given()
@@ -140,9 +140,9 @@ class CacheHeadersTest {
                 .header("Vary", containsString("Origin"));
     }
 
-    // O Vary entra no MESMO if do Cache-Control: o ramo nao-cacheavel nao pode
-    // ganhar Vary de carona, senao a decisao "random nao e cacheavel" fica
-    // acoplada a decisao de CORS.
+    // Vary goes inside the SAME if as Cache-Control: the non-cacheable branch
+    // must not pick up Vary for free, otherwise the "random is not cacheable"
+    // decision gets coupled to the CORS decision.
     @Test
     void nonCacheableRandomDoesNotGetVary() {
         given()
@@ -153,9 +153,9 @@ class CacheHeadersTest {
                 .header("Vary", nullValue());
     }
 
-    // O Vary do filtro de assets so era garantido por um comentario. Filtros
-    // quarkus.http.filter rodam antes do roteamento, entao o header aparece
-    // mesmo sem o asset existir - o que basta para travar a config.
+    // The assets filter's Vary was only guaranteed by a comment. quarkus.http.filter
+    // filters run before routing, so the header appears even when the asset
+    // does not exist - which is enough to lock down the config.
     @Test
     void assetsFilterEmitsVaryOrigin() {
         given()

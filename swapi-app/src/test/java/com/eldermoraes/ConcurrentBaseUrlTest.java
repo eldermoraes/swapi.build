@@ -16,8 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @QuarkusTest
 public class ConcurrentBaseUrlTest {
 
-    // Requests concorrentes com hosts diferentes nao podem contaminar as URLs
-    // umas das outras — cada resposta carrega apenas o host de quem pediu.
+    // Concurrent requests with different hosts must not contaminate each
+    // other's URLs — each response carries only the host of its own requester.
     @Test
     public void concurrentRequestsKeepTheirOwnHost() throws Exception {
         int rounds = 200;
@@ -40,7 +40,7 @@ public class ConcurrentBaseUrlTest {
             }
             for (Future<Boolean> f : results) {
                 assertTrue(f.get(30, TimeUnit.SECONDS),
-                        "resposta contaminada com o host de outra request");
+                        "response contaminated with another request's host");
             }
         } finally {
             pool.shutdown();

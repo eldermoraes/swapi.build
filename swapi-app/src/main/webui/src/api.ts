@@ -76,8 +76,8 @@ export async function fetchEndpoint<T = unknown>(path: string): Promise<ApiRespo
   return request<T>(url);
 }
 
-// Fetch direto (fora de request()): a spec não participa do cancelamento de
-// navegação e precisa de Accept explícito para garantir JSON.
+// Direct fetch (outside request()): the spec does not take part in navigation
+// cancellation and needs an explicit Accept to guarantee JSON.
 export async function fetchOpenApiSpec(): Promise<OpenApiSpec> {
   let res: Response;
   try {

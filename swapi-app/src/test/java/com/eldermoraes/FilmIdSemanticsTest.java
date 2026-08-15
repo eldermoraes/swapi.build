@@ -9,8 +9,8 @@ import static org.hamcrest.CoreMatchers.containsString;
 @QuarkusTest
 public class FilmIdSemanticsTest {
 
-    // O dataset emite "url": ".../films/1" para A New Hope — o endpoint tem
-    // que honrar o link que a propria API publica (record id, nao episode id).
+    // The dataset emits "url": ".../films/1" for A New Hope — the endpoint has
+    // to honor the link the API itself publishes (record id, not episode id).
     @Test
     public void filmsIdMatchesEmittedUrl() {
         given().when().get("/api/films/1")

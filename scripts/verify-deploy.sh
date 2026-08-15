@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
-# Probes do docs/DEPLOY.md em fonte única (CI e operador usam o mesmo script).
-# O runbook explica o porquê de cada check e vence em caso de divergência.
+# Probes from docs/DEPLOY.md as a single source (CI and operator use the same script).
+# The runbook explains the why of each check and wins on divergence.
 #
-# uso: verify-deploy.sh preview <host>   (inclui burst stateful; exige bypass ou host aberto)
-#      verify-deploy.sh prod <host>      (sem burst; inclui checks de edge cache)
+# usage: verify-deploy.sh preview <host>   (includes stateful burst; requires bypass or an open host)
+#        verify-deploy.sh prod <host>      (no burst; includes edge cache checks)
 #
-# Se VERCEL_AUTOMATION_BYPASS_SECRET estiver no ambiente, todas as chamadas
-# enviam o header x-vercel-protection-bypass (substitui o cookie jar do runbook).
+# If VERCEL_AUTOMATION_BYPASS_SECRET is in the environment, every call sends the
+# x-vercel-protection-bypass header (replaces the runbook's cookie jar).
 set -u
 
-MODE="${1:?uso: verify-deploy.sh <preview|prod> <host>}"
-HOST="${2:?uso: verify-deploy.sh <preview|prod> <host>}"
+MODE="${1:?usage: verify-deploy.sh <preview|prod> <host>}"
+HOST="${2:?usage: verify-deploy.sh <preview|prod> <host>}"
 HOST="${HOST#https://}"; HOST="${HOST%%/*}"
 BASE="https://${HOST}"
 
-case "$MODE" in preview|prod) ;; *) echo "modo inválido: $MODE"; exit 2 ;; esac
+case "$MODE" in preview|prod) ;; *) echo "invalid mode: $MODE"; exit 2 ;; esac
 
 CURL=(curl -s --max-time 90)
 if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
@@ -23,19 +23,19 @@ fi
 
 FAILURES=0
 pass() { printf 'PASS  %s\n' "$1"; }
-fail() { printf 'FAIL  %s\n      esperado: %s\n      obtido:   %s\n' "$1" "$2" "$3"; FAILURES=$((FAILURES+1)); }
+fail() { printf 'FAIL  %s\n      expected: %s\n      got:      %s\n' "$1" "$2" "$3"; FAILURES=$((FAILURES+1)); }
 
 # --- REST -------------------------------------------------------------------
 body=$("${CURL[@]}" "$BASE/api/people/1")
 code=$("${CURL[@]}" -o /dev/null -w '%{http_code}' "$BASE/api/people/1")
 [ "$code" = "200" ] && pass "REST /api/people/1 -> 200" \
   || fail "REST /api/people/1" "200" "$code"
-echo "$body" | grep -q "$BASE/api/people/1" && pass "REST embute URLs https no host" \
-  || fail "REST URLs embutidas" "conter $BASE/api/people/1" "ausente"
+echo "$body" | grep -q "$BASE/api/people/1" && pass "REST embeds https URLs on the host" \
+  || fail "REST embedded URLs" "contain $BASE/api/people/1" "missing"
 
 # --- OpenAPI ----------------------------------------------------------------
 ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' -H 'Accept: text/html' "$BASE/openapi.json")
-case "$ct" in "200 application/json"*) pass "OpenAPI servida pelo backend ($ct)";;
+case "$ct" in "200 application/json"*) pass "OpenAPI served by the backend ($ct)";;
   *) fail "OpenAPI content-type" "200 application/json" "$ct";; esac
 
 version=$("${CURL[@]}" "$BASE/openapi.json" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1)
@@ -47,47 +47,47 @@ if [ -n "$pom" ]; then
   echo "$version" | grep -q "\"$pom\"" && pass "OpenAPI version == pom ($pom)" \
     || fail "OpenAPI version" "\"$pom\"" "$version"
 else
-  echo "INFO  pom.xml não encontrado; versão publicada: $version"
+  echo "INFO  pom.xml not found; published version: $version"
 fi
 
 # --- SEO routes / social preview ---------------------------------------------
 ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' -H 'Accept: text/html' "$BASE/robots.txt")
-case "$ct" in "200 text/plain"*) pass "robots.txt servido como texto ($ct)";;
-  *) fail "robots.txt content-type" "200 text/plain" "$ct (text/html = SPA engoliu)";; esac
+case "$ct" in "200 text/plain"*) pass "robots.txt served as text ($ct)";;
+  *) fail "robots.txt content-type" "200 text/plain" "$ct (text/html = the SPA swallowed it)";; esac
 
 ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' -H 'Accept: text/html' "$BASE/sitemap.xml")
-case "$ct" in "200 application/xml"*|"200 text/xml"*) pass "sitemap.xml servido como XML ($ct)";;
-  *) fail "sitemap.xml content-type" "200 application/xml ou text/xml" "$ct (text/html = SPA engoliu)";; esac
+case "$ct" in "200 application/xml"*|"200 text/xml"*) pass "sitemap.xml served as XML ($ct)";;
+  *) fail "sitemap.xml content-type" "200 application/xml or text/xml" "$ct (text/html = the SPA swallowed it)";; esac
 
 robots=$("${CURL[@]}" "$BASE/robots.txt")
-echo "$robots" | grep -q "Sitemap: $BASE/sitemap.xml" && pass "robots.txt aponta para sitemap no host" \
+echo "$robots" | grep -q "Sitemap: $BASE/sitemap.xml" && pass "robots.txt points at the sitemap on the host" \
   || fail "robots.txt Sitemap" "Sitemap: $BASE/sitemap.xml" "$(echo "$robots" | tr '\n' ' ' | head -c 160)"
 
 sitemap=$("${CURL[@]}" "$BASE/sitemap.xml")
-echo "$sitemap" | grep -q "<loc>$BASE/docs</loc>" && pass "sitemap.xml lista /docs no host" \
-  || fail "sitemap.xml /docs" "<loc>$BASE/docs</loc>" "ausente"
+echo "$sitemap" | grep -q "<loc>$BASE/docs</loc>" && pass "sitemap.xml lists /docs on the host" \
+  || fail "sitemap.xml /docs" "<loc>$BASE/docs</loc>" "missing"
 
 ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' "$BASE/og-image.png")
-case "$ct" in "200 image/png"*) pass "og-image.png servido como PNG ($ct)";;
+case "$ct" in "200 image/png"*) pass "og-image.png served as PNG ($ct)";;
   *) fail "og-image.png content-type" "200 image/png" "$ct";; esac
 
 home=$("${CURL[@]}" "$BASE/")
 echo "$home" | grep -q 'rel="canonical"' && echo "$home" | grep -q 'property="og:url"' && echo "$home" | grep -q 'name="twitter:card"' \
-  && pass "home HTML inclui canonical, og:url e Twitter Card" \
-  || fail "home SEO metadata" 'canonical + og:url + twitter:card' "ausente"
-echo "$home" | grep -q "content=\"$BASE/\"" && pass "home SEO usa URLs absolutas no host" \
-  || fail "home SEO URLs" "content=\"$BASE/\"" "ausente"
+  && pass "home HTML includes canonical, og:url and Twitter Card" \
+  || fail "home SEO metadata" 'canonical + og:url + twitter:card' "missing"
+echo "$home" | grep -q "content=\"$BASE/\"" && pass "home SEO uses absolute URLs on the host" \
+  || fail "home SEO URLs" "content=\"$BASE/\"" "missing"
 
 # --- Analytics / Speed Insights --------------------------------------------
 for p in insights speed-insights; do
   ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' "$BASE/_vercel/$p/script.js")
   case "$ct" in "200 application/javascript"*|"200 text/javascript"*) pass "/_vercel/$p/script.js ($ct)";;
-    *) fail "/_vercel/$p/script.js" "200 application/javascript" "$ct (text/html = SPA engoliu; coleta quebrada)";; esac
+    *) fail "/_vercel/$p/script.js" "200 application/javascript" "$ct (text/html = the SPA swallowed it; collection broken)";; esac
 done
 
-# --- Cold start (informativo, não falha) ------------------------------------
+# --- Cold start (informational, never fails) ---------------------------------
 t=$("${CURL[@]}" -o /dev/null -w '%{time_total}' "$BASE/api/people/1")
-echo "INFO  primeira request medida: ${t}s (piso, instância pode já estar quente)"
+echo "INFO  first measured request: ${t}s (floor; the instance may already be warm)"
 
 # --- MCP stateless ----------------------------------------------------------
 resp=$("${CURL[@]}" -X POST "$BASE/mcp" \
@@ -98,17 +98,17 @@ resp=$("${CURL[@]}" -X POST "$BASE/mcp" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"sw_get","arguments":{"resource":"PEOPLE","id":1},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"verify-deploy","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}')
 echo "$resp" | grep -q '"isError":false' && pass "MCP stateless tools/call" \
   || fail "MCP stateless" '"isError":false' "$(echo "$resp" | head -c 200)"
-echo "$resp" | grep -q "$BASE/api/" && pass "MCP embute URLs no host" \
-  || fail "MCP URLs embutidas" "conter $BASE/api/" "ausente"
+echo "$resp" | grep -q "$BASE/api/" && pass "MCP embeds URLs on the host" \
+  || fail "MCP embedded URLs" "contain $BASE/api/" "missing"
 
-# --- MCP stateful burst (preview only — bursts tripam mitigação em prod) ----
+# --- MCP stateful burst (preview only — bursts trip the mitigation in prod) --
 if [ "$MODE" = "preview" ]; then
   SID=$("${CURL[@]}" -D - -o /dev/null -X POST "$BASE/mcp" \
     -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"verify-deploy","version":"1.0"}}}' \
     | tr -d '\r' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
   if [ -z "$SID" ]; then
-    fail "MCP stateful burst" "session id emitido no initialize" "nenhum (guard: burst NÃO executado)"
+    fail "MCP stateful burst" "session id issued on initialize" "none (guard: burst NOT executed)"
   else
     burst=$(for i in $(seq 1 12); do
       ( "${CURL[@]}" -o /dev/null -w '%{http_code}\n' -X POST "$BASE/mcp" \
@@ -117,7 +117,7 @@ if [ "$MODE" = "preview" ]; then
           -d '{"jsonrpc":"2.0","id":'"$i"',"method":"tools/list"}' ) &
     done; wait)
     ok=$(echo "$burst" | grep -c '^200$')
-    [ "$ok" = "12" ] && pass "MCP stateful burst 12x200 (mesma sessão)" \
+    [ "$ok" = "12" ] && pass "MCP stateful burst 12x200 (same session)" \
       || fail "MCP stateful burst" "12x 200" "$(echo "$burst" | sort | uniq -c | tr '\n' ' ')"
   fi
 fi
@@ -133,47 +133,47 @@ code=$("${CURL[@]}" -o /dev/null -w '%{http_code}' -X POST "$BASE/mcp" \
 code=$("${CURL[@]}" -o /dev/null -w '%{http_code}' "$BASE/mcp")
 [ "$code" = "405" ] && pass "GET /mcp -> 405" || fail "GET /mcp" "405" "$code"
 code=$("${CURL[@]}" -o /dev/null -w '%{http_code}' "$BASE/mcp/sse")
-[ "$code" = "404" ] && pass "GET /mcp/sse -> 404 (legacy rejeitado)" || fail "GET /mcp/sse" "404" "$code"
+[ "$code" = "404" ] && pass "GET /mcp/sse -> 404 (legacy rejected)" || fail "GET /mcp/sse" "404" "$code"
 edge=$("${CURL[@]}" -w '\n%{http_code}' -X POST "$BASE/mcp/messages/never-existed" \
   -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
 code=$(echo "$edge" | tail -1)
 if [ "$code" = "404" ] && echo "$edge" | head -1 | grep -q '/mcp'; then
-  pass "POST /mcp/messages/* -> 404 com JSON citando /mcp"
+  pass "POST /mcp/messages/* -> 404 with JSON citing /mcp"
 else
-  fail "POST /mcp/messages/*" "404 + corpo citando /mcp" "$code $(echo "$edge" | head -c 120)"
+  fail "POST /mcp/messages/*" "404 + body citing /mcp" "$code $(echo "$edge" | head -c 120)"
 fi
 
 # --- CORS / cache poisoning via Origin --------------------------------------
 vary=$("${CURL[@]}" -I -H 'Origin: https://evil.example' "$BASE/api/people/1" | tr -d '\r' | grep -i '^vary')
-echo "$vary" | grep -qi 'origin' && pass "Vary contém Origin ($vary)" \
-  || fail "Vary: Origin" "header Vary contendo Origin" "${vary:-ausente}"
+echo "$vary" | grep -qi 'origin' && pass "Vary contains Origin ($vary)" \
+  || fail "Vary: Origin" "Vary header containing Origin" "${vary:-missing}"
 acao=$("${CURL[@]}" -o /dev/null -w '%header{access-control-allow-origin}' "$BASE/api/people/1")
-[ -z "$acao" ] && pass "sem Origin na request -> sem ACAO" \
-  || fail "ACAO sem Origin" "vazio" "$acao"
+[ -z "$acao" ] && pass "no Origin on the request -> no ACAO" \
+  || fail "ACAO without Origin" "empty" "$acao"
 
 # --- Prod only: edge cache + poisoning X-Forwarded-Host ---------------------
 if [ "$MODE" = "prod" ]; then
   c1=$("${CURL[@]}" -I "$BASE/api/people/1" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-vercel-cache"{print $2}')
   c2=$("${CURL[@]}" -I "$BASE/api/people/1" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-vercel-cache"{print $2}')
   [ "$c2" = "HIT" ] && pass "edge cache /api/people/1: $c1 -> HIT" \
-    || fail "edge cache /api/people/1" "segunda leitura HIT" "$c1 -> $c2"
+    || fail "edge cache /api/people/1" "second read HIT" "$c1 -> $c2"
   cr=$("${CURL[@]}" -I "$BASE/api/people/random" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-vercel-cache"{print $2}')
-  [ "$cr" = "MISS" ] && pass "/api/people/random: sempre MISS" \
+  [ "$cr" = "MISS" ] && pass "/api/people/random: always MISS" \
     || fail "/api/people/random cache" "MISS" "$cr"
   n=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/api/people/3" | grep -c evil.example)
   m=$("${CURL[@]}" "$BASE/api/people/3" | grep -c evil.example)
-  [ "$n" = "0" ] && [ "$m" = "0" ] && pass "poisoning X-Forwarded-Host: 0 ocorrências" \
-    || fail "poisoning X-Forwarded-Host" "0 e 0" "$n e $m (PURGAR O CACHE JÁ — ver runbook)"
+  [ "$n" = "0" ] && [ "$m" = "0" ] && pass "poisoning X-Forwarded-Host: 0 occurrences" \
+    || fail "poisoning X-Forwarded-Host" "0 and 0" "$n and $m (PURGE THE CACHE NOW — see runbook)"
   seo_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/sitemap.xml" | grep -c evil.example)
   seo_clean=$("${CURL[@]}" "$BASE/sitemap.xml" | grep -c evil.example)
-  [ "$seo_poison" = "0" ] && [ "$seo_clean" = "0" ] && pass "poisoning SEO X-Forwarded-Host: 0 ocorrências" \
-    || fail "poisoning SEO X-Forwarded-Host" "0 e 0" "$seo_poison e $seo_clean (PURGAR O CACHE JÁ — ver runbook)"
+  [ "$seo_poison" = "0" ] && [ "$seo_clean" = "0" ] && pass "poisoning SEO X-Forwarded-Host: 0 occurrences" \
+    || fail "poisoning SEO X-Forwarded-Host" "0 and 0" "$seo_poison and $seo_clean (PURGE THE CACHE NOW — see runbook)"
 fi
 
 echo
 if [ "$FAILURES" -eq 0 ]; then
-  echo "verify-deploy [$MODE] $HOST: todos os probes verdes"
+  echo "verify-deploy [$MODE] $HOST: all probes green"
 else
-  echo "verify-deploy [$MODE] $HOST: $FAILURES probe(s) reprovado(s)"
+  echo "verify-deploy [$MODE] $HOST: $FAILURES probe(s) failed"
   exit 1
 fi

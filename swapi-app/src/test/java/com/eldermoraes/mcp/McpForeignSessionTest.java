@@ -9,12 +9,13 @@ import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.not;
 
 /**
- * A sessao MCP vive na heap de uma instancia e o Vercel nao tem afinidade de
- * sessao: um Mcp-Session-Id emitido pela instancia A chega na instancia B, que
- * nao o conhece. Sem auto-init isso e 404 e o cliente stateful quebra.
+ * An MCP session lives in one instance's heap and Vercel has no session
+ * affinity: an Mcp-Session-Id issued by instance A arrives at instance B,
+ * which does not know it. Without auto-init that is a 404 and the stateful
+ * client breaks.
  *
- * Estes testes usam rest-assured, nao McpAssured, de proposito: o McpAssured
- * gerencia a sessao e por isso nunca reproduz o bug.
+ * These tests use rest-assured, not McpAssured, on purpose: McpAssured
+ * manages the session and therefore never reproduces the bug.
  */
 @QuarkusTest
 class McpForeignSessionTest {
@@ -57,9 +58,9 @@ class McpForeignSessionTest {
                 .body(containsString("sw_get"));
     }
 
-    // auto-init nao pode suprimir o Mcp-Session-Id: um cliente stateful
-    // bem-comportado precisa continuar recebendo sessao e negociando a versao
-    // que pediu. Este teste tranca esse comportamento.
+    // auto-init must not suppress the Mcp-Session-Id: a well-behaved stateful
+    // client must keep receiving a session and negotiating the version it
+    // asked for. This test locks down that behavior.
     @Test
     void wellBehavedStatefulClientStillGetsASessionAndTheVersionItAskedFor() {
         given()

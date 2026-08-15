@@ -5,14 +5,14 @@ import type { OpenApiOperation, OpenApiSchemaObj, OpenApiSpec } from '../types';
 
 const SCHEMA_REF_PREFIX = '#/components/schemas/';
 
-// main.ts roteia só `/docs` para esta página (`/docs/mcp` é outra) — usado para
-// abortar a pintura quando o usuário navegou durante o fetch da spec.
+// main.ts routes only `/docs` to this page (`/docs/mcp` is another) — used to
+// abort the paint when the user navigated away during the spec fetch.
 function isDocsRoute(): boolean {
   const parts = window.location.pathname.split('/').filter(Boolean);
   return parts.length === 1 && parts[0] === 'docs';
 }
 
-// Ordem de exibição: Root primeiro, demais na ordem declarada na spec
+// Display order: Root first, the rest in the order declared in the spec
 function orderedTags(spec: OpenApiSpec): string[] {
   const declared = (spec.tags ?? []).map((t) => t.name);
   const seen = new Set<string>();
@@ -31,8 +31,8 @@ function operationsByTag(spec: OpenApiSpec, tag: string): { path: string; op: Op
     .sort((a, b) => a.path.localeCompare(b.path));
 }
 
-// O nome do schema vem da própria spec: primeiro $ref das respostas da tag
-// (direto nas operações by-id, dentro de `items` nas de lista).
+// The schema name comes from the spec itself: first $ref of the tag's responses
+// (directly on the by-id operations, inside `items` on the list ones).
 function schemaNameForTag(operations: { op: OpenApiOperation }[]): string | undefined {
   for (const { op } of operations) {
     for (const response of Object.values(op.responses)) {
@@ -114,7 +114,7 @@ export async function renderDocumentation(container: HTMLElement): Promise<void>
   try {
     spec = await fetchOpenApiSpec();
   } catch {
-    if (!isDocsRoute()) return; // navegou durante o fetch: não sobrescrever a página nova
+    if (!isDocsRoute()) return; // navigated during the fetch: do not overwrite the new page
     container.innerHTML = `
       <div class="docs sw-inner-prose">
         <h1 class="sw-page-title">Documentation</h1>
@@ -125,7 +125,7 @@ export async function renderDocumentation(container: HTMLElement): Promise<void>
     return;
   }
 
-  if (!isDocsRoute()) return; // navegou durante o fetch: não sobrescrever a página nova
+  if (!isDocsRoute()) return; // navigated during the fetch: do not overwrite the new page
 
   const tagDescriptions = new Map((spec.tags ?? []).map((t) => [t.name, t.description ?? '']));
   const sections = orderedTags(spec)
