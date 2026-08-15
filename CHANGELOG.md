@@ -373,7 +373,8 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...HEAD
+[2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/eldermoraes/swapi.build/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/eldermoraes/swapi.build/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/eldermoraes/swapi.build/compare/v2.2.1...v2.3.0
