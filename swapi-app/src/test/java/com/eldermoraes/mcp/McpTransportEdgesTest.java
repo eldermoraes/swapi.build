@@ -8,20 +8,20 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 
 /**
- * Bordas do endpoint MCP nesta topologia.
+ * Edges of the MCP endpoint in this topology.
  *
- * O auto-init cobre o POST, que e onde as tool calls acontecem, mas GET e
- * DELETE com sessao estrangeira continuam 404. Como nao emitimos nenhuma
- * mensagem server->client, o 405 da spec 2025-03-26 e a resposta correta e
- * incondicional para o GET, e o DELETE (teardown) e sempre bem-sucedido.
+ * auto-init covers POST, which is where the tool calls happen, but GET and
+ * DELETE with a foreign session are still 404. Since we emit no
+ * server->client messages, the 405 from the 2025-03-26 spec is the correct
+ * and unconditional answer for GET, and DELETE (teardown) always succeeds.
  */
 @QuarkusTest
 class McpTransportEdgesTest {
 
     @Test
     void getIsMethodNotAllowedBecauseThereIsNoServerToClientStream() {
-        // Allow lista tudo que o recurso responde de fato: POST (tool calls) e
-        // DELETE (teardown) - RFC 9110.
+        // Allow lists everything the resource actually responds to: POST (tool
+        // calls) and DELETE (teardown) - RFC 9110.
         given()
                 .accept("text/event-stream")
         .when()
@@ -88,9 +88,9 @@ class McpTransportEdgesTest {
                 .header("Access-Control-Allow-Origin", containsString("app.example"));
     }
 
-    // O filtro encerra a resposta, entao precisa rodar DEPOIS do handler de CORS
-    // (prioridade 300) - senao um cliente de browser recebe o 405 sem
-    // Access-Control-Allow-Origin e ve um erro de CORS em vez do 405.
+    // The filter ends the response, so it must run AFTER the CORS handler
+    // (priority 300) - otherwise a browser client receives the 405 without
+    // Access-Control-Allow-Origin and sees a CORS error instead of the 405.
     @Test
     void methodNotAllowedStillCarriesCorsHeadersForBrowserClients() {
         given()
@@ -103,9 +103,9 @@ class McpTransportEdgesTest {
                 .header("Access-Control-Allow-Origin", containsString("app.example"));
     }
 
-    // O router do Vert.x ignora uma barra final ao casar path exato; sem
-    // normalizar isso no filtro, um cliente configurado com /mcp/ escapava e
-    // caia no 404 ambiguo que este filtro existe para eliminar.
+    // The Vert.x router ignores a trailing slash when matching an exact path;
+    // without normalizing it in the filter, a client configured with /mcp/
+    // slipped through and hit the ambiguous 404 this filter exists to eliminate.
     @Test
     void getWithTrailingSlashIsAlsoMethodNotAllowed() {
         given()

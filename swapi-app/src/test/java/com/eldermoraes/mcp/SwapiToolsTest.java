@@ -34,12 +34,12 @@ public class SwapiToolsTest {
                     assertEquals(4, page.size());
                     for (String name : java.util.List.of("sw_list", "sw_get", "sw_random", "sw_search")) {
                         var tool = page.findByName(name);
-                        assertNotNull(tool, name + " ausente");
+                        assertNotNull(tool, name + " missing");
                         tool.annotations().ifPresentOrElse(a -> {
-                            assertTrue(a.readOnlyHint(), name + " deveria ser readOnly");
-                            assertFalse(a.destructiveHint(), name + " nao deveria anunciar destructive");
-                            assertFalse(a.openWorldHint(), name + " nao deveria anunciar openWorld");
-                        }, () -> fail(name + " sem annotations"));
+                            assertTrue(a.readOnlyHint(), name + " should be readOnly");
+                            assertFalse(a.destructiveHint(), name + " should not advertise destructive");
+                            assertFalse(a.openWorldHint(), name + " should not advertise openWorld");
+                        }, () -> fail(name + " has no annotations"));
                     }
                 })
                 .thenAssertResults();

@@ -96,12 +96,12 @@ export interface Vehicle extends SWResource {
   films: string[];
 }
 
-// Subconjunto do documento OpenAPI 3.x consumido pela página de docs
+// Subset of the OpenAPI 3.x document consumed by the docs page
 export interface OpenApiParameter {
   name: string;
   in: 'path' | 'query';
   description?: string;
-  // a spec emite números nos `id` de path e strings nos exemplos de query
+  // the spec emits numbers in path `id`s and strings in the query examples
   example?: string | number;
 }
 

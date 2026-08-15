@@ -9,7 +9,7 @@ import static org.hamcrest.CoreMatchers.equalTo;
 @QuarkusTest
 public class HomeworldUrlTest {
 
-    // homeworld deve sair absoluto como todos os outros links (films, starships, url...)
+    // homeworld must come out absolute like all the other links (films, starships, url...)
     @Test
     public void peopleHomeworldIsAbsolute() {
         given().when().get("/api/people/1")

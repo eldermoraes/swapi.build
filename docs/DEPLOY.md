@@ -61,7 +61,7 @@ curl -s -b jar.txt "https://<preview-host>/api/people/1"
 ```bash
 curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H 'Accept: text/html' \
   -b jar.txt https://<preview-host>/openapi.json
-# esperado: 200 application/json (Quinoa não pode engolir a rota)
+# expected: 200 application/json (Quinoa must not swallow the route)
 ```
 
 **SEO routes / social preview** — `robots.txt`, `sitemap.xml` and the OG image
@@ -70,36 +70,36 @@ must also bypass the SPA fallback and carry request-derived absolute URLs:
 ```bash
 curl -s -o /dev/null -w 'robots: %{http_code} %{content_type}\n' \
   -H 'Accept: text/html' -b jar.txt https://<preview-host>/robots.txt
-# esperado: 200 text/plain (text/html = SPA engoliu)
+# expected: 200 text/plain (text/html = the SPA swallowed it)
 curl -s -o /dev/null -w 'sitemap: %{http_code} %{content_type}\n' \
   -H 'Accept: text/html' -b jar.txt https://<preview-host>/sitemap.xml
-# esperado: 200 application/xml ou text/xml (text/html = SPA engoliu)
+# expected: 200 application/xml or text/xml (text/html = the SPA swallowed it)
 curl -s -b jar.txt https://<preview-host>/robots.txt \
   | grep -c 'Sitemap: https://<preview-host>/sitemap.xml'
-# esperado: 1
+# expected: 1
 curl -s -b jar.txt https://<preview-host>/sitemap.xml \
   | grep -c '<loc>https://<preview-host>/docs</loc>'
-# esperado: 1
+# expected: 1
 curl -s -o /dev/null -w 'og image: %{http_code} %{content_type}\n' \
   -b jar.txt https://<preview-host>/og-image.png
-# esperado: 200 image/png
+# expected: 200 image/png
 curl -s -b jar.txt https://<preview-host>/ \
   | grep -E 'rel="canonical"|property="og:url"|name="twitter:card"'
-# esperado: as três linhas aparecem com URLs absolutas no host do preview
+# expected: all three lines appear with absolute URLs on the preview host
 ```
 
-**Analytics / Speed Insights** — os dois scripts são servidos pela borda em
-`/_vercel/*`, e o `enable-spa-routing` do Quinoa responde `index.html` com 200 em
-qualquer caminho desconhecido. Sem checar o *content type* uma coleta quebrada é
-indistinguível de uma funcionando:
+**Analytics / Speed Insights** — both scripts are served by the edge at
+`/_vercel/*`, and Quinoa's `enable-spa-routing` answers `index.html` with 200 on
+any unknown path. Without checking the *content type*, a broken collection is
+indistinguishable from a working one:
 
 ```bash
 for p in insights speed-insights; do
   curl -s -o /dev/null -w "$p: %{http_code} %{content_type}\n" -b jar.txt \
     "https://<preview-host>/_vercel/$p/script.js"
 done
-# esperado: 200 application/javascript nos dois
-# text/html = a borda não interceptou; o Analytics NÃO está coletando
+# expected: 200 application/javascript for both
+# text/html = the edge did not intercept; Analytics is NOT collecting
 ```
 
 **Cold start** — after any deploy that changes Quarkus extensions (e.g.
@@ -144,7 +144,7 @@ else
         -d '{"jsonrpc":"2.0","id":'$i',"method":"tools/list"}' ) &
   done | sort | uniq -c
 fi
-# esperado: 12 200
+# expected: 12 200
 ```
 
 The empty-SID guard matters: with `auto-init` on, a request carrying an empty or
@@ -165,19 +165,19 @@ curl -s -o /dev/null -w 'foreign session: %{http_code}\n' -b jar.txt \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -H 'Mcp-Session-Id: never-existed' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-# esperado: 200
+# expected: 200
 ```
 
 **MCP edges:**
 
 ```bash
 curl -s -o /dev/null -w 'GET /mcp: %{http_code}\n' -b jar.txt "https://<preview-host>/mcp"
-# esperado: 405
+# expected: 405
 curl -s -o /dev/null -w 'GET /mcp/sse: %{http_code}\n' -b jar.txt "https://<preview-host>/mcp/sse"
-# esperado: 404
+# expected: 404
 curl -s -b jar.txt -X POST "https://<preview-host>/mcp/messages/never-existed" \
   -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-# esperado: 404 com corpo JSON mencionando /mcp
+# expected: 404 with a JSON body mentioning /mcp
 ```
 
 **Cache poisoning via `Origin`** — CORS echoes the request `Origin`, so every
@@ -186,9 +186,9 @@ origin's header to another:
 
 ```bash
 curl -sI -b jar.txt -H 'Origin: https://evil.example' "https://<preview-host>/api/people/1" | grep -i '^vary'
-# deve conter Origin
+# must contain Origin
 curl -s -o /dev/null -b jar.txt -w '[%header{access-control-allow-origin}]\n' "https://<preview-host>/api/people/1"
-# sem Origin na request: deve vir []
+# without Origin on the request: must come back []
 ```
 
 If `Vary` is missing, purge the cache before going further.
@@ -209,18 +209,18 @@ without a tty.
 curl -s -o /dev/null -w 'status: %{http_code}\n' https://swapi.build/api/people/1
 curl -s https://swapi.build/api/people/1 | grep -c 'https://swapi.build/api/people/1'
 curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H 'Accept: text/html' https://swapi.build/openapi.json
-# esperado: 200 application/json (Quinoa não pode engolir a rota)
+# expected: 200 application/json (Quinoa must not swallow the route)
 curl -s -o /dev/null -w 'robots: %{http_code} %{content_type}\n' -H 'Accept: text/html' https://swapi.build/robots.txt
 curl -s -o /dev/null -w 'sitemap: %{http_code} %{content_type}\n' -H 'Accept: text/html' https://swapi.build/sitemap.xml
 curl -s https://swapi.build/robots.txt | grep -c 'Sitemap: https://swapi.build/sitemap.xml'
 curl -s https://swapi.build/sitemap.xml | grep -c '<loc>https://swapi.build/docs</loc>'
 curl -s -o /dev/null -w 'og image: %{http_code} %{content_type}\n' https://swapi.build/og-image.png
 curl -s https://swapi.build/ | grep -E 'rel="canonical"|property="og:url"|name="twitter:card"'
-# esperado: robots 200 text/plain; sitemap 200 application/xml ou text/xml; contagens 1; og image 200 image/png
+# expected: robots 200 text/plain; sitemap 200 application/xml or text/xml; counts 1; og image 200 image/png
 for p in insights speed-insights; do
   curl -s -o /dev/null -w "$p: %{http_code} %{content_type}\n" "https://swapi.build/_vercel/$p/script.js"
 done
-# esperado: 200 application/javascript nos dois
+# expected: 200 application/javascript for both
 ```
 
 Expect `status: 200` and `1` (embedded URLs on `https://swapi.build`, scheme `https`),
@@ -242,7 +242,7 @@ are separate entries — don't read the first `HEAD` MISS as a failure.
 ```bash
 curl -sI https://swapi.build/api/people/1 | grep -i 'x-vercel-cache'   # MISS
 curl -sI https://swapi.build/api/people/1 | grep -i 'x-vercel-cache'   # HIT
-curl -sI https://swapi.build/api/people/random | grep -i 'x-vercel-cache'  # MISS, sempre
+curl -sI https://swapi.build/api/people/random | grep -i 'x-vercel-cache'  # MISS, always
 ```
 
 **Cache poisoning probe** — responses embed absolute URLs built from the per-request host,

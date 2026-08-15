@@ -1,8 +1,8 @@
 package com.eldermoraes;
 
 /**
- * Base URL da request corrente. Todo entry point que serializa entidades
- * (filtro REST, tools MCP) seta antes de qualquer leitura.
+ * Base URL of the current request. Every entry point that serializes entities
+ * (REST filter, MCP tools) sets it before any read.
  */
 public final class RequestBaseUrl {
 

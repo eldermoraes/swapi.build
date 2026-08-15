@@ -11,12 +11,12 @@ import { applySeoMetadata } from './seo';
 import { inject } from '@vercel/analytics';
 import { injectSpeedInsights } from '@vercel/speed-insights';
 
-// Ambos os scripts sao servidos pela borda do Vercel em /_vercel/*. Em dev o
-// Quinoa serve o Vite e esses caminhos nao existem, dai o modo explicito: sem
-// ele os scripts tentariam carregar de localhost:5173 e falhariam no console.
-// A borda so intercepta /_vercel/* quando as features estao habilitadas no
-// projeto — caso contrario o fallback de SPA do Quinoa devolve o index.html
-// com 200, e a coleta falha em silencio. Ver docs/DEPLOY.md.
+// Both scripts are served by the Vercel edge at /_vercel/*. In dev, Quinoa
+// serves Vite and those paths do not exist, hence the explicit mode: without
+// it the scripts would try to load from localhost:5173 and fail in the console.
+// The edge only intercepts /_vercel/* when the features are enabled on the
+// project — otherwise Quinoa's SPA fallback returns index.html with 200,
+// and collection fails silently. See docs/DEPLOY.md.
 const analyticsMode = import.meta.env.PROD ? 'production' : 'development';
 inject({ mode: analyticsMode });
 injectSpeedInsights();
@@ -102,7 +102,7 @@ async function navigate() {
       renderHome(container);
   }
 
-  // Render assíncrono pode terminar depois de outra navegação: não roubar foco/anúncio da página nova
+  // An async render can finish after another navigation: do not steal the new page's focus/announcement
   if (window.location.pathname !== path) return;
 
   window.scrollTo(0, 0);

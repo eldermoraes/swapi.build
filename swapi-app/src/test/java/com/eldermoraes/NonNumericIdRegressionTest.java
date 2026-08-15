@@ -9,11 +9,11 @@ import static org.hamcrest.CoreMatchers.containsString;
 @QuarkusTest
 public class NonNumericIdRegressionTest {
 
-    // Issue #12: um id que nao parseia como int Java falha na conversao do
-    // @PathParam antes do corpo do metodo rodar, e o 404 default do framework
-    // saia sem content-type e sem corpo — violando o contrato text/plain do
-    // openapi.json. O ApiNotFoundMapper garante que TODO 404 da familia /api
-    // carrega text/plain e uma mensagem legivel.
+    // Issue #12: an id that does not parse as a Java int fails in @PathParam
+    // conversion before the method body runs, and the framework's default 404
+    // went out with no content-type and no body — violating the text/plain
+    // contract in openapi.json. The ApiNotFoundMapper guarantees that EVERY 404
+    // in the /api family carries text/plain and a readable message.
 
     private void assertContractual404(String path, String expectedFragment) {
         given().when().get(path).then()
@@ -52,7 +52,7 @@ public class NonNumericIdRegressionTest {
         assertContractual404("/api/vehicles/abc", "No vehicle found with id abc");
     }
 
-    // O conjunto que falha nao e "nao numerico": e "nao parseia como int".
+    // The failing set is not "non-numeric": it is "does not parse as int".
     @Test
     public void intOverflowIdIs404WithBody() {
         assertContractual404("/api/people/2147483648", "No people found with id 2147483648");
@@ -63,17 +63,17 @@ public class NonNumericIdRegressionTest {
         assertContractual404("/api/people/1.5", "No people found with id 1.5");
     }
 
-    // Rota /api inexistente tambem responde o contrato, com mensagem generica.
+    // A nonexistent /api route also answers the contract, with a generic message.
     @Test
     public void unknownApiRouteIs404WithBody() {
         assertContractual404("/api/wookiees/1", "No resource found at /api/wookiees/1");
     }
 
-    // Controle positivo (sugerido na issue #12): um ExceptionMapper escopado a
-    // um prefixo inteiro e o tipo de fix que pode engolir respostas legitimas,
-    // e uma suite que so pina 404 nao distingue um mapper correto de um que
-    // captura demais. Um GET valido continua 200 application/json com o
-    // registro completo — o mapper nao esta over-reaching.
+    // Positive control (suggested in issue #12): an ExceptionMapper scoped to
+    // an entire prefix is the kind of fix that can swallow legitimate
+    // responses, and a suite that only pins 404 cannot distinguish a correct
+    // mapper from one that captures too much. A valid GET still returns 200
+    // application/json with the full record — the mapper is not over-reaching.
     @Test
     public void validIdStillReturns200JsonRecord() {
         given().when().get("/api/people/1").then()
@@ -84,9 +84,9 @@ public class NonNumericIdRegressionTest {
                 .body(containsString("homeworld"));
     }
 
-    // Defesa em profundidade (issue #12): o 404 ecoa o segmento de id
-    // verbatim, entao toda resposta carrega X-Content-Type-Options: nosniff
-    // para impedir reinterpretacao caso um error path devolva tipo sniffavel.
+    // Defense in depth (issue #12): the 404 echoes the id segment verbatim, so
+    // every response carries X-Content-Type-Options: nosniff to prevent
+    // reinterpretation should an error path return a sniffable type.
     @Test
     public void notFoundCarriesNosniffHeader() {
         given().when().get("/api/people/abc").then()

@@ -20,7 +20,7 @@ class OpenApiSpecTest {
 
     @Test
     void specIsServedAsJsonRegardlessOfAcceptHeader() {
-        // Accept genérico (curl/navegador) — a URL diz .json, a resposta TEM que ser JSON
+        // Generic Accept (curl/browser) — the URL says .json, the response MUST be JSON
         given()
                 .accept("*/*")
         .when()
@@ -55,7 +55,7 @@ class OpenApiSpecTest {
             for (Map<String, Object> server : servers) {
                 String url = String.valueOf(server.get("url"));
                 Assertions.assertFalse(url.startsWith("http://") || url.startsWith("https://"),
-                        "servers nao pode conter URL absoluta (base URL e por request): " + url);
+                        "servers must not contain an absolute URL (base URL is per request): " + url);
             }
         }
     }

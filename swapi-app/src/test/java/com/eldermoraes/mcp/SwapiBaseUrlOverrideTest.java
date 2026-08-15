@@ -32,7 +32,7 @@ public class SwapiBaseUrlOverrideTest {
                         assertFalse(r.isError());
                         String json = r.content().get(0).asText().text();
                         assertTrue(json.contains("https://config-wins.example/api/people/1"),
-                                "config explicita deveria vencer o discovery, veio: " + json);
+                                "explicit config should beat discovery, got: " + json);
                     })
                     .send()
                     .thenAssertResults();

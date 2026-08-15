@@ -26,7 +26,7 @@ class OpenApiContractTest {
                 .body("paths.'/api/" + resource + "'.get.summary", not(emptyOrNullString()))
                 .body("paths.'/api/" + resource + "'.get.parameters.find { it.name == 'search' }.description",
                         not(emptyOrNullString()))
-                // by-id: contrato 200/404 explicito
+                // by-id: explicit 200/404 contract
                 .body("paths.'/api/" + resource + "/{id}'.get.responses.'200'", notNullValue())
                 .body("paths.'/api/" + resource + "/{id}'.get.responses.'404'.description", not(emptyOrNullString()))
                 .body("paths.'/api/" + resource + "/{id}'.get.parameters.find { it.name == 'id' }.description",
@@ -44,12 +44,12 @@ class OpenApiContractTest {
         .then()
                 .statusCode(200)
                 .body(base + ".description", not(emptyOrNullString()))
-                // todo campo exposto tem description
+                // every exposed field has a description
                 .body(base + ".properties.every { it.value.description != null && !it.value.description.isEmpty() }",
                         org.hamcrest.Matchers.is(true))
-                // baseUrl e detalhe interno de serializacao, nunca parte do contrato
+                // baseUrl is an internal serialization detail, never part of the contract
                 .body(base + ".properties.baseUrl", org.hamcrest.Matchers.nullValue())
-                // url sempre presente (identidade do recurso)
+                // url is always present (resource identity)
                 .body(base + ".properties.url.description", not(emptyOrNullString()));
     }
 
@@ -59,7 +59,7 @@ class OpenApiContractTest {
         .when().get("/openapi.json")
         .then()
                 .statusCode(200)
-                // o gerador materializa o root como "/api" (sem barra final)
+                // the generator materializes the root as "/api" (no trailing slash)
                 .body("paths.'/api'.get.summary", not(emptyOrNullString()));
     }
 
@@ -81,9 +81,9 @@ class OpenApiContractTest {
         }
 
         org.junit.jupiter.api.Assertions.assertTrue(paths.containsAll(expected),
-                "Paths ausentes na spec: " + expected.stream().filter(p -> !paths.contains(p)).toList());
-        // root (a forma exata /api ou /api/ depende do gerador)
+                "Paths missing from spec: " + expected.stream().filter(p -> !paths.contains(p)).toList());
+        // root (the exact form /api or /api/ depends on the generator)
         org.junit.jupiter.api.Assertions.assertTrue(paths.contains("/api/") || paths.contains("/api"),
-                "Path root ausente na spec");
+                "Root path missing from spec");
     }
 }

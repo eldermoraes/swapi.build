@@ -16,6 +16,26 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.4.1] - 2026-08-15
+
+### Added
+
+- `X-Content-Type-Options: nosniff` on every response (defense in depth
+  suggested in issue #12 follow-up: the /api 404s echo the id segment verbatim,
+  so the header prevents reinterpretation if an error path ever returns a
+  sniffable type), with regression tests pinning the header on 200 and 404.
+- Positive-control regression test proving the `ApiNotFoundMapper` does not
+  over-reach: `GET /api/people/1` still answers 200 `application/json` with the
+  full record.
+
+### Changed
+
+- All remaining Portuguese content translated to English — code comments
+  (backend, tests, frontend, `application.properties`), docs (the MCP server
+  evaluation, renamed to `docs/2026-07-31-mcp-server-evaluation.md`), scripts
+  and workflow comments, and test assertion messages. The project language is
+  English.
+
 ## [2.4.0] - 2026-08-14
 
 ### Added

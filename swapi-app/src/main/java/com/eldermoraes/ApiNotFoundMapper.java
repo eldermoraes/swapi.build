@@ -12,19 +12,20 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Garante que todo 404 da familia /api honra o contrato publicado no
- * openapi.json: text/plain com uma mensagem legivel (issue #12).
+ * Guarantees that every 404 in the /api family honors the contract published
+ * in openapi.json: text/plain with a readable message (issue #12).
  *
- * Sem este mapper, um id que nao parseia como int Java ("abc", "1.5",
- * "2147483648") falha na conversao do @PathParam antes do corpo do resource
- * rodar, e o 404 default do framework sai sem content-type e sem corpo.
- * Os 404 construidos a mao pelos resources ("No people found with id 9999")
- * nao passam por aqui — este mapper so ve NotFoundException do framework.
+ * Without this mapper, an id that does not parse as a Java int ("abc", "1.5",
+ * "2147483648") fails @PathParam conversion before the resource body runs,
+ * and the framework's default 404 goes out with no content type and no body.
+ * The 404s hand-built by the resources ("No people found with id 9999")
+ * do not pass through here — this mapper only sees the framework's
+ * NotFoundException.
  */
 @Provider
 public class ApiNotFoundMapper implements ExceptionMapper<NotFoundException> {
 
-    // Plural da rota -> forma singular usada nas mensagens dos resources.
+    // Route plural -> singular form used in the resources' messages.
     private static final Map<String, String> MESSAGE_FORMS = Map.of(
             "people", "people",
             "films", "film",

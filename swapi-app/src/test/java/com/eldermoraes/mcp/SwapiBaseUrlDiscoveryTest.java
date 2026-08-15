@@ -20,9 +20,9 @@ public class SwapiBaseUrlDiscoveryTest {
                         assertFalse(r.isError());
                         String json = r.content().get(0).asText().text();
                         assertTrue(json.contains("http://localhost:8081/api/people/1"),
-                                "esperava URL derivada do host da request, veio: " + json);
+                                "expected URL derived from the request host, got: " + json);
                         assertFalse(json.contains("swapi.build/api"),
-                                "nao deveria haver dominio de producao hardcoded: " + json);
+                                "there should be no hardcoded production domain: " + json);
                     })
                     .send()
                     .thenAssertResults();

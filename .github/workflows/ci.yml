@@ -1,15 +1,15 @@
 name: CI
 
-# Até 10/08/2026 a suíte só rodava dentro do pipeline de release (deploy.yml,
-# disparado por tag v*). Um erro só aparecia no meio de um release já em
-# andamento. Este workflow roda o mesmo gate em PR e em push na main.
+# Until 2026-08-10 the suite only ran inside the release pipeline (deploy.yml,
+# triggered by a v* tag). An error only surfaced in the middle of a release
+# already in flight. This workflow runs the same gate on PRs and pushes to main.
 on:
   push:
     branches: [main]
   pull_request:
 
-# Um push novo na mesma branch/PR cancela o run anterior: aqui não há deploy,
-# só verificação — o resultado antigo não interessa mais.
+# A new push on the same branch/PR cancels the previous run: there is no deploy
+# here, only verification — the old result no longer matters.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -29,10 +29,10 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      # package, não test: `mvnw test` roda com o Quinoa desabilitado ("Quinoa is
-      # disabled by default in tests"), então a suíte sozinha nunca instala o Node
-      # nem roda o vite. Só o package exercita o build do frontend, que é o que o
-      # deploy faz. Custa ~13s a mais (medido a frio, com .quinoa/ vazio).
+      # package, not test: `mvnw test` runs with Quinoa disabled ("Quinoa is
+      # disabled by default in tests"), so the suite alone never installs Node
+      # nor runs vite. Only package exercises the frontend build, which is what
+      # the deploy does. Costs ~13s extra (measured cold, with .quinoa/ empty).
       - name: Full test suite + frontend build
         working-directory: swapi-app
         run: ./mvnw package

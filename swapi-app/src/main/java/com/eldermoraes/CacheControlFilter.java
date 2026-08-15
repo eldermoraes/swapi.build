@@ -12,39 +12,39 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.util.List;
 
 /**
- * Marca como cacheavel na borda tudo que e deterministico em /api.
+ * Marks everything deterministic under /api as edge-cacheable.
  *
- * Os dados sao JSONs estaticos embutidos no binario, entao a resposta so muda
- * num deploy novo — e a chave de cache da Vercel inclui a deployment URL, o que
- * invalida a entrada automaticamente. Por isso o TTL da borda e alto e o do
- * browser e curto: o cache do browser NAO e invalidado por deploy.
+ * The data is static JSON embedded in the binary, so a response only changes
+ * on a new deploy — and Vercel's cache key includes the deployment URL, which
+ * invalidates the entry automatically. That is why the edge TTL is high and
+ * the browser TTL is short: the browser cache is NOT invalidated by a deploy.
  *
- * Politica deny-list: todo endpoint novo em /api nasce cacheavel na borda;
- * endpoint nao-deterministico precisa entrar na exclusao. O header so e gravado
- * se a resposta ainda nao tiver um Cache-Control, entao um resource pode optar
- * por sair (ex.: no-store) setando o header ele mesmo.
+ * Deny-list policy: every new /api endpoint is born edge-cacheable;
+ * a non-deterministic endpoint must be added to the exclusion. The header is
+ * only written if the response does not already carry a Cache-Control, so a
+ * resource can opt out (e.g. no-store) by setting the header itself.
  */
 @Provider
 public class CacheControlFilter implements ContainerResponseFilter {
 
     private static final String RANDOM = "random";
 
-    // Definicao unica em application.properties, compartilhada com o filtro HTTP
-    // que cobre /openapi.json. Package-private: o padrao Quarkus para injecao
-    // de campo sem reflexao.
+    // Single definition in application.properties, shared with the HTTP filter
+    // that covers /openapi.json. Package-private: the Quarkus idiom for field
+    // injection without reflection.
     @ConfigProperty(name = "swapi.cache-control.public")
     String cacheControl;
 
     @Override
     public void filter(ContainerRequestContext request, ContainerResponseContext response) {
-        // Nao sobrescreve um Cache-Control que o resource tenha setado de proposito.
+        // Does not overwrite a Cache-Control the resource set on purpose.
         if (isCacheable(request, response)
                 && !response.getHeaders().containsKey(HttpHeaders.CACHE_CONTROL)) {
             response.getHeaders().putSingle(HttpHeaders.CACHE_CONTROL, cacheControl);
-            // O filtro CORS ecoa o Origin da request e nao emite Vary. Sem isto a
-            // borda serviria o Access-Control-Allow-Origin de um origin para
-            // outro — e a variante sem Origin para um cliente de browser.
-            // add, nao putSingle: preserva um Vary que ja exista (ex.: Accept-Encoding).
+            // The CORS filter echoes the request Origin and emits no Vary. Without
+            // this the edge would serve one origin's Access-Control-Allow-Origin
+            // to another — and the Origin-less variant to a browser client.
+            // add, not putSingle: preserves any existing Vary (e.g. Accept-Encoding).
             response.getHeaders().add(HttpHeaders.VARY, "Origin");
         }
     }
@@ -54,7 +54,7 @@ public class CacheControlFilter implements ContainerResponseFilter {
                 && !HttpMethod.HEAD.equals(request.getMethod())) {
             return false;
         }
-        // A borda so cacheia 200/404 (5xx nunca) — nao adianta marcar o resto.
+        // The edge only caches 200/404 (never 5xx) — marking anything else is pointless.
         if (response.getStatus() != 200 && response.getStatus() != 404) {
             return false;
         }

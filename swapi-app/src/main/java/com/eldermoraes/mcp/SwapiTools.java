@@ -34,13 +34,13 @@ public class SwapiTools {
     @ConfigProperty(name = "swapi.public-base-url")
     Optional<String> publicBaseUrl;
 
-    // Client proxy request-scoped: resolve para a request MCP ativa no momento
-    // da chamada da tool (transporte HTTP ativa o contexto CDI de request).
+    // Request-scoped client proxy: resolves to the MCP request active at the
+    // moment of the tool call (the HTTP transport activates the CDI request context).
     @Inject HttpServerRequest request;
 
-    // Os services montam URLs como baseUrl + path; o REST descobre via UriInfo por
-    // request. Aqui a config explicita vence (escape hatch operacional); sem ela,
-    // o dominio vem da propria request - nada de dominio hardcoded no binario.
+    // The services build URLs as baseUrl + path; REST discovers it via UriInfo per
+    // request. Here the explicit config wins (operational escape hatch); without it,
+    // the domain comes from the request itself - no hardcoded domain in the binary.
     private String resolveBaseUrl() {
         if (publicBaseUrl.isPresent()) {
             return publicBaseUrl.get();
