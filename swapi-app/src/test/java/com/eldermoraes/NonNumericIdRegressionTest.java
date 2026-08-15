@@ -68,4 +68,36 @@ public class NonNumericIdRegressionTest {
     public void unknownApiRouteIs404WithBody() {
         assertContractual404("/api/wookiees/1", "No resource found at /api/wookiees/1");
     }
+
+    // Controle positivo (sugerido na issue #12): um ExceptionMapper escopado a
+    // um prefixo inteiro e o tipo de fix que pode engolir respostas legitimas,
+    // e uma suite que so pina 404 nao distingue um mapper correto de um que
+    // captura demais. Um GET valido continua 200 application/json com o
+    // registro completo — o mapper nao esta over-reaching.
+    @Test
+    public void validIdStillReturns200JsonRecord() {
+        given().when().get("/api/people/1").then()
+                .statusCode(200)
+                .contentType("application/json")
+                .body(containsString("Luke Skywalker"))
+                .body(containsString("height"))
+                .body(containsString("homeworld"));
+    }
+
+    // Defesa em profundidade (issue #12): o 404 ecoa o segmento de id
+    // verbatim, entao toda resposta carrega X-Content-Type-Options: nosniff
+    // para impedir reinterpretacao caso um error path devolva tipo sniffavel.
+    @Test
+    public void notFoundCarriesNosniffHeader() {
+        given().when().get("/api/people/abc").then()
+                .statusCode(404)
+                .header("X-Content-Type-Options", "nosniff");
+    }
+
+    @Test
+    public void successCarriesNosniffHeader() {
+        given().when().get("/api/people/1").then()
+                .statusCode(200)
+                .header("X-Content-Type-Options", "nosniff");
+    }
 }
