@@ -230,4 +230,21 @@ class CacheHeadersTest {
                 cacheControl == null || !cacheControl.contains("s-maxage"),
                 "/does-not-exist must not be cached at the edge, but got: " + cacheControl);
     }
+
+    // quarkus.http.filter runs before routing, so without the methods=GET,HEAD
+    // restriction the SPA filter would stamp the edge TTL on the answer to a
+    // write request against a SPA path.
+    @Test
+    void nonGetOnASpaRouteStaysUncached() {
+        String cacheControl = given()
+                .accept("text/html")
+        .when()
+                .post("/about")
+        .then()
+                .extract().header("Cache-Control");
+
+        Assertions.assertTrue(
+                cacheControl == null || !cacheControl.contains("s-maxage"),
+                "POST /about must not be cached at the edge, but got: " + cacheControl);
+    }
 }
