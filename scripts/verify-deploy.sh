@@ -155,6 +155,10 @@ echo "$vary_html" | grep -qi 'origin' && pass "SPA HTML / Vary contains Origin (
   || fail "SPA HTML / Vary: Origin" "Vary header containing Origin" "${vary_html:-missing}"
 
 # --- Prod only: edge cache + poisoning X-Forwarded-Host ---------------------
+# MISS -> HIT only makes sense against the production edge: a preview deployment sits
+# behind the SSO bypass, whose header suppresses the shared cache, so the probe would
+# read MISS forever and say nothing. Preview is covered by the manual runbook step
+# before the approval gate (same reasoning as the /api probes above).
 if [ "$MODE" = "prod" ]; then
   c1=$("${CURL[@]}" -I "$BASE/api/people/1" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-vercel-cache"{print $2}')
   c2=$("${CURL[@]}" -I "$BASE/api/people/1" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-vercel-cache"{print $2}')
@@ -173,10 +177,20 @@ if [ "$MODE" = "prod" ]; then
   m=$("${CURL[@]}" "$BASE/api/people/3" | grep -c evil.example)
   [ "$n" = "0" ] && [ "$m" = "0" ] && pass "poisoning X-Forwarded-Host: 0 occurrences" \
     || fail "poisoning X-Forwarded-Host" "0 and 0" "$n and $m (PURGE THE CACHE NOW — see runbook)"
-  seo_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/sitemap.xml" | grep -c evil.example)
-  seo_clean=$("${CURL[@]}" "$BASE/sitemap.xml" | grep -c evil.example)
+  # The ?poison=$$ is load-bearing: the edge cache key includes the query string, and the
+  # probes above already primed the CLEAN entry for the bare path (lines with $BASE/ and
+  # $BASE/sitemap.xml). Without a unique key the spoofed request would just read that HIT
+  # and the probe would pass no matter what the origin does.
+  seo_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/sitemap.xml?poison=$$" | grep -c evil.example)
+  seo_clean=$("${CURL[@]}" "$BASE/sitemap.xml?poison=$$" | grep -c evil.example)
   [ "$seo_poison" = "0" ] && [ "$seo_clean" = "0" ] && pass "poisoning SEO X-Forwarded-Host: 0 occurrences" \
     || fail "poisoning SEO X-Forwarded-Host" "0 and 0" "$seo_poison and $seo_clean (PURGE THE CACHE NOW — see runbook)"
+  # The SPA HTML embeds canonical/og:url/og:image built from the request host, and it is
+  # storable at the edge since 2.4.2 — a poisoned entry would be served for a year.
+  home_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/?poison=$$" | grep -c evil.example)
+  home_clean=$("${CURL[@]}" "$BASE/?poison=$$" | grep -c evil.example)
+  [ "$home_poison" = "0" ] && [ "$home_clean" = "0" ] && pass "poisoning SPA HTML X-Forwarded-Host: 0 occurrences" \
+    || fail "poisoning SPA HTML X-Forwarded-Host" "0 and 0" "$home_poison and $home_clean (PURGE THE CACHE NOW — see runbook)"
 fi
 
 echo

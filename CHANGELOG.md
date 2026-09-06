@@ -28,11 +28,20 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
   edge injected `max-age=0`, so every page view on a cold PoP executed the function
   (`usage_anomaly` of 2026-09-03: six parallel cold starts for three page views).
   Explicit, anchored route list — unknown paths are still not cached, and `/api/*`,
-  `/openapi.json`, `/assets/*` and `/mcp` are untouched. Regression tests in
-  `CacheHeadersTest`.
+  `/openapi.json`, `/assets/*` and `/mcp` are untouched. Restricted to `GET`/`HEAD`.
+  Note the edge cache key includes the query string, so `/?utm_source=…` and friends
+  are separate entries and still execute the function on a cold PoP — the saving
+  applies to the bare URLs. Regression tests in `CacheHeadersTest`.
+- `SeoRoutes` serves the SEO-injected document for every known SPA route regardless of
+  the `Accept` header, so a cached route has exactly one body. Before, a non-HTML
+  `Accept` took a different branch, and the first such request after a deploy could pin
+  the wrong response at the edge for the whole deployment.
 - Deploy probes (`scripts/verify-deploy.sh`, `docs/DEPLOY.md`): `Vary: Origin` on the
-  SPA HTML in both modes, and `MISS` → `HIT` on `/` and `/resource/planets` in
-  production, with a Troubleshooting entry for "HTML always MISS".
+  SPA HTML in both modes, `MISS` → `HIT` on `/` and `/resource/planets` in production,
+  and a cache-poisoning probe on `/` (now that the HTML is storable at the edge), with a
+  Troubleshooting entry for "HTML always MISS". The poisoning probes on `/` and
+  `/sitemap.xml` carry a unique query string — the edge key includes it, and without it
+  they would read the entry the earlier SEO probes primed clean and pass unconditionally.
 
 ## [2.4.1] - 2026-08-15
 

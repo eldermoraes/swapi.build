@@ -267,9 +267,19 @@ this is a regression check:
 ```bash
 curl -s -H 'X-Forwarded-Host: evil.example' https://swapi.build/api/people/3 | grep -c evil.example  # 0
 curl -s https://swapi.build/api/people/3 | grep -c evil.example                                      # 0
+curl -s -H 'X-Forwarded-Host: evil.example' "https://swapi.build/?poison=$$" | grep -c evil.example   # 0
+curl -s "https://swapi.build/?poison=$$" | grep -c evil.example                                       # 0
 ```
 
-If either is non-zero, purge the cache immediately and add `Vary: X-Forwarded-Host` to the
+The `?poison=$$` on the SPA HTML pair is not decoration: the edge cache key **includes the
+query string**, and the SEO probes earlier in this runbook already primed the clean entry for
+the bare `/` (and for `/sitemap.xml`). Without a unique key the spoofed request reads that
+primed `HIT` and the probe passes unconditionally — it would prove nothing. The same query is
+applied to the `/sitemap.xml` pair in `scripts/verify-deploy.sh` for exactly this reason. The
+`/` pair matters more since 2.4.2: the SPA HTML embeds `canonical`, `og:url` and `og:image`
+built from the request host and is now storable at the edge for a year.
+
+If any is non-zero, purge the cache immediately and add `Vary: X-Forwarded-Host` to the
 cacheable response before redeploying.
 
 ### Questions settled on the 2026-08-03 production deploy
