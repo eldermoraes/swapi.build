@@ -161,6 +161,13 @@ public class SeoRoutes {
         if (excluded(path)) {
             return false;
         }
+        // The SPA HTML is stored at the edge by path alone (quarkus.http.filter.spa)
+        // and Accept is not part of the cache key, so a known route must answer the
+        // same document to every client. Deciding by Accept here would let the first
+        // non-HTML request after a deploy pin the wrong body for the whole deployment.
+        if (metadata.isKnownDocumentPath(path)) {
+            return true;
+        }
         String accept = rc.request().getHeader(HttpHeaders.ACCEPT);
         boolean acceptsHtml = accept == null || accept.contains("text/html") || accept.contains("*/*");
         return acceptsHtml && !lastSegment(path).contains(".");

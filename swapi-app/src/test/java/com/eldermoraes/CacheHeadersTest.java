@@ -164,4 +164,87 @@ class CacheHeadersTest {
         .then()
                 .header("Vary", containsString("Origin"));
     }
+
+    // --- SPA HTML ---------------------------------------------------------------
+    // Exact required value, locked down here: in production code it exists exactly
+    // once, in the swapi.cache-control.html property. It is NOT the /api value on
+    // purpose: the browser must never keep HTML (max-age=0 + must-revalidate), or a
+    // deploy leaves a stale index.html pointing at asset hashes that no longer exist;
+    // only the edge keeps it (s-maxage), and the edge key includes the deployment.
+    private static final String HTML_CACHE_CONTROL =
+            "public, max-age=0, must-revalidate, s-maxage=31536000";
+
+    // Every route in getRoute() (main.ts) / PUBLIC_SEO_ROUTES (seo.ts). A new SPA route
+    // must be added here AND to quarkus.http.filter.spa.matches, or it only loses cache.
+    private static final List<String> SPA_ROUTES = List.of(
+            "/", "/docs", "/docs/mcp", "/about", "/privacy", "/terms",
+            "/resource/planets", "/resource/people/1");
+
+    @Test
+    void spaHtmlRoutesAreCacheableAtTheEdgeButNeverInTheBrowser() {
+        for (String path : SPA_ROUTES) {
+            List<String> values = given()
+                    .accept("text/html")
+            .when()
+                    .get(path)
+            .then()
+                    .statusCode(200)
+                    .contentType(containsString("text/html"))
+                    .extract().headers().getValues("Cache-Control");
+
+            Assertions.assertEquals(List.of(HTML_CACHE_CONTROL), values,
+                    path + " must carry exactly one Cache-Control with the HTML policy, but got: " + values);
+        }
+    }
+
+    // The CORS filter echoes the request Origin on HTML too; without Vary the edge
+    // would pin one origin's Access-Control-Allow-Origin on the cached page.
+    @Test
+    void spaHtmlRoutesVaryByOrigin() {
+        for (String path : SPA_ROUTES) {
+            given()
+                    .accept("text/html")
+                    .header("Origin", "https://app.example")
+            .when()
+                    .get(path)
+            .then()
+                    .statusCode(200)
+                    .header("Vary", containsString("Origin"));
+        }
+    }
+
+    // Unknown paths are unique by definition (scanners), so caching them buys nothing
+    // and a catch-all regex is exactly the thing that could swallow /api or /_vercel.
+    // The filter is an explicit, anchored list: anything else stays untouched.
+    @Test
+    void unknownPathDoesNotGetTheSpaHtmlPolicy() {
+        String cacheControl = given()
+                .accept("text/html")
+        .when()
+                .get("/does-not-exist")
+        .then()
+                .statusCode(200)
+                .extract().header("Cache-Control");
+
+        Assertions.assertTrue(
+                cacheControl == null || !cacheControl.contains("s-maxage"),
+                "/does-not-exist must not be cached at the edge, but got: " + cacheControl);
+    }
+
+    // quarkus.http.filter runs before routing, so without the methods=GET,HEAD
+    // restriction the SPA filter would stamp the edge TTL on the answer to a
+    // write request against a SPA path.
+    @Test
+    void nonGetOnASpaRouteStaysUncached() {
+        String cacheControl = given()
+                .accept("text/html")
+        .when()
+                .post("/about")
+        .then()
+                .extract().header("Cache-Control");
+
+        Assertions.assertTrue(
+                cacheControl == null || !cacheControl.contains("s-maxage"),
+                "POST /about must not be cached at the edge, but got: " + cacheControl);
+    }
 }

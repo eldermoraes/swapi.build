@@ -16,6 +16,33 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.4.2] - 2026-09-06
+
+### Changed
+
+- The SPA HTML of the real routes (`/`, `/docs`, `/docs/mcp`, `/about`, `/privacy`,
+  `/terms`, `/resource/<type>`, `/resource/<type>/<id>`) is now edge-cacheable:
+  `public, max-age=0, must-revalidate, s-maxage=31536000` (new single-source property
+  `swapi.cache-control.html`, deliberately not the `/api` value — the browser must never
+  keep HTML across a deploy). Before, the origin sent no `Cache-Control` and the Vercel
+  edge injected `max-age=0`, so every page view on a cold PoP executed the function
+  (`usage_anomaly` of 2026-09-03: six parallel cold starts for three page views).
+  Explicit, anchored route list — unknown paths are still not cached, and `/api/*`,
+  `/openapi.json`, `/assets/*` and `/mcp` are untouched. Restricted to `GET`/`HEAD`.
+  Note the edge cache key includes the query string, so `/?utm_source=…` and friends
+  are separate entries and still execute the function on a cold PoP — the saving
+  applies to the bare URLs. Regression tests in `CacheHeadersTest`.
+- `SeoRoutes` serves the SEO-injected document for every known SPA route regardless of
+  the `Accept` header, so a cached route has exactly one body. Before, a non-HTML
+  `Accept` took a different branch, and the first such request after a deploy could pin
+  the wrong response at the edge for the whole deployment.
+- Deploy probes (`scripts/verify-deploy.sh`, `docs/DEPLOY.md`): `Vary: Origin` on the
+  SPA HTML in both modes, `MISS` → `HIT` on `/` and `/resource/planets` in production,
+  and a cache-poisoning probe on `/` (now that the HTML is storable at the edge), with a
+  Troubleshooting entry for "HTML always MISS". The poisoning probes on `/` and
+  `/sitemap.xml` carry a unique query string — the edge key includes it, and without it
+  they would read the entry the earlier SEO probes primed clean and pass unconditionally.
+
 ## [2.4.1] - 2026-08-15
 
 ### Added
@@ -373,7 +400,8 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...HEAD
+[2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/eldermoraes/swapi.build/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/eldermoraes/swapi.build/compare/v2.3.0...v2.3.1
