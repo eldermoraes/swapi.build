@@ -221,13 +221,13 @@ class CacheHeadersTest {
         String cacheControl = given()
                 .accept("text/html")
         .when()
-                .get("/nao-existe")
+                .get("/does-not-exist")
         .then()
                 .statusCode(200)
                 .extract().header("Cache-Control");
 
         Assertions.assertTrue(
                 cacheControl == null || !cacheControl.contains("s-maxage"),
-                "/nao-existe must not be cached at the edge, but got: " + cacheControl);
+                "/does-not-exist must not be cached at the edge, but got: " + cacheControl);
     }
 }
