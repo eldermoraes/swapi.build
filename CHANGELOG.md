@@ -16,6 +16,24 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.4.2] - 2026-09-06
+
+### Changed
+
+- The SPA HTML of the real routes (`/`, `/docs`, `/docs/mcp`, `/about`, `/privacy`,
+  `/terms`, `/resource/<type>`, `/resource/<type>/<id>`) is now edge-cacheable:
+  `public, max-age=0, must-revalidate, s-maxage=31536000` (new single-source property
+  `swapi.cache-control.html`, deliberately not the `/api` value — the browser must never
+  keep HTML across a deploy). Before, the origin sent no `Cache-Control` and the Vercel
+  edge injected `max-age=0`, so every page view on a cold PoP executed the function
+  (`usage_anomaly` of 2026-09-03: six parallel cold starts for three page views).
+  Explicit, anchored route list — unknown paths are still not cached, and `/api/*`,
+  `/openapi.json`, `/assets/*` and `/mcp` are untouched. Regression tests in
+  `CacheHeadersTest`.
+- Deploy probes (`scripts/verify-deploy.sh`, `docs/DEPLOY.md`): `Vary: Origin` on the
+  SPA HTML in both modes, and `MISS` → `HIT` on `/` and `/resource/planets` in
+  production, with a Troubleshooting entry for "HTML always MISS".
+
 ## [2.4.1] - 2026-08-15
 
 ### Added
@@ -373,7 +391,8 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...HEAD
+[2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/eldermoraes/swapi.build/compare/v2.3.1...v2.4.0
 [2.3.1]: https://github.com/eldermoraes/swapi.build/compare/v2.3.0...v2.3.1
