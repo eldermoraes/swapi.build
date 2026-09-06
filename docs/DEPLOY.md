@@ -245,6 +245,20 @@ curl -sI https://swapi.build/api/people/1 | grep -i 'x-vercel-cache'   # HIT
 curl -sI https://swapi.build/api/people/random | grep -i 'x-vercel-cache'  # MISS, always
 ```
 
+The SPA HTML of the real routes (`/`, `/docs`, `/docs/mcp`, `/about`, `/privacy`, `/terms`,
+`/resource/<type>`, `/resource/<type>/<id>`) is edge-cached too since 2.4.2. The client
+sees `public, max-age=0, must-revalidate` — indistinguishable from the pre-2.4.2 default
+the edge injected — so the **only** proof is `MISS` → `HIT`. Unknown paths are not cached
+on purpose (unique by definition; the filter is an explicit route list).
+
+```bash
+curl -sI -H 'Accept: text/html' https://swapi.build/ | grep -i 'x-vercel-cache'                  # MISS
+curl -sI -H 'Accept: text/html' https://swapi.build/ | grep -i 'x-vercel-cache'                  # HIT
+curl -sI -H 'Accept: text/html' https://swapi.build/resource/planets | grep -i 'x-vercel-cache'  # MISS
+curl -sI -H 'Accept: text/html' https://swapi.build/resource/planets | grep -i 'x-vercel-cache'  # HIT
+curl -sI -H 'Accept: text/html' https://swapi.build/does-not-exist | grep -i 'x-vercel-cache'    # MISS, always
+```
+
 **Cache poisoning probe** — responses embed absolute URLs built from the per-request host,
 and `X-Forwarded-Host` is *not* part of the cache key. Vercel overwrites the header (verified
 2026-08-03: plain spoof, RFC 7239 `Forwarded`, and a duplicated header were all ignored), so
@@ -295,3 +309,4 @@ project setting (`resourceConfig`), applied by `PATCH` without a redeploy — se
 | First request after a deploy takes ~11s | Container cold start (image pull + boot). Measured 10.9s on 2026-08-03. Edge cache makes the function idle more, so cold starts now hit the uncached `/random` endpoints more often than before. The first external request after the second 2026-08-03 deploy took only 1.67s, but that is **not** a counter-measurement: nothing rules out a platform health check having booted the instance first. Treat ~11s as the number to budget against. |
 | `Error: fetch failed` / `"reason": "deploy_failed"` from the CLI mid-build | The CLI lost its log stream — **the remote build usually keeps running**. Do not paste the `retry deploy` command the CLI suggests: that starts a second native build in parallel. Get the deployment id from the CLI output (or `list_deployments`) and poll `GET /v13/deployments/<id>` until `readyState` leaves `BUILDING`. Seen on 2026-08-03: the CLI errored out, the build finished `READY` normally, and the preview verified clean. |
 | `504` / `FUNCTION_INVOCATION_TIMEOUT` on the first request after a deploy | The cold start (~11s measured) exceeded `functionDefaultTimeout`, now **60s** since 2026-08-03 — the earlier 15s left only ~4s of margin. Read the current value with `GET /v9/projects/swapi-build`; change it with `PATCH` and the same `resourceConfig` shape (`{"fluid":true,"functionDefaultRegions":["iad1"],"functionDefaultTimeout":60}`). It is a project setting: it takes effect immediately, without a redeploy. |
+| SPA HTML (`/`, `/resource/*`) always `x-vercel-cache: MISS` | The `quarkus.http.filter.spa` block in `application.properties` is missing or its `matches` regex no longer covers the route (the list is explicit and anchored — a new SPA route must be added there and to `CacheHeadersTest.SPA_ROUTES`). Without it the edge injects `public, max-age=0, must-revalidate` and every cold-PoP page view executes the function (usage_anomaly of 2026-09-03). Note the client never sees `s-maxage` (the CDN strips it): only MISS → HIT proves the cache. If the header is present at the origin and the edge still refuses to store, drop `must-revalidate` from `swapi.cache-control.html` and redeploy. |
