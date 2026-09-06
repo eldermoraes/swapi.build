@@ -150,6 +150,9 @@ echo "$vary" | grep -qi 'origin' && pass "Vary contains Origin ($vary)" \
 acao=$("${CURL[@]}" -o /dev/null -w '%header{access-control-allow-origin}' "$BASE/api/people/1")
 [ -z "$acao" ] && pass "no Origin on the request -> no ACAO" \
   || fail "ACAO without Origin" "empty" "$acao"
+vary_html=$("${CURL[@]}" -I -H 'Accept: text/html' -H 'Origin: https://evil.example' "$BASE/" | tr -d '\r' | grep -i '^vary')
+echo "$vary_html" | grep -qi 'origin' && pass "SPA HTML / Vary contains Origin ($vary_html)" \
+  || fail "SPA HTML / Vary: Origin" "Vary header containing Origin" "${vary_html:-missing}"
 
 # --- Prod only: edge cache + poisoning X-Forwarded-Host ---------------------
 if [ "$MODE" = "prod" ]; then
@@ -160,6 +163,12 @@ if [ "$MODE" = "prod" ]; then
   cr=$("${CURL[@]}" -I "$BASE/api/people/random" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-vercel-cache"{print $2}')
   [ "$cr" = "MISS" ] && pass "/api/people/random: always MISS" \
     || fail "/api/people/random cache" "MISS" "$cr"
+  for p in / /resource/planets; do
+    h1=$("${CURL[@]}" -I -H 'Accept: text/html' "$BASE$p" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-vercel-cache"{print $2}')
+    h2=$("${CURL[@]}" -I -H 'Accept: text/html' "$BASE$p" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-vercel-cache"{print $2}')
+    [ "$h2" = "HIT" ] && pass "edge cache SPA HTML $p: $h1 -> HIT" \
+      || fail "edge cache SPA HTML $p" "second read HIT" "$h1 -> $h2 (HTML always MISS — see runbook Troubleshooting)"
+  done
   n=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/api/people/3" | grep -c evil.example)
   m=$("${CURL[@]}" "$BASE/api/people/3" | grep -c evil.example)
   [ "$n" = "0" ] && [ "$m" = "0" ] && pass "poisoning X-Forwarded-Host: 0 occurrences" \
