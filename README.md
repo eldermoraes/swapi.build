@@ -70,6 +70,14 @@ Full setup guides: **[swapi.build/docs/mcp](https://swapi.build/docs/mcp)**
 `resource` is one of `PEOPLE`, `FILMS`, `PLANETS`, `SPECIES`, `STARSHIPS`, `VEHICLES`.
 Ids are the record ids from each entity's `url` field (for `FILMS`, `1` = A New Hope).
 
+**Caching:** Quarkiverse MCP Server 2.0.0 emits the required `ttlMs: 0` and
+`cacheScope: "public"` fields on stateless discovery and tool-list responses.
+Zero TTL means immediately stale; no positive freshness period is configured.
+Its [cache hints](https://github.com/quarkiverse/quarkus-mcp-server/blob/2.0.0/docs/modules/ROOT/pages/release-notes.adoc)
+apply to discovery, list methods and `resources/read`, **not `tools/call`**.
+The Star Wars data here is exposed through tools, so tool-result caching is not
+enabled, including for `sw_random`. REST/edge caching is a separate mechanism.
+
 <details>
 <summary><strong>Claude Code</strong></summary>
 

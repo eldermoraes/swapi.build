@@ -125,6 +125,17 @@ curl -s -b jar.txt -X POST "https://<preview-host>/mcp" \
 
 Expect `isError: false` and embedded URLs on the preview host.
 
+**MCP discovery / tool-list cache fields** — since 2.4.3, the automated probes
+also send stateless `server/discover` and `tools/list` requests. Use the same
+protocol headers and `_meta` as above, set `Mcp-Method` and JSON `method` to the
+method being checked, and omit `Mcp-Name`, `name` and `arguments`.
+Both responses must have flat `result.ttlMs: 0` and
+`result.cacheScope: "public"`, with no nested `result.cacheControl`.
+These fields are required by the 2026-07-28 protocol even when no positive
+cache lifetime is configured. CR1 omitted them; checking the native preview
+and production response guards against serialization regressions.
+This does not enable caching of `tools/call` results.
+
 **MCP stateful** — the probe that catches the instance-affinity bug. Twelve
 concurrent calls on one session must all return 200; before `auto-init` this
 returned 33–58% `404`:

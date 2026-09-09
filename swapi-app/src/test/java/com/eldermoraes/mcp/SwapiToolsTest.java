@@ -32,6 +32,8 @@ public class SwapiToolsTest {
         client().when()
                 .toolsList(page -> {
                     assertEquals(4, page.size());
+                    // Older protocols do not define the stateless cache fields.
+                    assertNull(page.cacheControl());
                     for (String name : java.util.List.of("sw_list", "sw_get", "sw_random", "sw_search")) {
                         var tool = page.findByName(name);
                         assertNotNull(tool, name + " missing");
