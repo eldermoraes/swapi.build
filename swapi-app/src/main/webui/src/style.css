@@ -570,3 +570,72 @@
 .webmcp-guide code {
   overflow-wrap: anywhere;
 }
+
+.webmcp-copy {
+  display: grid;
+  gap: 1rem;
+  justify-items: start;
+}
+
+.webmcp-guide ol {
+  padding-left: 1.5rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+
+.webmcp-tools td {
+  padding: 1rem 0.75rem;
+  vertical-align: top;
+  font-size: 0.9rem;
+}
+
+.webmcp-tools td:first-child,
+.webmcp-tools td:nth-child(2) {
+  white-space: nowrap;
+}
+
+.webmcp-tools td code {
+  font-size: 0.8rem;
+}
+
+.webmcp-notes {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.25rem 0;
+  font-size: 0.9rem;
+  color: var(--sw-text-sub);
+}
+
+.webmcp-notes strong {
+  color: var(--sw-text);
+}
+
+@media (max-width: 640px) {
+  .webmcp-tools thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .webmcp-tools tr {
+    display: grid;
+    gap: 0.5rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--sw-hairline-soft);
+  }
+
+  .webmcp-tools td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+
+  .webmcp-tools td[data-label]::before {
+    content: attr(data-label) ": ";
+    color: var(--sw-text-dim);
+    font-size: 0.8rem;
+  }
+}

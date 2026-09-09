@@ -16,6 +16,13 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.5.1] - 2026-09-09
+
+### Fixed
+
+- Restore readable WebMCP guide tables with spaced columns on desktop and stacked tool entries on mobile.
+- Separate resource, record ID, search and response notes, and improve guide paragraph and list spacing.
+
 ## [2.5.0] - 2026-09-09
 
 ### Added
@@ -456,3 +463,5 @@ snapshot version is not a release. -->
 [1.1]: https://github.com/eldermoraes/swapi.build/releases/tag/v1.1
 
 [2.5.0]: https://github.com/eldermoraes/swapi.build/compare/v2.4.3...v2.5.0
+
+[2.5.1]: https://github.com/eldermoraes/swapi.build/compare/v2.5.0...v2.5.1
