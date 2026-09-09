@@ -66,6 +66,12 @@ echo "$robots" | grep -q "Sitemap: $BASE/sitemap.xml" && pass "robots.txt points
 sitemap=$("${CURL[@]}" "$BASE/sitemap.xml")
 echo "$sitemap" | grep -q "<loc>$BASE/docs</loc>" && pass "sitemap.xml lists /docs on the host" \
   || fail "sitemap.xml /docs" "<loc>$BASE/docs</loc>" "missing"
+webmcp_html=$("${CURL[@]}" -H 'Accept: text/html' "$BASE/docs/webmcp")
+echo "$webmcp_html" | grep -q '<title>WebMCP in the browser - SWAPI</title>' && pass "WebMCP guide title" \
+  || fail "WebMCP guide title" "route-specific title" "missing"
+echo "$sitemap" | grep -q "<loc>$BASE/docs/webmcp</loc>" && pass "sitemap.xml lists WebMCP guide" \
+  || fail "sitemap.xml WebMCP guide" "<loc>$BASE/docs/webmcp</loc>" "missing"
+
 
 ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' "$BASE/og-image.png")
 case "$ct" in "200 image/png"*) pass "og-image.png served as PNG ($ct)";;

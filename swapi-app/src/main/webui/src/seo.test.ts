@@ -65,3 +65,11 @@ describe('SEO metadata', () => {
     );
   });
 });
+
+it('gives the WebMCP guide an indexable canonical route', () => {
+  expect(getSeoMetadata('/docs/webmcp')).toMatchObject({
+    canonicalPath: '/docs/webmcp',
+    title: 'WebMCP in the browser - SWAPI',
+    robots: 'index,follow',
+  });
+});

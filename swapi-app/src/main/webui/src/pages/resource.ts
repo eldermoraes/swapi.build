@@ -1,12 +1,16 @@
-import { fetchResources, searchResource, fetchResourceById, fetchRandom, ApiError } from '../api';
 import { highlightJson } from '../json-highlight';
 import { escapeHtml } from '../utils';
 import { getResourceMeta } from '../constants';
-import type { SWResource } from '../types';
+import type { Entity, ResourceTool } from '../resource-actions';
 
-export async function renderResourceList(container: HTMLElement, type: string): Promise<void> {
+export function renderResourceList(
+  container: HTMLElement,
+  type: string,
+  items: Entity[],
+  query: string,
+  action: (tool: ResourceTool, query?: string) => void,
+): void {
   const meta = getResourceMeta(type);
-
   container.innerHTML = `
     <div class="resource-browser sw-inner-wide">
       <div class="browser-header">
@@ -14,139 +18,59 @@ export async function renderResourceList(container: HTMLElement, type: string): 
         <div class="browser-actions">
           <div class="search-box">
             <label for="search-input" class="sr-only">Search ${meta.title.toLowerCase()}</label>
-            <input type="text" class="search-input" id="search-input" placeholder="Search ${meta.title.toLowerCase()}..." />
+            <input type="text" class="search-input" id="search-input" placeholder="Search ${meta.title.toLowerCase()}..." value="${escapeHtml(query)}" />
             <button class="sw-pill sw-pill--solid sw-pill--sm" id="search-btn">Search</button>
           </div>
           <button class="sw-pill sw-pill--ghost sw-pill--sm" id="random-btn">Random</button>
         </div>
       </div>
       <div id="resource-content" aria-live="polite">
-        <div class="loading"><div class="spinner"></div></div>
+        ${
+          items.length === 0
+            ? '<p class="no-results">No results found.</p>'
+            : `<div class="item-list">${items
+                .map(
+                  (item) => `
+          <a href="/resource/${type}/${String(item.url).match(/\/(\d+)\/?$/)![1]}" class="item-card sw-panel">
+            <div class="item-name">${escapeHtml(String(item[meta.nameField]))}</div>
+            <div class="item-detail">${escapeHtml(String(item[meta.detailField] ?? ''))}</div>
+          </a>`,
+                )
+                .join('')}</div>`
+        }
       </div>
-    </div>
-  `;
-
-  const contentDiv = document.getElementById('resource-content')!;
-  const searchInput = document.getElementById('search-input') as HTMLInputElement;
-  const searchBtn = document.getElementById('search-btn')!;
-  const randomBtn = document.getElementById('random-btn')!;
-
-  function renderItems(items: SWResource[]) {
-    if (!items || items.length === 0) {
-      contentDiv.innerHTML = '<p class="no-results">No results found.</p>';
-      return;
-    }
-    contentDiv.innerHTML = `
-      <div class="item-list">
-        ${(items as unknown as Record<string, unknown>[])
-          .map((item, i) => {
-            const name = (item[meta.nameField] || `Item ${i + 1}`) as string;
-            const detail = (item[meta.detailField] || '') as string;
-            const url = (item['url'] || '') as string;
-            const idMatch = url.match(/\/(\d+)\/?$/);
-            const id = idMatch ? idMatch[1] : String(i + 1);
-            return `
-            <a href="/resource/${type}/${id}" class="item-card sw-panel">
-              <div class="item-name">${escapeHtml(name)}</div>
-              <div class="item-detail">${escapeHtml(detail)}</div>
-            </a>
-          `;
-          })
-          .join('')}
-      </div>
-    `;
-  }
-
-  function showJson(data: unknown, status: number) {
-    contentDiv.innerHTML = `
-      <div class="sw-code result-panel">
-        <div class="result-header">
-          <span class="result-status"><span class="status-code">${status}</span></span>
-          <a href="/resource/${type}" class="back-btn">Back to list</a>
-        </div>
-        <pre class="result-body">${highlightJson(data)}</pre>
-      </div>
-    `;
-  }
-
-  function showError(action: string, err: unknown) {
-    if (err instanceof DOMException && err.name === 'AbortError') return;
-    const message = err instanceof ApiError ? err.message : 'Unknown error';
-    contentDiv.innerHTML = `<div class="error-message">${escapeHtml(`${action}: ${message}`)}</div>`;
-  }
-
-  try {
-    const { data: items } = await fetchResources<SWResource>(type);
-    renderItems(items);
-  } catch (err) {
-    showError('Failed to load', err);
-  }
-
-  searchBtn.addEventListener('click', async () => {
-    const q = searchInput.value.trim();
-    if (!q) return;
-    contentDiv.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-    try {
-      const { data: results } = await searchResource<SWResource>(type, q);
-      renderItems(results);
-    } catch (err) {
-      showError('Search failed', err);
-    }
+    </div>`;
+  const input = container.querySelector<HTMLInputElement>('#search-input')!;
+  container
+    .querySelector('#search-btn')!
+    .addEventListener('click', () => action('sw_search', input.value));
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') action('sw_search', input.value);
   });
-
-  searchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') searchBtn.click();
-  });
-
-  randomBtn.addEventListener('click', async () => {
-    contentDiv.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-    try {
-      const { data, status } = await fetchRandom(type);
-      showJson(data, status);
-    } catch (err) {
-      showError('Failed', err);
-    }
-  });
+  container.querySelector('#random-btn')!.addEventListener('click', () => action('sw_random'));
 }
 
-export async function renderResourceDetail(
+export function renderResourceDetail(
   container: HTMLElement,
   type: string,
-  id: string,
-): Promise<void> {
+  id: number,
+  data: Entity,
+  status: number,
+): void {
   const meta = getResourceMeta(type);
-
   container.innerHTML = `
     <div class="detail-view sw-inner-wide">
       <div class="detail-header">
         <a href="/resource/${type}" class="back-btn">&larr; ${meta.title}</a>
-        <h1 class="detail-title">${escapeHtml(`${meta.title} #${id}`)}</h1>
+        <h1 class="detail-title">${escapeHtml(String(data[meta.nameField]))}</h1>
       </div>
       <div id="detail-content" aria-live="polite">
-        <div class="loading"><div class="spinner"></div></div>
-      </div>
-    </div>
-  `;
-
-  const contentDiv = document.getElementById('detail-content')!;
-
-  try {
-    const { data, status } = await fetchResourceById<Record<string, unknown>>(type, id);
-    const name = (data[meta.nameField] as string) || `${meta.title} #${id}`;
-    const titleEl = container.querySelector('.detail-title')!;
-    titleEl.textContent = name;
-
-    contentDiv.innerHTML = `
-      <div class="sw-code result-panel">
-        <div class="result-header">
-          <span class="result-status">GET /api/${escapeHtml(type)}/${escapeHtml(id)} <span class="status-code">${status}</span></span>
+        <div class="sw-code result-panel">
+          <div class="result-header">
+            <span class="result-status">GET /api/${type}/${id} <span class="status-code">${status}</span></span>
+          </div>
+          <pre class="result-body">${highlightJson(data)}</pre>
         </div>
-        <pre class="result-body">${highlightJson(data)}</pre>
       </div>
-    `;
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') return;
-    const message = err instanceof ApiError ? err.message : 'Unknown error';
-    contentDiv.innerHTML = `<div class="error-message">${escapeHtml(`Failed to load: ${message}`)}</div>`;
-  }
+    </div>`;
 }

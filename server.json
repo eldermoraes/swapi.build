@@ -3,7 +3,7 @@
   "name": "build.swapi/star-wars",
   "title": "Star Wars MCP",
   "description": "Star Wars API (SWAPI) as a remote MCP server: films, people, planets, species, starships, vehicles.",
-  "version": "2.4.3",
+  "version": "2.5.0",
   "websiteUrl": "https://swapi.build",
   "repository": {
     "url": "https://github.com/eldermoraes/swapi.build",

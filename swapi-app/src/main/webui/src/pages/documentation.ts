@@ -107,13 +107,18 @@ function schemaTable(name: string, schema: OpenApiSchemaObj): string {
     </details>`;
 }
 
-export async function renderDocumentation(container: HTMLElement): Promise<void> {
+export async function renderDocumentation(
+  container: HTMLElement,
+  isCurrent: () => boolean = () => true,
+): Promise<void> {
   container.innerHTML = `<div class="docs sw-inner-prose"><h1 class="sw-page-title">Documentation</h1><p class="docs-intro">Loading API specification…</p></div>`;
 
   let spec: OpenApiSpec;
   try {
     spec = await fetchOpenApiSpec();
+    if (!isCurrent()) return;
   } catch {
+    if (!isCurrent()) return;
     if (!isDocsRoute()) return; // navigated during the fetch: do not overwrite the new page
     container.innerHTML = `
       <div class="docs sw-inner-prose">
