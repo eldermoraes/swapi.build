@@ -16,6 +16,23 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.4.3] - 2026-09-09
+
+### Fixed
+
+- Upgrade `quarkus-mcp-server-http` and `quarkus-mcp-server-test` from
+  `2.0.0.CR1` to `2.0.0` GA. Stateless discovery and tool-list responses now
+  include the required `ttlMs: 0` and `cacheScope: "public"` fields, avoiding
+  rejection by clients that validate the 2026-07-28 protocol schema.
+  Existing stateful clients, foreign-session calls and tool behavior are preserved.
+
+### Changed
+
+- Add MCP cache-field regression tests and native deploy probes for discovery
+  and tool listing. Document the cache evaluation from issue #1: the extension
+  supports hints for discovery, lists and resource reads, not `tools/call`;
+  tool results (including random results) remain uncached by the application.
+
 ## [2.4.2] - 2026-09-06
 
 ### Changed
@@ -400,7 +417,8 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.4.3...HEAD
+[2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/eldermoraes/swapi.build/compare/v2.3.1...v2.4.0

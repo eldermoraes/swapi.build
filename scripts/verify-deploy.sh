@@ -101,6 +101,28 @@ echo "$resp" | grep -q '"isError":false' && pass "MCP stateless tools/call" \
 echo "$resp" | grep -q "$BASE/api/" && pass "MCP embeds URLs on the host" \
   || fail "MCP embedded URLs" "contain $BASE/api/" "missing"
 
+# --- MCP stateless cacheable results (also checks the native wire shape) -----
+for method in server/discover tools/list; do
+  resp=$("${CURL[@]}" -X POST "$BASE/mcp" \
+    -H 'Content-Type: application/json' \
+    -H 'Accept: application/json, text/event-stream' \
+    -H "Mcp-Method: $method" -H 'MCP-Protocol-Version: 2026-07-28' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"'"$method"'","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"verify-deploy","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}')
+  if echo "$resp" | python3 -c '
+import json, sys
+response = json.load(sys.stdin)
+result = response["result"]
+assert "error" not in response
+assert type(result.get("ttlMs")) is int and result["ttlMs"] == 0
+assert result.get("cacheScope") == "public"
+assert "cacheControl" not in result
+' 2>/dev/null; then
+    pass "MCP $method: flat ttlMs=0, cacheScope=public"
+  else
+    fail "MCP $method cache fields" "flat ttlMs=0 and cacheScope=public" "$(echo "$resp" | head -c 200)"
+  fi
+done
+
 # --- MCP stateful burst (preview only — bursts trip the mitigation in prod) --
 if [ "$MODE" = "preview" ]; then
   SID=$("${CURL[@]}" -D - -o /dev/null -X POST "$BASE/mcp" \
