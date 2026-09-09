@@ -17,6 +17,13 @@ import static org.hamcrest.Matchers.not;
 class SeoRoutesTest {
 
     @Test
+    void webMcpGuideHasItsOwnMetadata() {
+        given().accept("text/html").when().get("/docs/webmcp").then()
+                .statusCode(200).contentType(containsString("text/html"))
+                .body(containsString("<title>WebMCP in the browser - SWAPI</title>"));
+    }
+
+    @Test
     void robotsTxtBypassesSpaFallbackAndUsesForwardedBaseUrl() {
         given()
                 .accept("text/html")
@@ -50,6 +57,7 @@ class SeoRoutesTest {
                         containsString("<loc>https://preview.example/</loc>"),
                         containsString("<loc>https://preview.example/docs</loc>"),
                         containsString("<loc>https://preview.example/docs/mcp</loc>"),
+                        containsString("<loc>https://preview.example/docs/webmcp</loc>"),
                         containsString("<loc>https://preview.example/about</loc>"),
                         containsString("<loc>https://preview.example/resource/people</loc>"),
                         containsString("<loc>https://preview.example/resource/films</loc>"),

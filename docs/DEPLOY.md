@@ -256,7 +256,7 @@ curl -sI https://swapi.build/api/people/1 | grep -i 'x-vercel-cache'   # HIT
 curl -sI https://swapi.build/api/people/random | grep -i 'x-vercel-cache'  # MISS, always
 ```
 
-The SPA HTML of the real routes (`/`, `/docs`, `/docs/mcp`, `/about`, `/privacy`, `/terms`,
+The SPA HTML of the real routes (`/`, `/docs`, `/docs/mcp`, `/docs/webmcp`, `/about`, `/privacy`, `/terms`,
 `/resource/<type>`, `/resource/<type>/<id>`) is edge-cached too since 2.4.2. The client
 sees `public, max-age=0, must-revalidate` — indistinguishable from the pre-2.4.2 default
 the edge injected — so the **only** proof is `MISS` → `HIT`. Unknown paths are not cached
@@ -331,3 +331,35 @@ project setting (`resourceConfig`), applied by `PATCH` without a redeploy — se
 | `Error: fetch failed` / `"reason": "deploy_failed"` from the CLI mid-build | The CLI lost its log stream — **the remote build usually keeps running**. Do not paste the `retry deploy` command the CLI suggests: that starts a second native build in parallel. Get the deployment id from the CLI output (or `list_deployments`) and poll `GET /v13/deployments/<id>` until `readyState` leaves `BUILDING`. Seen on 2026-08-03: the CLI errored out, the build finished `READY` normally, and the preview verified clean. |
 | `504` / `FUNCTION_INVOCATION_TIMEOUT` on the first request after a deploy | The cold start (~11s measured) exceeded `functionDefaultTimeout`, now **60s** since 2026-08-03 — the earlier 15s left only ~4s of margin. Read the current value with `GET /v9/projects/swapi-build`; change it with `PATCH` and the same `resourceConfig` shape (`{"fluid":true,"functionDefaultRegions":["iad1"],"functionDefaultTimeout":60}`). It is a project setting: it takes effect immediately, without a redeploy. |
 | SPA HTML (`/`, `/resource/*`) always `x-vercel-cache: MISS` | The `quarkus.http.filter.spa` block in `application.properties` is missing or its `matches` regex no longer covers the route (the list is explicit and anchored — a new SPA route must be added there and to `CacheHeadersTest.SPA_ROUTES`). Without it the edge injects `public, max-age=0, must-revalidate` and every cold-PoP page view executes the function (usage_anomaly of 2026-09-03). Note the client never sees `s-maxage` (the CDN strips it): only MISS → HIT proves the cache. If the header is present at the origin and the edge still refuses to store, drop `must-revalidate` from `swapi.cache-control.html` and redeploy. |
+
+
+## WebMCP verification (2.5.0+)
+
+Confirm `/docs/webmcp` returns HTML with title `WebMCP in the browser - SWAPI`
+and appears in the sitemap. The automated probes check both. Browser tool
+execution must also be verified with WebMCP enabled: discover `sw_list`,
+`sw_get`, `sw_search`, `sw_random`; list PEOPLE, search Luke, open FILMS ID 1,
+and show a random starship. Confirm the displayed record matches the returned
+record and manual navigation supersedes pending work. Test the unsupported
+browser path too. HTTP probes alone do not prove browser API compatibility.
+
+The initial implementation was validated with Chrome 152, WebMCP testing
+enabled, against the GraalVM native application. Chrome 152 can omit the
+execution callback's cancellation options; the adapter accepts that version.
+The browser API remains experimental, so record the tested browser version
+when validating future changes.
+
+To repeat browser verification against a running native binary, install the
+frontend dev dependencies, use an installed compatible Google Chrome, and run:
+
+```bash
+cd swapi-app/src/main/webui
+SWAPI_TEST_URL=http://127.0.0.1:5545 npm run test:browser
+```
+
+The script launches isolated Chrome sessions with WebMCP enabled and disabled;
+it does not use your personal browser profile or a model API key. It covers
+all six resource lists, the four tools, cancellation, history, manual search,
+and a 360px viewport. It must run against a trusted test instance: the script
+performs ordinary read-only queries. The local native instance needs to be
+started on the corresponding port beforehand.

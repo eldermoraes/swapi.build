@@ -16,6 +16,7 @@ export function renderHome(container: HTMLElement): void {
       <div class="sw-cta-row">
         ${pill('▶ Get started', '/docs', 'solid')}
         ${pill('MCP for agents', '/docs/mcp', 'ghost')}
+        ${pill('WebMCP in the browser', '/docs/webmcp', 'ghost')}
       </div>
     </section>
     <div class="sw-term-wrap">${terminalMarkup(TERM)}</div>

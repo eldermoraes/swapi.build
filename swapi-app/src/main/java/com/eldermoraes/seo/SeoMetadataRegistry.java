@@ -13,6 +13,7 @@ public class SeoMetadataRegistry {
             route("/", "SWAPI - The Star Wars API", HOME_DESCRIPTION, "weekly", "1.0"),
             route("/docs", "Documentation - SWAPI", "OpenAPI documentation for the SWAPI REST API, including live examples and response schemas.", "weekly", "0.9"),
             route("/docs/mcp", "MCP Server - SWAPI", "Connect AI agents to the Star Wars API through the Streamable HTTP MCP server.", "weekly", "0.8"),
+            route("/docs/webmcp", "WebMCP in the browser - SWAPI", "Explore Star Wars together with a browser agent using experimental WebMCP tools.", "weekly", "0.8"),
             route("/about", "About - SWAPI", "Learn why SWAPI exists, how it is built with Quarkus and GraalVM, and how to contribute.", "monthly", "0.7"),
             route("/resource/people", "People - SWAPI", "Browse Star Wars people records through the SWAPI REST API.", "weekly", "0.7"),
             route("/resource/films", "Films - SWAPI", "Browse Star Wars film records through the SWAPI REST API.", "weekly", "0.7"),

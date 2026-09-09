@@ -1,7 +1,7 @@
 {
   "name": "swapi-ui",
   "private": true,
-  "version": "2.4.3",
+  "version": "2.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,12 +9,14 @@
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "eslint src/",
-    "format": "prettier --write \"src/**/*.{ts,css}\" index.html"
+    "format": "prettier --write \"src/**/*.{ts,css}\" index.html",
+    "test:browser": "node scripts/verify-webmcp.cjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.8.1",
     "jsdom": "^30.0.1",
+    "playwright": "1.62.1",
     "prettier": "^3.4.0",
     "typescript": "~5.7.0",
     "typescript-eslint": "^8.66.0",

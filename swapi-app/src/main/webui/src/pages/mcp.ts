@@ -120,6 +120,7 @@ export function renderMcp(container: HTMLElement): void {
   container.innerHTML = `
     <div class="sw-inner-prose mcp-page">
     <h1 class="sw-page-title">MCP Server</h1>
+    <p>To explore this site together with a browser agent, see <a href="/docs/webmcp">WebMCP in the browser</a>.</p>
     <p class="page-sub">Use the Star Wars API from your AI agent.</p>
 
     <section class="mcp-endpoint">

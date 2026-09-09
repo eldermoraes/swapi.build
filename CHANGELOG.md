@@ -16,6 +16,22 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-09-09
+
+### Added
+
+- Experimental browser WebMCP tools (`sw_list`, `sw_get`, `sw_search`,
+  `sw_random`) that share the Star Wars explorer with the user, with complete
+  resource results, explicit page actions and a setup guide at `/docs/webmcp`.
+- Browser tool discovery is optional: unsupported browsers retain the existing
+  website, REST API and remote MCP server.
+
+### Fixed
+
+- Isolate resource request cancellation and prevent superseded agent responses
+  from overwriting human navigation or input. Random selections are displayed
+  without making a second request.
+
 ## [2.4.3] - 2026-09-09
 
 ### Fixed
@@ -438,3 +454,5 @@ snapshot version is not a release. -->
 [1.3]: https://github.com/eldermoraes/swapi.build/compare/v1.2...v1.3
 [1.2]: https://github.com/eldermoraes/swapi.build/compare/v1.1...v1.2
 [1.1]: https://github.com/eldermoraes/swapi.build/releases/tag/v1.1
+
+[2.5.0]: https://github.com/eldermoraes/swapi.build/compare/v2.4.3...v2.5.0

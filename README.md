@@ -164,6 +164,21 @@ Or Bob panel → MCP tab → **Edit Global MCP**. Bob detects the tools automati
 > provision the container; subsequent calls are fast, whether your client is stateless or
 > session-based).
 
+## WebMCP in the browser (experimental)
+
+The website exposes `sw_list`, `sw_get`, `sw_search` and `sw_random` through
+WebMCP. Names and arguments match the remote MCP tools, including uppercase
+resource names. Each browser tool updates the visible explorer and returns
+complete records in a JSON result with `ok`, `data`, `resource` and `path`.
+The browser result envelope differs from the remote MCP transport.
+
+Use a compatible browser with WebMCP enabled and the `document.modelContext`
+API. The [setup and demonstration guide](https://swapi.build/docs/webmcp)
+explains the inspector, example calls and cancellation behavior. When the API
+is unavailable, the site works normally. No model API key or AI runtime is
+embedded in the site. The JavaScript is bundled by Quinoa and runs in the
+browser, including when served by the Quarkus native executable.
+
 ## Client examples
 
 - [`examples/java/langchain4j-mcp-client`](examples/java/langchain4j-mcp-client) — ask

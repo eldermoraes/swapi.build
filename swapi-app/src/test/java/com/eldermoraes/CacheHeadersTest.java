@@ -177,7 +177,7 @@ class CacheHeadersTest {
     // Every route in getRoute() (main.ts) / PUBLIC_SEO_ROUTES (seo.ts). A new SPA route
     // must be added here AND to quarkus.http.filter.spa.matches, or it only loses cache.
     private static final List<String> SPA_ROUTES = List.of(
-            "/", "/docs", "/docs/mcp", "/about", "/privacy", "/terms",
+            "/", "/docs", "/docs/mcp", "/docs/webmcp", "/about", "/privacy", "/terms",
             "/resource/planets", "/resource/people/1");
 
     @Test

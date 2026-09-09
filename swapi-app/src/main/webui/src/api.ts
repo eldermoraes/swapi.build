@@ -27,48 +27,58 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(url: string): Promise<ApiResponse<T>> {
-  cancelPending();
-  currentController = new AbortController();
-
-  let res: Response;
+async function request<T>(url: string, signal?: AbortSignal): Promise<ApiResponse<T>> {
+  const controller = signal ? null : new AbortController();
+  if (controller) {
+    cancelPending();
+    currentController = controller;
+  }
+  const requestSignal = signal ?? controller!.signal;
   try {
-    res = await fetch(url, { signal: currentController.signal });
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      throw err;
+    const res = await fetch(url, { signal: requestSignal });
+    if (!res.ok) {
+      throw new ApiError(`HTTP ${res.status}: ${res.statusText}`, res.status, 'http');
     }
+    const data = (await res.json()) as T;
+    requestSignal.throwIfAborted();
+    return { data, status: res.status };
+  } catch (err) {
+    if (requestSignal.aborted) throw requestSignal.reason;
+    if (err instanceof ApiError || err instanceof SyntaxError) throw err;
     throw new ApiError('Network error — check your connection', 0, 'network');
   } finally {
-    currentController = null;
+    if (controller && currentController === controller) currentController = null;
   }
-
-  if (!res.ok) {
-    throw new ApiError(`HTTP ${res.status}: ${res.statusText}`, res.status, 'http');
-  }
-  return { data: (await res.json()) as T, status: res.status };
 }
 
-export async function fetchResources<T = unknown>(type: string): Promise<ApiResponse<T[]>> {
-  return request<T[]>(`${BASE}/${type}`);
+export async function fetchResources<T = unknown>(
+  type: string,
+  signal?: AbortSignal,
+): Promise<ApiResponse<T[]>> {
+  return request<T[]>(`${BASE}/${type}`, signal);
 }
 
 export async function fetchResourceById<T = unknown>(
   type: string,
   id: string,
+  signal?: AbortSignal,
 ): Promise<ApiResponse<T>> {
-  return request<T>(`${BASE}/${type}/${id}`);
+  return request<T>(`${BASE}/${type}/${id}`, signal);
 }
 
 export async function searchResource<T = unknown>(
   type: string,
   query: string,
+  signal?: AbortSignal,
 ): Promise<ApiResponse<T[]>> {
-  return request<T[]>(`${BASE}/${type}?search=${encodeURIComponent(query)}`);
+  return request<T[]>(`${BASE}/${type}?search=${encodeURIComponent(query)}`, signal);
 }
 
-export async function fetchRandom<T = unknown>(type: string): Promise<ApiResponse<T>> {
-  return request<T>(`${BASE}/${type}/random`);
+export async function fetchRandom<T = unknown>(
+  type: string,
+  signal?: AbortSignal,
+): Promise<ApiResponse<T>> {
+  return request<T>(`${BASE}/${type}/random`, signal);
 }
 
 export async function fetchEndpoint<T = unknown>(path: string): Promise<ApiResponse<T>> {

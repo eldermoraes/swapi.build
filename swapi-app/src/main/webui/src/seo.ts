@@ -26,6 +26,11 @@ export const PUBLIC_SEO_ROUTES: SeoMetadata[] = [
     'Connect AI agents to the Star Wars API through the Streamable HTTP MCP server.',
   ),
   route(
+    '/docs/webmcp',
+    'WebMCP in the browser - SWAPI',
+    'Explore Star Wars together with a browser agent using experimental WebMCP tools.',
+  ),
+  route(
     '/about',
     'About - SWAPI',
     'Learn why SWAPI exists, how it is built with Quarkus and GraalVM, and how to contribute.',
@@ -42,7 +47,11 @@ export const PUBLIC_SEO_ROUTES: SeoMetadata[] = [
     'Privacy Policy - SWAPI',
     'Plain-language privacy policy for the public Star Wars API and MCP server.',
   ),
-  route('/terms', 'Terms of Use - SWAPI', 'Terms of use for the free public Star Wars API and MCP server.'),
+  route(
+    '/terms',
+    'Terms of Use - SWAPI',
+    'Terms of use for the free public Star Wars API and MCP server.',
+  ),
 ];
 
 export function getSeoMetadata(rawPath: string): SeoMetadata {

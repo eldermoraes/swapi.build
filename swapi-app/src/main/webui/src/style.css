@@ -565,3 +565,8 @@
 .try-json .json-null {
   color: var(--sw-text-dim);
 }
+
+/* Inline tool arguments remain readable on narrow screens. */
+.webmcp-guide code {
+  overflow-wrap: anywhere;
+}
