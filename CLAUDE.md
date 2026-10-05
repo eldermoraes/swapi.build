@@ -37,10 +37,9 @@ an MCP server (Streamable HTTP) at `/mcp`.
   `container` framework can't find the Dockerfile). See `docs/DEPLOY.md`.
 - **There is no commit-push auto-deploy.** Deploys run via the Vercel CLI —
   manually, or by `.github/workflows/deploy.yml` on a release-tag push (with a
-  manual gate before production). Since 2026-08-03 the GitHub repo *is* linked
-  to the Vercel project, so this now holds by explicit configuration rather
-  than by absence of a connection: the root `vercel.json` carries
-  `git.deploymentEnabled: false`. Never remove it without first setting
+  manual gate before production). The GitHub repo is linked to the Vercel
+  project, and the root `vercel.json` carries `git.deploymentEnabled: false`
+  to keep git pushes from deploying. Never remove it without first setting
   `rootDirectory` to `swapi-app` — with `rootDirectory: null` a git-triggered
   build runs from the repo root and hits the failure above.
 - **Web Analytics and Speed Insights are enabled on the project** and injected by
@@ -63,8 +62,7 @@ an MCP server (Streamable HTTP) at `/mcp`.
   suite if the pom version has no changelog section, and `OpenApiVersionTest` fails
   if `/openapi.json` stops advertising the pom version. Tags point at the **last**
   commit of a version line, never at the bump commit.
-- **Successful GETs return HTTP 200; nonexistent ids return 404** (the historic
-  202 quirk was retired on 2026-08-01 — no external clients depended on it).
+- **Successful GETs return HTTP 200; nonexistent ids return 404.**
 - **Container tooling is `podman`** (`/opt/podman/bin`), not `docker`. The podman
   machine needs 8 GB for local native builds.
 - **MCP serves stateful and stateless clients on the same `/mcp` endpoint.**
