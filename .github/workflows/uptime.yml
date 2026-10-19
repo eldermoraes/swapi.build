@@ -17,8 +17,8 @@ name: Uptime
 # in the repository. Re-enable it from the Actions tab if that happens.
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: '*/15 * * * *'
+  schedule:
+    - cron: '*/15 * * * *'
 
 permissions:
   contents: read
