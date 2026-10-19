@@ -10,18 +10,10 @@ import { renderPrivacy } from './pages/privacy';
 import { renderTerms } from './pages/terms';
 import { cancelPending } from './api';
 import { applySeoMetadata } from './seo';
-import { inject } from '@vercel/analytics';
-import { injectSpeedInsights } from '@vercel/speed-insights';
 
-// Both scripts are served by the Vercel edge at /_vercel/*. In dev, Quinoa
-// serves Vite and those paths do not exist, hence the explicit mode: without
-// it the scripts would try to load from localhost:5173 and fail in the console.
-// The edge only intercepts /_vercel/* when the features are enabled on the
-// project — otherwise Quinoa's SPA fallback returns index.html with 200,
-// and collection fails silently. See docs/DEPLOY.md.
-const analyticsMode = import.meta.env.PROD ? 'production' : 'development';
-inject({ mode: analyticsMode });
-injectSpeedInsights();
+// No analytics or performance beacons: Vercel's collection scripts only exist
+// behind its edge, the self-hosted origin (docs/DEPLOY.md) has no such edge, and
+// the privacy page promises no trackers. no-tracking.test.ts keeps it that way.
 
 const announcer = document.createElement('div');
 announcer.setAttribute('aria-live', 'polite');

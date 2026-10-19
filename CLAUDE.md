@@ -42,13 +42,16 @@ an MCP server (Streamable HTTP) at `/mcp`.
   to keep git pushes from deploying. Never remove it without first setting
   `rootDirectory` to `swapi-app` — with `rootDirectory: null` a git-triggered
   build runs from the repo root and hits the failure above.
-- **Web Analytics and Speed Insights are enabled on the project** and injected by
-  the SPA (`@vercel/analytics` / `@vercel/speed-insights` in `src/main.ts`). Their
-  scripts live at `/_vercel/insights/*` and `/_vercel/speed-insights/*`, served by
-  the Vercel edge. `quarkus.quinoa.enable-spa-routing=true` answers *any* unknown
-  path with `index.html` and HTTP 200, so if the edge ever stops intercepting
-  those paths the collection breaks **silently**. The curl check in
-  `docs/DEPLOY.md` asserts the content type is JavaScript, not HTML.
+- **No analytics or tracking scripts.** Vercel Web Analytics and Speed Insights
+  were removed from the SPA (2026-10-19) to prepare the move to a self-hosted
+  origin on Oracle Cloud, which has no `/_vercel/*` edge, and because the
+  privacy page promises no trackers. `no-tracking.test.ts` fails if a `@vercel/`
+  package or a `/_vercel/` script comes back.
+- **Self-hosted origin (migration target).** `native-binary.yml` attaches the
+  linux/amd64 native binary to each published Release (UBI9 builder, glibc
+  ≤ 2.35 checked); the host runbook, cutover and rollback live in
+  `docs/DEPLOY.md`, "Self-hosted origin on Oracle Cloud". Probes against it use
+  `scripts/verify-deploy.sh origin <host>`.
 - **Tests:** `cd swapi-app && ./mvnw test` (backend) and
   `cd swapi-app/src/main/webui && npm test` (Vitest, frontend). **CI runs both.**
   Quinoa's `vite build` bundles the frontend during `./mvnw package` but never

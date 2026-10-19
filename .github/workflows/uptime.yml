@@ -1,0 +1,67 @@
+name: Uptime
+
+# External monitor for the self-hosted origin (docs/DEPLOY.md, "Self-hosted
+# origin on Oracle Cloud"). When a run fails, GitHub emails the repo owner.
+# It covers what the systemd OnFailure alert cannot see: the whole machine
+# down, a reboot that never came back, the provider stopping the VM, an
+# expiring certificate, and the DNS pointing somewhere else ("step 0").
+#
+# BORN DISABLED ON PURPOSE. Until the DNS cutover, swapi.build resolves to
+# Vercel and the DNS check below would fail on every run. On cutover day:
+#   1. set the repository variable SWAPI_ORIGIN_IP to the host's public IP
+#      (Settings -> Secrets and variables -> Actions -> Variables);
+#   2. uncomment the schedule below in a PR and merge it.
+# The IP lives only in that variable, never in the repository.
+#
+# Caveat: GitHub disables scheduled workflows after 60 days without activity
+# in the repository. Re-enable it from the Actions tab if that happens.
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: '*/15 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      EXPECTED_IP: ${{ vars.SWAPI_ORIGIN_IP }}
+      # Caddy renews 30 days ahead; under 20 days left means renewal is failing.
+      MIN_CERT_DAYS: '20'
+    steps:
+      - name: API answers
+        run: curl -fsS --max-time 10 -o /dev/null -w '%{http_code} in %{time_total}s\n' https://swapi.build/api/people/1
+
+      - name: Certificate has more than ${{ env.MIN_CERT_DAYS }} days left
+        run: |
+          for host in swapi.build www.swapi.build; do
+            cert=$(echo | openssl s_client -connect "$host:443" -servername "$host" 2>/dev/null | openssl x509)
+            end=$(echo "$cert" | openssl x509 -noout -enddate | cut -d= -f2)
+            echo "$host: certificate valid until $end"
+            echo "$cert" | openssl x509 -noout -checkend $((MIN_CERT_DAYS * 86400)) >/dev/null \
+              || { echo "$host: certificate expires in less than $MIN_CERT_DAYS days: renewal is failing"; exit 1; }
+          done
+
+      # Step 0 of the runbook: if the VM is lost or recreated, its IP can be
+      # handed to another tenant, who could then get a valid certificate for
+      # swapi.build. A DNS answer other than the host's IP is an alarm.
+      - name: DNS points at the host
+        run: |
+          [ -n "$EXPECTED_IP" ] || { echo "repository variable SWAPI_ORIGIN_IP is not set (see the header of this workflow)"; exit 1; }
+          for host in swapi.build www.swapi.build; do
+            got=$(getent ahostsv4 "$host" | awk '{print $1}' | sort -u | paste -sd' ' -)
+            [ "$got" = "$EXPECTED_IP" ] \
+              || { echo "$host resolves to '$got', expected only the host's IP: see runbook step 0"; exit 1; }
+            echo "$host -> host IP"
+          done
