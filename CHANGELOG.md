@@ -16,6 +16,16 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+### Fixed
+
+- Release runbook: the MCP Registry key is derived by `scripts/registry-key.sh`,
+  which rejects anything but 64 hex characters. The previous inline recipe kept the
+  `pub:` label, produced 67 characters and broke `mcp-publisher login`. Covered by
+  `scripts/registry-key.test.sh`, now run in CI.
+- Deploy workflow: the closing reminder no longer asks to check the Vercel Analytics
+  dashboard, removed in 2.5.2; it points to the production probes and post-deploy
+  checks instead.
+
 ## [2.5.2] - 2026-10-19
 
 ### Changed

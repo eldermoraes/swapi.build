@@ -105,4 +105,4 @@ jobs:
         run: ./scripts/verify-deploy.sh prod swapi.build | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Manual step reminder
         run: |
-          echo '**Remaining manual step:** open https://swapi.build in a browser and confirm the pageview in the Analytics dashboard (script served != collection working).' >> "$GITHUB_STEP_SUMMARY"
+          echo '**Remaining manual steps:** read the production probe output above (every line PASS), then run the post-deploy checks in docs/DEPLOY.md and step 9 of docs/RELEASE.md.' >> "$GITHUB_STEP_SUMMARY"
