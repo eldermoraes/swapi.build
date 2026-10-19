@@ -16,6 +16,8 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.5.2] - 2026-10-19
+
 ### Changed
 
 - Infrastructure: each published GitHub Release gets the linux/amd64 native
@@ -457,7 +459,7 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.4.3...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.5.2...HEAD
 [2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
@@ -482,3 +484,5 @@ snapshot version is not a release. -->
 [2.5.0]: https://github.com/eldermoraes/swapi.build/compare/v2.4.3...v2.5.0
 
 [2.5.1]: https://github.com/eldermoraes/swapi.build/compare/v2.5.0...v2.5.1
+
+[2.5.2]: https://github.com/eldermoraes/swapi.build/compare/v2.5.1...v2.5.2
