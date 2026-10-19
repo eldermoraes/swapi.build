@@ -5,9 +5,14 @@ Cloud**, production since 2026-10-19. The native binary from the GitHub Release
 runs under systemd behind Caddy. Everything about the host is in
 [Self-hosted origin on Oracle Cloud](#self-hosted-origin-on-oracle-cloud).
 
-Nothing of this project runs on Vercel any more: the Vercel deploy pipeline,
-`vercel.json` and `Dockerfile.vercel` were removed on 2026-10-19, and there is
-no rollback to Vercel.
+Nothing of this project runs on Vercel any more: the Vercel deploy pipeline and
+`Dockerfile.vercel` were removed on 2026-10-19, and there is no rollback to
+Vercel. The root `vercel.json` stays, with `git.deploymentEnabled: false`,
+only because the repository is still connected to the old Vercel project
+through the Vercel GitHub app: without it, every push starts a Vercel
+deployment (seen on PR #25). Once the repository is disconnected on the Vercel
+side (project settings, Git), the file and `scripts/vercel-git-off.test.sh`
+can go.
 
 `scripts/verify-deploy.sh origin <host>` runs every probe below against the
 host. CI and the operator use the same script.
@@ -46,6 +51,14 @@ What the deploy needs, all outside the repository's files:
 | `ORACLE_KNOWN_HOSTS` | Actions secret | One `known_hosts` line, `<host IP> ssh-ed25519 AAAA...`, built from the host's `/etc/ssh/ssh_host_ed25519_key.pub`. The job connects with `StrictHostKeyChecking=yes`, so a changed host key stops the deploy. |
 | `SWAPI_ORIGIN_IP` | Actions variable | The host's public IP (also read by the uptime monitor). |
 | `production` | Environment | Required reviewer: the maintainer. Approval in the Actions UI or through the REST API (`docs/RELEASE.md`, step 8). |
+
+**Redeploying a Release that already has its binary** (a reinstall, a
+rollback through the pipeline, or a proof of the deploy path): run **Native
+binary and deploy** from the Actions tab (or
+`gh workflow run native-binary.yml -f tag=vX.Y.Z -f sha256=<hash>`) with the
+hash copied from the summary of that release's original run. `test` and
+`build` are skipped; `deploy` waits for approval and runs as above, with
+`swapi-update` checking that hash against the Release's `application.sha256`.
 
 The manual path is [Updating the version on the host](#updating-the-version-on-the-host).
 

@@ -9,7 +9,10 @@ name: Native binary and deploy
 #   the tag (docs/RELEASE.md), so a tag trigger would race a Release that does
 #   not exist yet.
 # - workflow_dispatch: build and attach the binary to an existing Release that
-#   has none yet (the upload never replaces an asset), then deploy it.
+#   has none yet (the upload never replaces an asset), then deploy it. With the
+#   sha256 input, redeploy a Release that already has its binary: test and
+#   build are skipped and the operator supplies the hash from the original
+#   run's summary, so swapi-update still checks two sources.
 # - pull_request touching this file: runs the suite, the build and the GLIBC
 #   check without uploading or deploying anything, so a change to the pipeline
 #   is proven before merge.
@@ -33,6 +36,13 @@ on:
       tag:
         description: Existing release tag to build, attach and deploy (e.g. v2.6.0)
         required: true
+      sha256:
+        description: >-
+          Redeploy only. SHA-256 of the binary already attached to that Release,
+          copied from the summary of its original run (the second source). When
+          set, test and build are skipped and only the deploy job runs.
+        required: false
+        default: ''
   pull_request:
     paths:
       - .github/workflows/native-binary.yml
@@ -56,6 +66,9 @@ env:
 
 jobs:
   test:
+    # Skipped on a redeploy (workflow_dispatch with sha256): the tag was
+    # already tested and built when it was released.
+    if: ${{ !inputs.sha256 }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -171,7 +184,13 @@ jobs:
 
   deploy:
     needs: build
-    if: github.event_name != 'pull_request'
+    # After a successful build, or on a redeploy (workflow_dispatch with
+    # sha256), where test and build are skipped on purpose. A build skipped
+    # because the suite failed never deploys: sha256 is empty then.
+    if: >-
+      ${{ !cancelled() && github.event_name != 'pull_request' &&
+      (needs.build.result == 'success' ||
+      (needs.build.result == 'skipped' && inputs.sha256 != '')) }}
     runs-on: ubuntu-latest
     # Manual approval: the job waits here until a reviewer of the environment
     # approves (in the Actions UI or through the REST API, docs/RELEASE.md).
@@ -182,7 +201,7 @@ jobs:
       group: deploy-oracle
       cancel-in-progress: false
     env:
-      SHA256: ${{ needs.build.outputs.sha256 }}
+      SHA256: ${{ needs.build.outputs.sha256 || inputs.sha256 }}
       ORIGIN_IP: ${{ vars.SWAPI_ORIGIN_IP }}
     steps:
       - name: Validate the inputs

@@ -48,6 +48,11 @@ jobs:
       - name: Deploy gate tests
         run: scripts/swapi-deploy-gate.test.sh
 
+      # The repo is still connected to the old Vercel project; without
+      # git.deploymentEnabled false every push starts a Vercel deployment.
+      - name: Vercel git deployments stay off
+        run: scripts/vercel-git-off.test.sh
+
       # Maven never runs Vitest: Quinoa's `vite build` bundles the frontend, it
       # does not test it. Without this step the frontend suite — including the
       # "no raw colour" guard in tokens.test.ts — passes locally and gates

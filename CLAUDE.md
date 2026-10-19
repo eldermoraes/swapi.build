@@ -36,8 +36,13 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
 ## Non-negotiable facts
 
 - **Nothing of this project runs on Vercel** (decided 2026-10-19). Production
-  moved to the self-hosted origin that day, and the Vercel deploy pipeline,
-  `vercel.json` and `Dockerfile.vercel` were removed. Do not reintroduce them.
+  moved to the self-hosted origin that day, and the Vercel deploy pipeline and
+  `Dockerfile.vercel` were removed. Do not reintroduce them. The one exception
+  is the root `vercel.json` (`git.deploymentEnabled: false`): the repository is
+  still connected to the old Vercel project through the Vercel GitHub app, and
+  without that file every push starts a Vercel deployment (seen on PR #25).
+  It stays until the repository is disconnected on the Vercel side;
+  `scripts/vercel-git-off.test.sh` guards it in CI.
 - **There is no commit-push auto-deploy.** Only a published Release deploys,
   through `native-binary.yml`, and its `deploy` job waits for manual approval
   (environment `production`). The job reaches the host as the `deploy` user,

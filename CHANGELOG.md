@@ -31,8 +31,10 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 ### Removed
 
 - Everything that published to Vercel: the `deploy.yml` workflow (preview,
-  production), `vercel.json`, `swapi-app/Dockerfile.vercel`,
-  `swapi-app/.vercelignore`, and the Vercel-only `preview` and `prod` modes of
+  production), `swapi-app/Dockerfile.vercel`, `swapi-app/.vercelignore`
+  (the root `vercel.json` with `git.deploymentEnabled: false` stays while the
+  repository is still connected to the Vercel project, guarded by
+  `scripts/vercel-git-off.test.sh`), and the Vercel-only `preview` and `prod` modes of
   `scripts/verify-deploy.sh`. Rollback is now the previous version on the host.
 
 ### Fixed
