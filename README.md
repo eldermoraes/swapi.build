@@ -31,6 +31,11 @@ Base path: `/api`
 Ids are the record ids from each entity's `url` field (for films, `1` = A New Hope).
 Successful responses return `200`; unknown or non-numeric ids return `404`.
 
+`GET /api/stats` returns anonymous request counts per route (for example
+`/api/people/{id}` or `/mcp`) and per UTC day for the last seven days. They are
+counted in memory with no IP address or client details and restart from zero
+when the server restarts.
+
 All responses are JSON. Example:
 
 ```bash

@@ -34,6 +34,17 @@ code=$("${CURL[@]}" -o /dev/null -w '%{http_code}' "$BASE/api/people/1")
 echo "$body" | grep -q "$BASE/api/people/1" && pass "REST embeds https URLs on the host" \
   || fail "REST embedded URLs" "contain $BASE/api/people/1" "missing"
 
+# --- Usage counters (2.6.0+) -------------------------------------------------
+# The REST probe above was just counted, so /api/people/{id} is in the window.
+stats=$("${CURL[@]}" -w '\n%{http_code}' "$BASE/api/stats")
+code="${stats##*$'\n'}"
+if [ "$code" = "200" ] && echo "$stats" | grep -q '"countingSince"' \
+   && echo "$stats" | grep -qF '"/api/people/{id}"'; then
+  pass "/api/stats -> 200 with per-route counts"
+else
+  fail "/api/stats" "200 with countingSince and /api/people/{id}" "$code"
+fi
+
 # --- OpenAPI ----------------------------------------------------------------
 ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' -H 'Accept: text/html' "$BASE/openapi.json")
 case "$ct" in "200 application/json"*) pass "OpenAPI served by the backend ($ct)";;

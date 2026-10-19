@@ -28,6 +28,22 @@ describe('privacy page', () => {
     expect(text()).toContain('DNS by Cloudflare (DNS-only, no proxying');
   });
 
+  it('says page visits are measured by Cloudflare Web Analytics, without cookies or personal data', () => {
+    expect(text()).toContain('measured with Cloudflare Web Analytics');
+    expect(text()).toContain('It sets no cookie, uses no local storage');
+    expect(text()).toContain('collects no personal data');
+  });
+
+  it('says the server counts requests per route and per day, without IP address', () => {
+    expect(text()).toContain('The server also counts requests per route and per day (UTC)');
+    expect(text()).toContain('no IP address');
+    expect(text()).toContain('/api/stats');
+  });
+
+  it('no longer promises "no analytics" (regression: the policy must match the beacon)', () => {
+    expect(text()).not.toMatch(/no analytics/i);
+  });
+
   it('carries the date of this revision', () => {
     expect(text()).toContain('Last updated: October 19, 2026');
   });

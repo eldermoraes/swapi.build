@@ -16,7 +16,29 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-10-19
+
+### Added
+
+- `GET /api/stats`: request counts per route template (for example
+  `/api/people/{id}`, `/mcp`) and per UTC day for the last seven days. Counted in
+  memory only, with no IP address, no User-Agent and no other client data; the
+  counters restart from zero on a server restart (`countingSince`). Once a day,
+  at 00:00 UTC, and on shutdown, the app writes one `route-stats` summary line to
+  the journal. `scripts/verify-deploy.sh` probes the endpoint.
+- Cloudflare Web Analytics beacon (no cookie, no local storage), injected by the
+  server into the site's HTML only when `CF_WEB_ANALYTICS_TOKEN` is set on the
+  host. Read at runtime: turning it on or off needs a restart, not a release
+  (`docs/DEPLOY.md`).
+
 ### Changed
+
+- Privacy policy: page visits are measured by Cloudflare Web Analytics, without
+  cookies or personal data, and the server counts requests per route and per day,
+  without IP addresses.
+- `no-tracking.test.ts` now also fails on known trackers, `document.cookie` and
+  any third-party script in `index.html`; the Cloudflare beacon is the one
+  exception, and it is never part of the frontend.
 
 - Deploy: publishing a GitHub Release now deploys to the self-hosted origin on
   Oracle Cloud. `native-binary.yml` runs the full suite, builds and attaches the
@@ -487,7 +509,7 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.5.2...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.6.0...HEAD
 [2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
@@ -514,3 +536,5 @@ snapshot version is not a release. -->
 [2.5.1]: https://github.com/eldermoraes/swapi.build/compare/v2.5.0...v2.5.1
 
 [2.5.2]: https://github.com/eldermoraes/swapi.build/compare/v2.5.1...v2.5.2
+
+[2.6.0]: https://github.com/eldermoraes/swapi.build/compare/v2.5.2...v2.6.0

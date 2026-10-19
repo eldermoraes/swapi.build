@@ -50,11 +50,16 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   (`scripts/swapi-deploy-gate.sh`, tested by `scripts/swapi-deploy-gate.test.sh`
   in CI): it accepts exactly `update vX.Y.Z <sha256>` and calls
   `sudo swapi-update`. Never loosen that pattern or give the key a shell.
-- **No analytics or tracking scripts.** Vercel Web Analytics and Speed Insights
-  were removed from the SPA (2026-10-19): the self-hosted origin has no
-  `/_vercel/*` edge, and the privacy page promises no trackers.
-  `no-tracking.test.ts` fails if a `@vercel/` package or a `/_vercel/` script
-  comes back.
+- **One measurement script, no trackers.** The only third-party script is the
+  Cloudflare Web Analytics beacon (no cookie, no local storage), injected by the
+  server (`WebAnalytics.java`, through `SeoRoutes`) only when
+  `CF_WEB_ANALYTICS_TOKEN` is set on the host; the frontend itself loads none.
+  Vercel Web Analytics and Speed Insights were removed (2026-10-19) and must not
+  come back. `no-tracking.test.ts` fails on a `@vercel/` package, a `/_vercel/`
+  script, a known tracker, `document.cookie` or a third-party script in
+  `index.html`. Server-side usage counting (`com.eldermoraes.stats`) keeps only
+  route templates and counts per UTC day, in memory, never anything about the
+  client; it is public at `/api/stats`. The privacy page describes both.
 - **Self-hosted origin.** `native-binary.yml` attaches the linux/amd64 native
   binary to each published Release (UBI9 builder, glibc ≤ 2.35 checked); the
   host runbook, the deploy user and the rollback live in `docs/DEPLOY.md`,
