@@ -1,8 +1,9 @@
 name: CI
 
-# Until 2026-08-10 the suite only ran inside the release pipeline (deploy.yml,
-# triggered by a v* tag). An error only surfaced in the middle of a release
-# already in flight. This workflow runs the same gate on PRs and pushes to main.
+# Until 2026-08-10 the suite only ran inside the release pipeline (then
+# deploy.yml, triggered by a v* tag). An error only surfaced in the middle of a
+# release already in flight. This workflow runs the same gate on PRs and pushes
+# to main; the release pipeline (native-binary.yml) runs it again on the tag.
 on:
   push:
     branches: [main]
@@ -41,6 +42,11 @@ jobs:
       # plain-bash tests. Throwaway keys only; the runner's OpenSSL 3 is enough.
       - name: Release script tests
         run: scripts/registry-key.test.sh
+
+      # The forced command of the host's deploy user: valid requests pass,
+      # injection and malformed tags or hashes are refused. Runs without the host.
+      - name: Deploy gate tests
+        run: scripts/swapi-deploy-gate.test.sh
 
       # Maven never runs Vitest: Quinoa's `vite build` bundles the frontend, it
       # does not test it. Without this step the frontend suite — including the

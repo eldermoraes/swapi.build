@@ -1,17 +1,26 @@
-name: Native binary
+name: Native binary and deploy
 
-# Builds the linux/amd64 native executable for the self-hosted origin
-# (docs/DEPLOY.md, "Self-hosted origin on Oracle Cloud") and attaches it, with
-# its SHA-256, to the GitHub Release.
+# The release pipeline (docs/DEPLOY.md, "Automated deploy"): full test suite →
+# linux/amd64 native executable attached, with its SHA-256, to the GitHub
+# Release → manual approval (environment `production`) → install on the
+# self-hosted origin over SSH → production probes on both names.
 #
 # - release: published, not the tag push: the Release is created by hand after
 #   the tag (docs/RELEASE.md), so a tag trigger would race a Release that does
 #   not exist yet.
-# - workflow_dispatch: re-attach the binary to an existing Release.
-# - pull_request touching this file: builds and runs the GLIBC check without
-#   uploading anything, so a change to the build is proven before merge.
+# - workflow_dispatch: build and attach the binary to an existing Release that
+#   has none yet (the upload never replaces an asset), then deploy it.
+# - pull_request touching this file: runs the suite, the build and the GLIBC
+#   check without uploading or deploying anything, so a change to the pipeline
+#   is proven before merge.
 #
-# The build runs inside the same UBI9 Mandrel builder the Vercel image uses
+# Why the deploy is a job here (needs: build) and not a workflow_run of its
+# own: it gets the hash straight from the build job's output, in the same run,
+# with no artifact download and no reading it back from the Release (which
+# would turn the two-source check of swapi-update into a single source). A
+# failed deploy is retried with "Re-run failed jobs", which reuses that output.
+#
+# The build runs inside the UBI9 Mandrel builder container
 # (quarkus.native.builder-image, glibc 2.34). Building directly on the
 # ubuntu-latest runner (glibc 2.39) would produce a binary that does not start
 # on the Ubuntu 22.04 host (glibc 2.35). march=compatibility drops the default
@@ -22,7 +31,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag to build and attach (e.g. v2.6.0)
+        description: Existing release tag to build, attach and deploy (e.g. v2.6.0)
         required: true
   pull_request:
     paths:
@@ -35,20 +44,55 @@ concurrency:
   group: native-binary-${{ github.event.release.tag_name || inputs.tag || github.ref }}
   cancel-in-progress: false
 
-# bash with -o pipefail (only an explicit shell: bash gets it).
+# bash with -o pipefail (only an explicit shell: bash gets it): a failed probe
+# on the left of "| tee" fails the step.
 defaults:
   run:
     shell: bash
 
+env:
+  # Never interpolated into a script directly: passed through the environment.
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Validate the tag
+        if: github.event_name != 'pull_request'
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a release tag: '$TAG'"; exit 1; }
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.sha || format('refs/tags/{0}', env.TAG) }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      # package, not test: with `mvnw test` Quinoa stays disabled ("Quinoa is
+      # disabled by default in tests") and the gate would pass green without
+      # ever installing Node or running vite. NodeToolchainTest covers the
+      # coherence between node-version and the lockfile; this step covers the
+      # real build. The native build below runs with -DskipTests, so this job is
+      # the suite that gates the release.
+      - name: Full test suite + frontend build
+        working-directory: swapi-app
+        run: ./mvnw -B package
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: write
+    outputs:
+      sha256: ${{ steps.sha.outputs.sha256 }}
     env:
-      # Never interpolated into a script directly: passed through the environment.
-      TAG: ${{ github.event.release.tag_name || inputs.tag }}
       # Highest glibc symbol version the host provides (Ubuntu 22.04).
       MAX_GLIBC: '2.35'
     steps:
@@ -101,14 +145,16 @@ jobs:
           [ "$top" = "$MAX_GLIBC" ] || { echo "binary needs GLIBC_$highest > $MAX_GLIBC: it will not start on the host"; exit 1; }
 
       - name: SHA-256
+        id: sha
         working-directory: dist
         run: |
           sha256sum application > application.sha256
           cat application.sha256
+          echo "sha256=$(cut -d' ' -f1 application.sha256)" >> "$GITHUB_OUTPUT"
           {
             echo "### Native binary ${TAG:-(pull request build, not uploaded)}"
             echo
-            echo "Second source for the checksum: compare with \`application.sha256\` on the Release before installing."
+            echo "Second source for the checksum: the deploy job passes this value to swapi-update, which also checks \`application.sha256\` on the Release."
             echo
             echo '```'
             cat application.sha256
@@ -122,3 +168,75 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         # No --clobber: an asset that already exists is never silently replaced.
         run: gh release upload "$TAG" application application.sha256 --repo "$GITHUB_REPOSITORY"
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    # Manual approval: the job waits here until a reviewer of the environment
+    # approves (in the Actions UI or through the REST API, docs/RELEASE.md).
+    environment: production
+    timeout-minutes: 20
+    # One deploy at a time on the host, whatever the tag.
+    concurrency:
+      group: deploy-oracle
+      cancel-in-progress: false
+    env:
+      SHA256: ${{ needs.build.outputs.sha256 }}
+      ORIGIN_IP: ${{ vars.SWAPI_ORIGIN_IP }}
+    steps:
+      - name: Validate the inputs
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a release tag: '$TAG'"; exit 1; }
+          [[ "$SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "no valid sha256 from the build job: '$SHA256'"; exit 1; }
+          [[ "$ORIGIN_IP" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || { echo "vars.SWAPI_ORIGIN_IP is not an IPv4 address"; exit 1; }
+
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.TAG }}
+
+      # The host key is pinned by the ORACLE_KNOWN_HOSTS secret; an unknown or
+      # changed key aborts the connection (StrictHostKeyChecking=yes).
+      - name: SSH key and pinned host key
+        env:
+          DEPLOY_KEY: ${{ secrets.ORACLE_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.ORACLE_KNOWN_HOSTS }}
+        run: |
+          [ -n "$DEPLOY_KEY" ] || { echo "secret ORACLE_DEPLOY_KEY is empty"; exit 1; }
+          [ -n "$KNOWN_HOSTS" ] || { echo "secret ORACLE_KNOWN_HOSTS is empty"; exit 1; }
+          umask 077
+          mkdir -p "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/ssh/deploy_key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$RUNNER_TEMP/ssh/known_hosts"
+
+      # The host runs only the forced command swapi-deploy-gate, which accepts
+      # exactly "update <tag> <sha256>" and calls sudo swapi-update. swapi-update
+      # downloads the binary from the Release, checks the hash against the
+      # Release's application.sha256 and against this value, switches
+      # /opt/swapi/current, restarts swapi and fails if it does not answer.
+      - name: Install on the host (swapi-update)
+        run: |
+          ssh -i "$RUNNER_TEMP/ssh/deploy_key" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" \
+            -o GlobalKnownHostsFile=/dev/null \
+            -o HostKeyAlgorithms=ssh-ed25519 \
+            -o ConnectTimeout=20 \
+            -o ServerAliveInterval=15 \
+            "deploy@$ORIGIN_IP" "update $TAG $SHA256"
+
+      - name: Remove the SSH key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/ssh"
+
+      - name: Verify production (swapi.build)
+        run: ./scripts/verify-deploy.sh origin swapi.build | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify production (www.swapi.build)
+        run: ./scripts/verify-deploy.sh origin www.swapi.build | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Manual step reminder
+        run: |
+          echo "**Deployed $TAG.** Remaining: step 9 of docs/RELEASE.md and the MCP Registry publish (step 10)." >> "$GITHUB_STEP_SUMMARY"

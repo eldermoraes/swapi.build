@@ -2,29 +2,25 @@
 # Probes from docs/DEPLOY.md as a single source (CI and operator use the same script).
 # The runbook explains the why of each check and wins on divergence.
 #
-# usage: verify-deploy.sh preview <host>   (Vercel preview: stateful burst; requires bypass or an open host)
-#        verify-deploy.sh prod <host>      (Vercel production: no burst; edge cache + X-Forwarded-Host poisoning)
-#        verify-deploy.sh origin <host>    (self-hosted origin behind Caddy, docs/DEPLOY.md "Oracle"):
-#                                           no Vercel-only checks (x-vercel-cache); keeps the burst and
-#                                           the X-Forwarded-Host / Forwarded poisoning probes, and checks
-#                                           the Caddy headers (HSTS, no Server)
+# usage: verify-deploy.sh origin <host>    (the self-hosted origin behind Caddy, docs/DEPLOY.md
+#                                           "Self-hosted origin on Oracle Cloud"): REST, OpenAPI, SEO,
+#                                           MCP (stateless, stateful burst, edges), CORS, the
+#                                           X-Forwarded-Host / Forwarded poisoning probes, and the
+#                                           Caddy headers (HSTS, no Server)
 #
-# If VERCEL_AUTOMATION_BYPASS_SECRET is in the environment, every call sends the
-# x-vercel-protection-bypass header (replaces the runbook's cookie jar).
+# `origin` is the only mode. The `preview` and `prod` modes probed the former
+# Vercel deployments and were removed with them.
 set -u
 
-USAGE="usage: verify-deploy.sh <preview|prod|origin> <host>"
+USAGE="usage: verify-deploy.sh origin <host>"
 MODE="${1:?$USAGE}"
 HOST="${2:?$USAGE}"
 HOST="${HOST#https://}"; HOST="${HOST%%/*}"
 BASE="https://${HOST}"
 
-case "$MODE" in preview|prod|origin) ;; *) echo "invalid mode: $MODE"; echo "$USAGE"; exit 2 ;; esac
+case "$MODE" in origin) ;; *) echo "invalid mode: $MODE"; echo "$USAGE"; exit 2 ;; esac
 
 CURL=(curl -s --max-time 90)
-if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
-  CURL+=(-H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}")
-fi
 
 FAILURES=0
 pass() { printf 'PASS  %s\n' "$1"; }
@@ -127,26 +123,23 @@ assert "cacheControl" not in result
   fi
 done
 
-# --- MCP stateful burst (preview and origin — bursts trip the Vercel mitigation
-# in prod; the self-hosted origin has no such mitigation and a single instance) --
-if [ "$MODE" = "preview" ] || [ "$MODE" = "origin" ]; then
-  SID=$("${CURL[@]}" -D - -o /dev/null -X POST "$BASE/mcp" \
-    -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"verify-deploy","version":"1.0"}}}' \
-    | tr -d '\r' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
-  if [ -z "$SID" ]; then
-    fail "MCP stateful burst" "session id issued on initialize" "none (guard: burst NOT executed)"
-  else
-    burst=$(for i in $(seq 1 12); do
-      ( "${CURL[@]}" -o /dev/null -w '%{http_code}\n' -X POST "$BASE/mcp" \
-          -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-          -H "Mcp-Session-Id: $SID" \
-          -d '{"jsonrpc":"2.0","id":'"$i"',"method":"tools/list"}' ) &
-    done; wait)
-    ok=$(echo "$burst" | grep -c '^200$')
-    [ "$ok" = "12" ] && pass "MCP stateful burst 12x200 (same session)" \
-      || fail "MCP stateful burst" "12x 200" "$(echo "$burst" | sort | uniq -c | tr '\n' ' ')"
-  fi
+# --- MCP stateful burst: 12 concurrent calls on one session ---------------------
+SID=$("${CURL[@]}" -D - -o /dev/null -X POST "$BASE/mcp" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"verify-deploy","version":"1.0"}}}' \
+  | tr -d '\r' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
+if [ -z "$SID" ]; then
+  fail "MCP stateful burst" "session id issued on initialize" "none (guard: burst NOT executed)"
+else
+  burst=$(for i in $(seq 1 12); do
+    ( "${CURL[@]}" -o /dev/null -w '%{http_code}\n' -X POST "$BASE/mcp" \
+        -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+        -H "Mcp-Session-Id: $SID" \
+        -d '{"jsonrpc":"2.0","id":'"$i"',"method":"tools/list"}' ) &
+  done; wait)
+  ok=$(echo "$burst" | grep -c '^200$')
+  [ "$ok" = "12" ] && pass "MCP stateful burst 12x200 (same session)" \
+    || fail "MCP stateful burst" "12x 200" "$(echo "$burst" | sort | uniq -c | tr '\n' ' ')"
 fi
 
 # --- MCP foreign session + edges --------------------------------------------
@@ -181,67 +174,40 @@ vary_html=$("${CURL[@]}" -I -H 'Accept: text/html' -H 'Origin: https://evil.exam
 echo "$vary_html" | grep -qi 'origin' && pass "SPA HTML / Vary contains Origin ($vary_html)" \
   || fail "SPA HTML / Vary: Origin" "Vary header containing Origin" "${vary_html:-missing}"
 
-# --- Prod only: Vercel edge cache --------------------------------------------
-# MISS -> HIT only makes sense against the production edge: a preview deployment sits
-# behind the SSO bypass, whose header suppresses the shared cache, so the probe would
-# read MISS forever and say nothing. Preview is covered by the manual runbook step
-# before the approval gate (same reasoning as the /api probes above). The self-hosted
-# origin has no edge cache at all, so origin mode skips this block.
-if [ "$MODE" = "prod" ]; then
-  c1=$("${CURL[@]}" -I "$BASE/api/people/1" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-vercel-cache"{print $2}')
-  c2=$("${CURL[@]}" -I "$BASE/api/people/1" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-vercel-cache"{print $2}')
-  [ "$c2" = "HIT" ] && pass "edge cache /api/people/1: $c1 -> HIT" \
-    || fail "edge cache /api/people/1" "second read HIT" "$c1 -> $c2"
-  cr=$("${CURL[@]}" -I "$BASE/api/people/random" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-vercel-cache"{print $2}')
-  [ "$cr" = "MISS" ] && pass "/api/people/random: always MISS" \
-    || fail "/api/people/random cache" "MISS" "$cr"
-  for p in / /resource/planets; do
-    h1=$("${CURL[@]}" -I -H 'Accept: text/html' "$BASE$p" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-vercel-cache"{print $2}')
-    h2=$("${CURL[@]}" -I -H 'Accept: text/html' "$BASE$p" | tr -d '\r' | awk -F': ' 'tolower($1)=="x-vercel-cache"{print $2}')
-    [ "$h2" = "HIT" ] && pass "edge cache SPA HTML $p: $h1 -> HIT" \
-      || fail "edge cache SPA HTML $p" "second read HIT" "$h1 -> $h2 (HTML always MISS — see runbook Troubleshooting)"
-  done
-fi
+# --- Poisoning via X-Forwarded-Host ---------------------------------------------
+# The app trusts X-Forwarded-* (application.properties); Caddy's reverse_proxy
+# overwrites the header (clients are not trusted proxies). A spoofed header must
+# never reach the response.
+n=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/api/people/3" | grep -c evil.example)
+m=$("${CURL[@]}" "$BASE/api/people/3" | grep -c evil.example)
+[ "$n" = "0" ] && [ "$m" = "0" ] && pass "poisoning X-Forwarded-Host: 0 occurrences" \
+  || fail "poisoning X-Forwarded-Host" "0 and 0" "$n and $m (see runbook)"
+# The ?poison=$$ keeps each pair on its own URL: should a shared cache ever sit in
+# front of the host again, the probes above would already have primed the CLEAN entry
+# for the bare path, and a spoofed request would just read that hit and pass no
+# matter what the origin does.
+seo_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/sitemap.xml?poison=$$" | grep -c evil.example)
+seo_clean=$("${CURL[@]}" "$BASE/sitemap.xml?poison=$$" | grep -c evil.example)
+[ "$seo_poison" = "0" ] && [ "$seo_clean" = "0" ] && pass "poisoning SEO X-Forwarded-Host: 0 occurrences" \
+  || fail "poisoning SEO X-Forwarded-Host" "0 and 0" "$seo_poison and $seo_clean (see runbook)"
+# The SPA HTML embeds canonical/og:url/og:image built from the request host.
+home_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/?poison=$$" | grep -c evil.example)
+home_clean=$("${CURL[@]}" "$BASE/?poison=$$" | grep -c evil.example)
+[ "$home_poison" = "0" ] && [ "$home_clean" = "0" ] && pass "poisoning SPA HTML X-Forwarded-Host: 0 occurrences" \
+  || fail "poisoning SPA HTML X-Forwarded-Host" "0 and 0" "$home_poison and $home_clean (see runbook)"
 
-# --- Prod and origin: poisoning via X-Forwarded-Host ---------------------------
-# The app trusts X-Forwarded-* (application.properties). On Vercel the edge overwrites
-# the header; on the self-hosted origin, Caddy's reverse_proxy does (clients are not
-# trusted proxies). Either way a spoofed header must never reach the response.
-if [ "$MODE" = "prod" ] || [ "$MODE" = "origin" ]; then
-  n=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/api/people/3" | grep -c evil.example)
-  m=$("${CURL[@]}" "$BASE/api/people/3" | grep -c evil.example)
-  [ "$n" = "0" ] && [ "$m" = "0" ] && pass "poisoning X-Forwarded-Host: 0 occurrences" \
-    || fail "poisoning X-Forwarded-Host" "0 and 0" "$n and $m (PURGE THE CACHE NOW — see runbook)"
-  # The ?poison=$$ is load-bearing: the edge cache key includes the query string, and the
-  # probes above already primed the CLEAN entry for the bare path (lines with $BASE/ and
-  # $BASE/sitemap.xml). Without a unique key the spoofed request would just read that HIT
-  # and the probe would pass no matter what the origin does.
-  seo_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/sitemap.xml?poison=$$" | grep -c evil.example)
-  seo_clean=$("${CURL[@]}" "$BASE/sitemap.xml?poison=$$" | grep -c evil.example)
-  [ "$seo_poison" = "0" ] && [ "$seo_clean" = "0" ] && pass "poisoning SEO X-Forwarded-Host: 0 occurrences" \
-    || fail "poisoning SEO X-Forwarded-Host" "0 and 0" "$seo_poison and $seo_clean (PURGE THE CACHE NOW — see runbook)"
-  # The SPA HTML embeds canonical/og:url/og:image built from the request host, and it is
-  # storable at the edge since 2.4.2 — a poisoned entry would be served for a year.
-  home_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/?poison=$$" | grep -c evil.example)
-  home_clean=$("${CURL[@]}" "$BASE/?poison=$$" | grep -c evil.example)
-  [ "$home_poison" = "0" ] && [ "$home_clean" = "0" ] && pass "poisoning SPA HTML X-Forwarded-Host: 0 occurrences" \
-    || fail "poisoning SPA HTML X-Forwarded-Host" "0 and 0" "$home_poison and $home_clean (PURGE THE CACHE NOW — see runbook)"
-fi
-
-# --- Origin only: what Caddy itself must add or remove ------------------------
-if [ "$MODE" = "origin" ]; then
-  # RFC 7239 Forwarded is not honoured by the app (allow-forwarded is off); prove it
-  # stays that way through the proxy too.
-  f=$("${CURL[@]}" -H 'Forwarded: host=evil.example;proto=https' "$BASE/api/people/3" | grep -c evil.example)
-  [ "$f" = "0" ] && pass "poisoning Forwarded (RFC 7239): 0 occurrences" \
-    || fail "poisoning Forwarded (RFC 7239)" "0" "$f"
-  headers=$("${CURL[@]}" -o /dev/null -D - "$BASE/api/people/1" | tr -d '\r')
-  hsts=$(echo "$headers" | awk -F': ' 'tolower($1)=="strict-transport-security"{print $2}')
-  [ "$hsts" = "max-age=63072000" ] && pass "HSTS max-age=63072000 (same value Vercel sent)" \
-    || fail "HSTS" "max-age=63072000" "${hsts:-missing}"
-  server=$(echo "$headers" | awk -F': ' 'tolower($1)=="server"{print $2}')
-  [ -z "$server" ] && pass "no Server header" || fail "Server header" "absent" "$server"
-fi
+# --- What Caddy itself must add or remove -----------------------------------------
+# RFC 7239 Forwarded is not honoured by the app (allow-forwarded is off); prove it
+# stays that way through the proxy too.
+f=$("${CURL[@]}" -H 'Forwarded: host=evil.example;proto=https' "$BASE/api/people/3" | grep -c evil.example)
+[ "$f" = "0" ] && pass "poisoning Forwarded (RFC 7239): 0 occurrences" \
+  || fail "poisoning Forwarded (RFC 7239)" "0" "$f"
+headers=$("${CURL[@]}" -o /dev/null -D - "$BASE/api/people/1" | tr -d '\r')
+hsts=$(echo "$headers" | awk -F': ' 'tolower($1)=="strict-transport-security"{print $2}')
+[ "$hsts" = "max-age=63072000" ] && pass "HSTS max-age=63072000" \
+  || fail "HSTS" "max-age=63072000" "${hsts:-missing}"
+server=$(echo "$headers" | awk -F': ' 'tolower($1)=="server"{print $2}')
+[ -z "$server" ] && pass "no Server header" || fail "Server header" "absent" "$server"
 
 echo
 if [ "$FAILURES" -eq 0 ]; then

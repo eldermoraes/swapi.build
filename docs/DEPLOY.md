@@ -1,331 +1,100 @@
 # Deploy runbook
 
-Canonical deploy procedure. Two hosts, one at a time:
+Canonical deploy procedure. One host: the **self-hosted origin on Oracle
+Cloud**, production since 2026-10-19. The native binary from the GitHub Release
+runs under systemd behind Caddy. Everything about the host is in
+[Self-hosted origin on Oracle Cloud](#self-hosted-origin-on-oracle-cloud).
 
-- **Vercel** (production until the DNS cutover): the project is
-  `algorium/swapi-build`, `framework: container`, built from
-  `swapi-app/Dockerfile.vercel`. Sections 1 to 4 below.
-- **Self-hosted origin on Oracle Cloud** (the migration target, and production
-  after the cutover): the native binary from the GitHub Release, run by systemd
-  behind Caddy. See [Self-hosted origin on Oracle Cloud](#self-hosted-origin-on-oracle-cloud).
+Nothing of this project runs on Vercel any more: the Vercel deploy pipeline,
+`vercel.json` and `Dockerfile.vercel` were removed on 2026-10-19, and there is
+no rollback to Vercel.
 
-`scripts/verify-deploy.sh <preview|prod|origin> <host>` runs the probes for
-either host: `preview` and `prod` against Vercel, `origin` against the
-self-hosted origin (no Vercel-only checks).
+`scripts/verify-deploy.sh origin <host>` runs every probe below against the
+host. CI and the operator use the same script.
 
-## Automated path (default since 2026-08-05)
+## Automated deploy
 
-Pushing a release tag (`v*`) — or manually dispatching **Deploy** in the Actions
-tab — runs `.github/workflows/deploy.yml`: full suite → preview deploy from
-`swapi-app/` → `scripts/verify-deploy.sh preview <url>` (all the probes below,
-including the stateful burst) → waits for **manual approval** (environment
-`production`) → production deploy → `scripts/verify-deploy.sh prod swapi.build`.
-CI authenticates against SSO-protected previews with the project's Protection
-Bypass for Automation secret (`x-vercel-protection-bypass` header) instead of a
-share link. Commit pushes never trigger it.
+Publishing a GitHub Release (`docs/RELEASE.md`, step 7) runs
+`.github/workflows/native-binary.yml`:
 
-The manual runbook below remains canonical: the workflow is an executor of this
-document, and this document wins on divergence. Use the manual path when the
-workflow is unavailable, when debugging, or for a deploy without a tag.
-`scripts/verify-deploy.sh <preview|prod> <host>` is the canonical way to run the
-Vercel probes in either path; the sections below explain what each probe proves.
+1. **`test`**: the full suite on the tag (`./mvnw package`, which also builds the
+   frontend).
+2. **`build`**: the native binary (section 1 below), attached to the Release with
+   its `application.sha256`; the hash also goes to the run summary and to the
+   job's output.
+3. **`deploy`**: waits for **manual approval** (environment `production`), then
+   connects to the host over SSH as the `deploy` user and sends
+   `update <tag> <sha256>`. On the host, the forced command `swapi-deploy-gate`
+   checks that request and runs `sudo swapi-update <tag> <sha256>` (section
+   2.5), which downloads the binary from the Release, checks the hash against
+   both sources, switches `/opt/swapi/current`, restarts swapi and fails if it
+   does not answer. Then `scripts/verify-deploy.sh origin swapi.build` and
+   `scripts/verify-deploy.sh origin www.swapi.build`.
 
-## Prerequisites
+Pushing a tag or commits never deploys. The deploy is a job in the same
+workflow (`needs: build`) rather than a separate `workflow_run`, so the hash
+comes straight from the build job's output: no artifact download, and no
+reading it back from the Release, which would reduce the two-source check of
+`swapi-update` to one. If `deploy` fails after the binary is attached, fix the
+cause and use **Re-run failed jobs** on the same run.
 
-- `.env` at the repo root (gitignored) with `VERCEL_API_TOKEN` and `VERCEL_TEAM_ID`.
-- `swapi-app/.vercel/project.json` exists (project already linked).
-- Full test suite green: `cd swapi-app && ./mvnw test`.
-- If this deploy carries a version bump, `docs/RELEASE.md` steps 1–7 are done
-  (changelog entry, annotated tag and GitHub Release exist).
+What the deploy needs, all outside the repository's files:
 
-## 1. Preview deploy
+| Name | Kind | Holds |
+|---|---|---|
+| `ORACLE_DEPLOY_KEY` | Actions secret | Private half of an ed25519 key used only by this workflow. Its public half sits in `~deploy/.ssh/authorized_keys` on the host (section 2.11). |
+| `ORACLE_KNOWN_HOSTS` | Actions secret | One `known_hosts` line, `<host IP> ssh-ed25519 AAAA...`, built from the host's `/etc/ssh/ssh_host_ed25519_key.pub`. The job connects with `StrictHostKeyChecking=yes`, so a changed host key stops the deploy. |
+| `SWAPI_ORIGIN_IP` | Actions variable | The host's public IP (also read by the uptime monitor). |
+| `production` | Environment | Required reviewer: the maintainer. Approval in the Actions UI or through the REST API (`docs/RELEASE.md`, step 8). |
 
-**Always from `swapi-app/` — never from the repo root** (root fails with
-`Expected VCR image registry vcr.vercel.com: <detect>`).
+The manual path is [Updating the version on the host](#updating-the-version-on-the-host).
 
-```bash
-cd swapi-app && set -a; source ../.env; set +a; npx vercel deploy --token "$VERCEL_API_TOKEN" --scope algorium
-```
+## What the probes check
 
-Native-image build takes ~10–25 min. Note the `Preview` URL in the output.
+`scripts/verify-deploy.sh origin <host>`, run by the `deploy` job on both names
+and by hand after any change on the host. Every line must read `PASS`.
 
-## 2. Verify the preview
+- **REST**: `GET /api/people/1` returns 200 and embeds `https://<host>/api/...`
+  URLs. Proves the per-request base-URL discovery through `X-Forwarded-*`.
+- **OpenAPI**: `/openapi.json` with `Accept: text/html` returns
+  `200 application/json` (Quinoa must not swallow the route), and its
+  `info.version` equals the pom of the checked-out tag: the deployed version
+  is the released one.
+- **SEO routes / social preview**: `robots.txt` (text/plain), `sitemap.xml`
+  (XML), `og-image.png` (PNG) bypass the SPA fallback; `robots.txt` points at the
+  sitemap on the host; the sitemap lists `/docs` and `/docs/webmcp`; the home
+  page carries `canonical`, `og:url` and the Twitter Card with absolute URLs on
+  the host; `/docs/webmcp` has its own title.
+- **Cold start**: the time of one request, informational only.
+- **MCP stateless**: a `tools/call` of `sw_get` with the 2026-07-28 headers and
+  `_meta` returns `isError: false` and URLs on the host. `server/discover` and
+  `tools/list` return flat `result.ttlMs: 0` and `result.cacheScope: "public"`,
+  with no nested `result.cacheControl` (required by the 2026-07-28 protocol;
+  CR1 omitted them).
+- **MCP stateful burst**: twelve concurrent `tools/list` calls on one session
+  must all return 200. Before `auto-init` this returned 33–58% `404` on Vercel's
+  multiple instances. The script skips the burst and fails if `initialize`
+  issued no session id: with `auto-init` on, an empty id also returns 200, so a
+  failed extraction would otherwise look like a pass.
+- **MCP foreign session and edges**: a session id that never existed is still
+  served (200); `GET /mcp` is 405; `GET /mcp/sse` is 404 (legacy transport
+  rejected); `POST /mcp/messages/*` is 404 with a JSON body citing `/mcp`.
+- **CORS and `Vary: Origin`**: CORS echoes the request `Origin`, so cacheable
+  responses (`/api/*` and the SPA HTML) must carry `Vary: Origin`, and a
+  request without `Origin` gets no `Access-Control-Allow-Origin`.
+- **Poisoning**: a spoofed `X-Forwarded-Host: evil.example` never reaches the
+  REST body, the sitemap or the SPA HTML (Caddy overwrites the header), and an
+  RFC 7239 `Forwarded` header is ignored by the app.
+- **Caddy headers**: `Strict-Transport-Security: max-age=63072000` and no
+  `Server` header.
 
-`*.vercel.app` URLs are SSO-protected. Create a bypass link (Vercel MCP tool
-`get_access_to_vercel_url`, or the dashboard "Share" button), then load it once
-with a cookie jar:
-
-```bash
-curl -sL -c jar.txt "<shareable-url-with-_vercel_share>" -o /dev/null
-```
-
-**REST** — expect HTTP 200 and embedded URLs pointing at the preview host with
-`https` (proves per-request base-url discovery through `X-Forwarded-*`):
-
-```bash
-curl -s -b jar.txt "https://<preview-host>/api/people/1"
-```
-
-**OpenAPI** — the spec must be served by the backend, not intercepted by Quinoa:
-
-```bash
-curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H 'Accept: text/html' \
-  -b jar.txt https://<preview-host>/openapi.json
-# expected: 200 application/json (Quinoa must not swallow the route)
-```
-
-**SEO routes / social preview** — `robots.txt`, `sitemap.xml` and the OG image
-must also bypass the SPA fallback and carry request-derived absolute URLs:
-
-```bash
-curl -s -o /dev/null -w 'robots: %{http_code} %{content_type}\n' \
-  -H 'Accept: text/html' -b jar.txt https://<preview-host>/robots.txt
-# expected: 200 text/plain (text/html = the SPA swallowed it)
-curl -s -o /dev/null -w 'sitemap: %{http_code} %{content_type}\n' \
-  -H 'Accept: text/html' -b jar.txt https://<preview-host>/sitemap.xml
-# expected: 200 application/xml or text/xml (text/html = the SPA swallowed it)
-curl -s -b jar.txt https://<preview-host>/robots.txt \
-  | grep -c 'Sitemap: https://<preview-host>/sitemap.xml'
-# expected: 1
-curl -s -b jar.txt https://<preview-host>/sitemap.xml \
-  | grep -c '<loc>https://<preview-host>/docs</loc>'
-# expected: 1
-curl -s -o /dev/null -w 'og image: %{http_code} %{content_type}\n' \
-  -b jar.txt https://<preview-host>/og-image.png
-# expected: 200 image/png
-curl -s -b jar.txt https://<preview-host>/ \
-  | grep -E 'rel="canonical"|property="og:url"|name="twitter:card"'
-# expected: all three lines appear with absolute URLs on the preview host
-```
-
-**Analytics / Speed Insights** — removed from the SPA in preparation for the
-self-hosted origin (Vercel's collection scripts only exist behind its edge, and
-the privacy page promises no trackers). There is nothing to probe;
-`no-tracking.test.ts` keeps the beacons from coming back.
-
-**Cold start** — after any deploy that changes Quarkus extensions (e.g.
-`smallrye-openapi`), measure and record the cold start of the first request so the
-extension's impact stays tracked:
-
-```bash
-curl -s -o /dev/null -w 'cold start: %{time_total}s\n' -b jar.txt "https://<preview-host>/api/people/1"
-```
-
-**MCP** — stateless probe wire format (all headers and `_meta` keys are required;
-`Mcp-Name` must match the tool name):
-
-```bash
-curl -s -b jar.txt -X POST "https://<preview-host>/mcp" \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -H "Mcp-Method: tools/call" \
-  -H "Mcp-Name: sw_get" \
-  -H "MCP-Protocol-Version: 2026-07-28" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"sw_get","arguments":{"resource":"PEOPLE","id":1},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"probe","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}'
-```
-
-Expect `isError: false` and embedded URLs on the preview host.
-
-**MCP discovery / tool-list cache fields** — since 2.4.3, the automated probes
-also send stateless `server/discover` and `tools/list` requests. Use the same
-protocol headers and `_meta` as above, set `Mcp-Method` and JSON `method` to the
-method being checked, and omit `Mcp-Name`, `name` and `arguments`.
-Both responses must have flat `result.ttlMs: 0` and
-`result.cacheScope: "public"`, with no nested `result.cacheControl`.
-These fields are required by the 2026-07-28 protocol even when no positive
-cache lifetime is configured. CR1 omitted them; checking the native preview
-and production response guards against serialization regressions.
-This does not enable caching of `tools/call` results.
-
-**MCP stateful** — the probe that catches the instance-affinity bug. Twelve
-concurrent calls on one session must all return 200; before `auto-init` this
-returned 33–58% `404`:
-
-```bash
-SID=$(curl -s -D - -o /dev/null -b jar.txt -X POST "https://<preview-host>/mcp" \
-  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"1.0"}}}' \
-  | tr -d '\r' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
-if [ -z "$SID" ]; then
-  echo "FAIL: no session id issued - do not read the burst below as a pass"
-else
-  for i in $(seq 1 12); do
-    ( curl -s -o /dev/null -w '%{http_code}\n' -b jar.txt -X POST "https://<preview-host>/mcp" \
-        -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-        -H "Mcp-Session-Id: $SID" \
-        -d '{"jsonrpc":"2.0","id":'$i',"method":"tools/list"}' ) &
-  done | sort | uniq -c
-fi
-# expected: 12 200
-```
-
-The empty-SID guard matters: with `auto-init` on, a request carrying an empty or
-missing session id also returns 200, so a failed extraction would otherwise print
-`12 200` and look like a pass without ever having sent a real session id. The
-`if`/`else` skips the burst entirely on failure rather than relying on `set -e`
-or `exit`, which would be wrong in a runbook block an operator pastes into their
-own interactive shell.
-
-Run the concurrent burst against the **preview only** — bursts are what trip the
-Vercel IP mitigation documented in Troubleshooting.
-
-**MCP foreign session** — a session id that never existed must still be served:
-
-```bash
-curl -s -o /dev/null -w 'foreign session: %{http_code}\n' -b jar.txt \
-  -X POST "https://<preview-host>/mcp" \
-  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-  -H 'Mcp-Session-Id: never-existed' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-# expected: 200
-```
-
-**MCP edges:**
-
-```bash
-curl -s -o /dev/null -w 'GET /mcp: %{http_code}\n' -b jar.txt "https://<preview-host>/mcp"
-# expected: 405
-curl -s -o /dev/null -w 'GET /mcp/sse: %{http_code}\n' -b jar.txt "https://<preview-host>/mcp/sse"
-# expected: 404
-curl -s -b jar.txt -X POST "https://<preview-host>/mcp/messages/never-existed" \
-  -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-# expected: 404 with a JSON body mentioning /mcp
-```
-
-**Cache poisoning via `Origin`** — CORS echoes the request `Origin`, so every
-edge-cacheable response must carry `Vary: Origin` or the edge serves one
-origin's header to another:
-
-```bash
-curl -sI -b jar.txt -H 'Origin: https://evil.example' "https://<preview-host>/api/people/1" | grep -i '^vary'
-# must contain Origin
-curl -s -o /dev/null -b jar.txt -w '[%header{access-control-allow-origin}]\n' "https://<preview-host>/api/people/1"
-# without Origin on the request: must come back []
-```
-
-If `Vary` is missing, purge the cache before going further.
-
-## 3. Production deploy
-
-```bash
-cd swapi-app && set -a; source ../.env; set +a; npx vercel deploy --prod --token "$VERCEL_API_TOKEN" --scope algorium
-```
-
-Do **not** use `vercel promote` on a preview deployment: it rebuilds anyway (preview
-and production environments differ) and asks an interactive question that fails
-without a tty.
-
-## 4. Post-deploy verification
-
-```bash
-curl -s -o /dev/null -w 'status: %{http_code}\n' https://swapi.build/api/people/1
-curl -s https://swapi.build/api/people/1 | grep -c 'https://swapi.build/api/people/1'
-curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H 'Accept: text/html' https://swapi.build/openapi.json
-# expected: 200 application/json (Quinoa must not swallow the route)
-curl -s -o /dev/null -w 'robots: %{http_code} %{content_type}\n' -H 'Accept: text/html' https://swapi.build/robots.txt
-curl -s -o /dev/null -w 'sitemap: %{http_code} %{content_type}\n' -H 'Accept: text/html' https://swapi.build/sitemap.xml
-curl -s https://swapi.build/robots.txt | grep -c 'Sitemap: https://swapi.build/sitemap.xml'
-curl -s https://swapi.build/sitemap.xml | grep -c '<loc>https://swapi.build/docs</loc>'
-curl -s -o /dev/null -w 'og image: %{http_code} %{content_type}\n' https://swapi.build/og-image.png
-curl -s https://swapi.build/ | grep -E 'rel="canonical"|property="og:url"|name="twitter:card"'
-# expected: robots 200 text/plain; sitemap 200 application/xml or text/xml; counts 1; og image 200 image/png
-```
-
-Expect `status: 200` and `1` (embedded URLs on `https://swapi.build`, scheme `https`),
-and `200 application/json` for the spec.
-Then run the MCP probe from step 2 against `https://swapi.build/mcp` (no cookie jar
-needed — the custom domain has no SSO). Re-run the foreign-session, edges, and
-`Origin`/`Vary` cache-poisoning probes against `https://swapi.build` too, without the
-concurrent burst.
-
-**Edge cache** — the response reaching the client shows `cache-control: public, max-age=300`:
-the CDN consumes and strips `s-maxage`/`stale-while-revalidate` before forwarding. The proof
-the edge stored it is `x-vercel-cache` going `MISS` → `HIT` on a second request to the same
-path. Note the cache key includes the HTTP method, so a `GET` and a `HEAD` on the same path
-are separate entries — don't read the first `HEAD` MISS as a failure.
-
-```bash
-curl -sI https://swapi.build/api/people/1 | grep -i 'x-vercel-cache'   # MISS
-curl -sI https://swapi.build/api/people/1 | grep -i 'x-vercel-cache'   # HIT
-curl -sI https://swapi.build/api/people/random | grep -i 'x-vercel-cache'  # MISS, always
-```
-
-The SPA HTML of the real routes (`/`, `/docs`, `/docs/mcp`, `/docs/webmcp`, `/about`, `/privacy`, `/terms`,
-`/resource/<type>`, `/resource/<type>/<id>`) is edge-cached too since 2.4.2. The client
-sees `public, max-age=0, must-revalidate` — indistinguishable from the pre-2.4.2 default
-the edge injected — so the **only** proof is `MISS` → `HIT`. Unknown paths are not cached
-on purpose (unique by definition; the filter is an explicit route list).
-
-```bash
-curl -sI -H 'Accept: text/html' https://swapi.build/ | grep -i 'x-vercel-cache'                  # MISS
-curl -sI -H 'Accept: text/html' https://swapi.build/ | grep -i 'x-vercel-cache'                  # HIT
-curl -sI -H 'Accept: text/html' https://swapi.build/resource/planets | grep -i 'x-vercel-cache'  # MISS
-curl -sI -H 'Accept: text/html' https://swapi.build/resource/planets | grep -i 'x-vercel-cache'  # HIT
-curl -sI -H 'Accept: text/html' https://swapi.build/does-not-exist | grep -i 'x-vercel-cache'    # MISS, always
-```
-
-**Cache poisoning probe** — responses embed absolute URLs built from the per-request host,
-and `X-Forwarded-Host` is *not* part of the cache key. Vercel overwrites the header (verified
-2026-08-03: plain spoof, RFC 7239 `Forwarded`, and a duplicated header were all ignored), so
-this is a regression check:
-
-```bash
-curl -s -H 'X-Forwarded-Host: evil.example' https://swapi.build/api/people/3 | grep -c evil.example  # 0
-curl -s https://swapi.build/api/people/3 | grep -c evil.example                                      # 0
-curl -s -H 'X-Forwarded-Host: evil.example' "https://swapi.build/?poison=$$" | grep -c evil.example   # 0
-curl -s "https://swapi.build/?poison=$$" | grep -c evil.example                                       # 0
-```
-
-The `?poison=$$` on the SPA HTML pair is not decoration: the edge cache key **includes the
-query string**, and the SEO probes earlier in this runbook already primed the clean entry for
-the bare `/` (and for `/sitemap.xml`). Without a unique key the spoofed request reads that
-primed `HIT` and the probe passes unconditionally — it would prove nothing. The same query is
-applied to the `/sitemap.xml` pair in `scripts/verify-deploy.sh` for exactly this reason. The
-`/` pair matters more since 2.4.2: the SPA HTML embeds `canonical`, `og:url` and `og:image`
-built from the request host and is now storable at the edge for a year.
-
-If any is non-zero, purge the cache immediately and add `Vary: X-Forwarded-Host` to the
-cacheable response before redeploying.
-
-### Questions settled on the 2026-08-03 production deploy
-
-1. **Per-request cost of `auto-init`:** a warm `tools/call` measured 0.19–0.36s over five
-   runs (~0.26s median), in line with the historical warm-instance figure. Serving every
-   call with a session costs nothing measurable at this scale.
-2. **`Vary: Origin` did not fragment the `/api/*` cache:** six distinct paths all went
-   `MISS` → `HIT` on the second request. Varying by `Origin` is safe here because clients
-   that send no `Origin` — curl, servers, MCP — share one entry.
-3. **The edge *does* cache a response carrying `max-age` without `s-maxage`:** verified on
-   `/assets/index-*.js` (`cache-control: public, max-age=31536000, immutable`, no
-   `s-maxage`), which went `MISS` → `HIT`. So `Vary: Origin` on the SPA's static responses
-   is load-bearing, not decorative — without it the edge could serve one origin's
-   `Access-Control-Allow-Origin` to another. A local container could not answer this.
-
-Note: `functionDefaultTimeout` is **60s** since 2026-08-03, as the spec had decided. It is a
-project setting (`resourceConfig`), applied by `PATCH` without a redeploy — see Troubleshooting.
-
-## Troubleshooting
+## Troubleshooting (application)
 
 | Symptom | Cause / fix |
 |---|---|
-| `Expected VCR image registry vcr.vercel.com: <detect>` | Deploy ran from the repo root. Re-run from `swapi-app/`. |
-| The Deploy workflow sits "Waiting" after the preview job | Expected: the `production` environment requires manual approval. Review the preview probe output in the job summary, then approve in the Actions UI. |
-| CI preview probes all fail with an SSO/auth page | The Protection Bypass secret was regenerated on Vercel. Update the `VERCEL_AUTOMATION_BYPASS_SECRET` repo secret (`gh secret set`). |
-| A `git push` triggered a Vercel build | The GitHub repo has been linked to the project since 2026-08-03. Auto-deploy is off via `git.deploymentEnabled: false` in the **root** `vercel.json` — if a build fired, that file was removed or the setting was overridden in the dashboard. Note the build would fail anyway: `rootDirectory` is `null`, so it builds from the repo root (row above). |
-| Vercel Analytics dashboard shows zero visitors | Expected since the SPA stopped injecting the Web Analytics and Speed Insights scripts (self-hosted origin preparation). Not a fault. |
-| `vercel promote` hangs or `User force closed the prompt` | Interactive confirmation without tty. Use `vercel deploy --prod` instead. |
-| 403 on `*.vercel.app` URLs | Team SSO protection. Use a `_vercel_share` bypass link + cookie jar. |
-| 404 `Mcp session not found` on a stateful MCP call | **Not a cold start.** Sessions live in one instance's heap and Vercel has no session affinity, so the call landed on a different replica. Fixed by `quarkus.mcp.server.http.streamable.auto-init=true`; if it reappears, that property is off in the running deployment. |
-| Quinoa build fails on Vercel with local artifacts | `swapi-app/.vercelignore` must exclude `dist/` and `target/`. |
-| 202 responses from the API | Legacy quirk retired 2026-08-01 — current builds return 200; a 202 means an old deployment is live. |
-| 403 on every path of `swapi.build`, answered in ~0.07s with `x-vercel-mitigated: deny` | Automatic mitigation blocked the source IP (typical after a load test). The app is **not** down: check with `curl https://swapi-build.vercel.app/api/people/1` (200) or hit the public domain from another IP. It expires on its own. **Do not redeploy.** (The team is on the Pro plan since 2026-08-07, not Hobby.) |
-| `x-vercel-cache: MISS` always, on a path that isn't `/random` | The `CacheControlFilter` isn't applying the header. Check `curl -sI <host>/api/people/1 \| grep -i cache-control` — it must contain `max-age=300` (the edge strips `s-maxage` before the client sees it). Remember `GET` and `HEAD` are separate cache entries. |
-| A wrong response "frozen" at the edge (1-year TTL) | Purge: dashboard → project → **CDN** → **Caches** → **Purge**, `*` for the whole project. Prefer **Invalidate** over **Delete** (Delete revalidates in the foreground and risks a cache stampede). A new deployment also clears it, since the cache key includes the deployment URL. |
-| First request after a deploy takes ~11s | Container cold start (image pull + boot). Measured 10.9s on 2026-08-03. Edge cache makes the function idle more, so cold starts now hit the uncached `/random` endpoints more often than before. The first external request after the second 2026-08-03 deploy took only 1.67s, but that is **not** a counter-measurement: nothing rules out a platform health check having booted the instance first. Treat ~11s as the number to budget against. |
-| `Error: fetch failed` / `"reason": "deploy_failed"` from the CLI mid-build | The CLI lost its log stream — **the remote build usually keeps running**. Do not paste the `retry deploy` command the CLI suggests: that starts a second native build in parallel. Get the deployment id from the CLI output (or `list_deployments`) and poll `GET /v13/deployments/<id>` until `readyState` leaves `BUILDING`. Seen on 2026-08-03: the CLI errored out, the build finished `READY` normally, and the preview verified clean. |
-| `504` / `FUNCTION_INVOCATION_TIMEOUT` on the first request after a deploy | The cold start (~11s measured) exceeded `functionDefaultTimeout`, now **60s** since 2026-08-03 — the earlier 15s left only ~4s of margin. Read the current value with `GET /v9/projects/swapi-build`; change it with `PATCH` and the same `resourceConfig` shape (`{"fluid":true,"functionDefaultRegions":["iad1"],"functionDefaultTimeout":60}`). It is a project setting: it takes effect immediately, without a redeploy. |
-| SPA HTML (`/`, `/resource/*`) always `x-vercel-cache: MISS` | The `quarkus.http.filter.spa` block in `application.properties` is missing or its `matches` regex no longer covers the route (the list is explicit and anchored — a new SPA route must be added there and to `CacheHeadersTest.SPA_ROUTES`). Without it the edge injects `public, max-age=0, must-revalidate` and every cold-PoP page view executes the function (usage_anomaly of 2026-09-03). Note the client never sees `s-maxage` (the CDN strips it): only MISS → HIT proves the cache. If the header is present at the origin and the edge still refuses to store, drop `must-revalidate` from `swapi.cache-control.html` and redeploy. |
-
+| 404 `Mcp session not found` on a stateful MCP call | `quarkus.mcp.server.http.streamable.auto-init=true` is off in the running version. It serves an unknown session id with a throwaway session (introduced for Vercel's lack of session affinity; on the single host it keeps clients working across restarts). |
+| 202 responses from the API | Legacy quirk retired 2026-08-01 — current builds return 200; a 202 means a very old binary is live. |
+| The OpenAPI version probe fails right after a deploy | The host still runs the previous version: `swapi-update` failed, or the probe ran against a tag other than the deployed one. Read the `deploy` job log; on the host, `readlink /opt/swapi/current`. |
 
 ## WebMCP verification (2.5.0+)
 
@@ -360,9 +129,9 @@ started on the corresponding port beforehand.
 
 ## Self-hosted origin on Oracle Cloud
 
-The migration target, and production after the DNS cutover. Everything needed
-to rebuild the host from scratch is in this section, so a reinstall never
-depends on anyone's memory.
+Production since the DNS cutover of 2026-10-19. Everything needed to rebuild
+the host from scratch is in this section, so a reinstall never depends on
+anyone's memory.
 
 **Shape.** One Always Free micro VM (x86_64, 1 GB RAM, Ubuntu 22.04, glibc
 2.35) that already runs a Discord bot (`invite-role-bot.service`). The bot is
@@ -373,18 +142,19 @@ internet ──► Caddy :80/:443 (TLS, Let's Encrypt) ──► swapi 127.0.0.1
 ```
 
 - swapi listens on loopback only; only Caddy talks to the internet.
-- DNS stays on Cloudflare, **DNS-only (grey cloud)**, no proxy, no tunnel, no
-  firewall rules ported from Vercel.
-- The Vercel project stays as the rollback target during the reserve period.
+- DNS stays on Cloudflare, **DNS-only (grey cloud)**, no proxy, no tunnel.
+- Releases arrive through the `deploy` user (section 2.11), whose key can only
+  run `swapi-update` with a validated tag and hash.
 
 **Who does what.** Work on the host (SSH) is done by the maintainer, or by a
 session he opens for that purpose. DNS changes need his explicit go, record by
 record. Each step below says who owns it.
 
 **Kept out of this public repository:** the host's public IP (the uptime
-monitor reads it from the repository variable `SWAPI_ORIGIN_IP`), SSH keys, the
-Discord webhook, and where the bot's token lives. Record those in the
-maintainer's private notes.
+monitor and the deploy job read it from the repository variable
+`SWAPI_ORIGIN_IP`), SSH keys (the deploy key lives only in the
+`ORACLE_DEPLOY_KEY` secret), the Discord webhook, and where the bot's token
+lives. Record those in the maintainer's private notes.
 
 ### Step 0: host lost, recreated, or account closed (any time)
 
@@ -394,37 +164,34 @@ to another tenant, who could then obtain a valid Let's Encrypt certificate for
 `swapi.build` (the records are DNS-only) and answer in its place, including on
 `/mcp` for third-party agents.
 
-- During the reserve period: point both names back to Vercel (values under
-  [Rollback](#rollback)).
-- After it: delete the `swapi.build` and `www.swapi.build` A records.
-
-Then rebuild from this runbook on a new VM. The uptime monitor's DNS check is
-what raises this alarm.
+Delete the `swapi.build` and `www.swapi.build` A records (maintainer's go),
+then rebuild from this runbook on a new VM and point them at the new IP. A new
+VM also has a new host key: update the `ORACLE_KNOWN_HOSTS` secret (section
+2.11) and the `SWAPI_ORIGIN_IP` variable, or the next deploy stops at the host
+key check. The uptime monitor's DNS check is what raises this alarm.
 
 ### 1. The binary: built by CI, attached to the Release
 
 `.github/workflows/native-binary.yml` runs on `release: published` (after the
 manual Release step of `docs/RELEASE.md`, so it never races the tag) and on
-`workflow_dispatch` with an existing tag. It:
+`workflow_dispatch` with an existing tag. After the `test` job, its `build`
+job:
 
-- builds with `-Dquarkus.native.container-build=true`, inside the same UBI9
-  Mandrel builder the Vercel image uses (`quarkus.native.builder-image`, glibc
-  2.34). Building on the `ubuntu-latest` runner itself (glibc 2.39) would
+- builds with `-Dquarkus.native.container-build=true`, inside the UBI9
+  Mandrel builder pinned in `quarkus.native.builder-image` (glibc 2.34). Building on the `ubuntu-latest` runner itself (glibc 2.39) would
   produce a binary that does not start on Ubuntu 22.04;
 - passes `-Dquarkus.native.march=compatibility`, so the binary does not require
   AVX2/BMI2/FMA (the default `x86-64-v3` target), which the host CPU is not
   known to have;
 - fails if `objdump -T` shows any `GLIBC_` symbol version above 2.35 (the
   regression test for the glibc trap);
-- uploads `application` and `application.sha256` to the Release, and prints
-  the hash in the run summary: **a second source** for the checksum, so a
-  binary swapped on the Release together with its `.sha256` is still caught.
+- uploads `application` and `application.sha256` to the Release, and hands
+  the hash to the `deploy` job (and prints it in the run summary): **a second
+  source** for the checksum, so a binary swapped on the Release together with
+  its `.sha256` is still caught by `swapi-update`.
 
-A pull request that changes the workflow runs the build and the GLIBC check
-without uploading anything.
-
-While the reserve period lasts, a release tag still deploys to Vercel as well
-(`deploy.yml`). See [Reserve period](#5-reserve-period-and-after).
+A pull request that changes the workflow runs the suite, the build and the
+GLIBC check without uploading or deploying anything.
 
 ### 2. Host preparation (one SSH window with write access)
 
@@ -467,8 +234,11 @@ installed).
    PasswordAuthentication no
    KbdInteractiveAuthentication no
    PermitRootLogin no
-   AllowUsers ubuntu
+   AllowUsers ubuntu deploy
    ```
+
+   `deploy` is the automated-deploy user of section 2.11. If `AllowUsers`
+   names only `ubuntu`, sshd refuses it before the key is even checked.
 
 #### 2.3 The bot token (touches the bot: maintainer's go on the spot)
 
@@ -725,7 +495,7 @@ oracle.swapi.build {
 - `protocols h1 h2`: no HTTP/3 advertised on UDP 443, which stays closed.
 - Only a header read timeout: no `write` or `idle` timeout, which would cut the
   streamed responses of `/mcp`.
-- HSTS: the same value Vercel sends today, no `preload`, no
+- HSTS: two years, the value the site has always sent, no `preload`, no
   `includeSubDomains`.
 - `reverse_proxy` overwrites `X-Forwarded-*` coming from clients, which is what
   makes the app's `quarkus.http.proxy.allow-x-forwarded=true` safe here
@@ -734,7 +504,7 @@ oracle.swapi.build {
   investigation, and remove it afterwards.
 
 **Rule: a name enters the `Caddyfile` only after its DNS already points at the
-host.** Otherwise the ACME challenge lands on Vercel, fails, and Let's Encrypt
+host.** Otherwise the ACME challenge lands on the old address, fails, and Let's Encrypt
 rate-limits the name (5 failed validations per hour), which can delay the
 certificate by hours on cutover day.
 
@@ -799,6 +569,67 @@ The privacy page states this 30-day limit.
 Security List of the VCN: ingress TCP 22, 80 and 443 only. Keep the ICMP rules
 Oracle adds by default (type 3 code 4 is needed for path MTU discovery).
 
+#### 2.11 The `deploy` user (automated deploys)
+
+The `deploy` job of `native-binary.yml` logs in as `deploy` with the key in
+the `ORACLE_DEPLOY_KEY` secret. That key can do one thing: ask for
+`swapi-update <tag> <sha256>`.
+
+- **The user:** a system account with a login shell (sshd runs the forced
+  command through it) and no password (`*`, never a password login):
+
+  ```bash
+  sudo useradd --system --no-create-home --home-dir /home/deploy --shell /bin/bash --user-group deploy
+  sudo usermod -p '*' deploy
+  ```
+
+- **`~deploy/.ssh/authorized_keys`**, a single line. Home, `.ssh` and the file
+  are owned by root and only readable by the group `deploy` (750, 750, 640),
+  so the user cannot rewrite its own forced command:
+
+  ```
+  restrict,command="/usr/local/sbin/swapi-deploy-gate" ssh-ed25519 AAAA... swapi-deploy-ci
+  ```
+
+  `restrict` turns off port, agent and X11 forwarding, the PTY and
+  `~/.ssh/rc`; `command=` replaces whatever the client asks for with the gate.
+
+- **`/usr/local/sbin/swapi-deploy-gate`** (owner root, mode 755): byte-for-byte
+  `scripts/swapi-deploy-gate.sh` of this repository. It reads
+  `SSH_ORIGINAL_COMMAND`, accepts only `update vX.Y.Z <64 lowercase hex>` as a
+  whole string with single spaces, and runs
+  `sudo -n /usr/local/sbin/swapi-update <tag> <sha256>` with the two values as
+  separate arguments. Anything else (no command, a shell, scp, `;`, `$(`,
+  extra spaces or arguments, a malformed tag or hash) is refused without running
+  anything. `scripts/swapi-deploy-gate.test.sh` proves it in CI.
+
+- **`/etc/sudoers.d/swapi-deploy`** (owner root, mode 440), checked with
+  `visudo -cf` before it is installed:
+
+  ```
+  deploy ALL=(root) NOPASSWD: /usr/local/sbin/swapi-update
+  ```
+
+- **sshd:** if `AllowUsers` is set (section 2.2), it must include `deploy`.
+
+- **`ORACLE_KNOWN_HOSTS`:** the host's ed25519 key in `known_hosts` form, read
+  on the host itself, not with `ssh-keyscan` over the network:
+
+  ```bash
+  printf '%s %s\n' "<host IP>" "$(cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub)"
+  ```
+
+The maintainer's provisioning script (kept with his private notes) does all of
+the above idempotently, run as root from standard input with the public key and
+the host IP as arguments, and prints that line. It warns, without changing
+anything, if sshd would refuse `deploy`. Its embedded gate can be checked
+against this repository with
+`scripts/swapi-deploy-gate.test.sh <provisioning script>`.
+
+**Rotating the deploy key:** generate a new ed25519 key pair, replace the line
+in `authorized_keys` (never add a second one), update `ORACLE_DEPLOY_KEY`, and
+delete the old private key.
+
 ### 3. Rehearsal on `oracle.swapi.build` (same window)
 
 1. `sudo journalctl -u caddy -f` until "certificate obtained successfully" for
@@ -818,84 +649,59 @@ Oracle adds by default (type 3 code 4 is needed for path MTU discovery).
    rules and the enabled units in one go.
 6. `free -m`: the bot keeps its usual memory.
 
-### 4. Cutover
+### 4. Cutover (done on 2026-10-19)
 
-**The day before:**
-
-- DNS (maintainer's go): TTL of `swapi.build` and `www.swapi.build` down to 60 s.
-  `swapi.build` sends HSTS for 2 years, so browsers will not let a visitor click
-  through a certificate error: the window between the DNS switch and the
-  certificate must be as short as possible.
-- Note the expiry of Vercel's certificates
-  (`echo | openssl s_client -connect swapi.build:443 -servername swapi.build 2>/dev/null | openssl x509 -noout -enddate`,
-  same for `www`). It bounds the fast rollback (see [Rollback](#rollback)).
-- Maintainer, Oracle console: is the account Always Free only or Pay As You Go?
-
-**On the day:** a 30-minute window on a weekday morning, maintainer present.
-
-| # | Step | Owner |
-|---|---|---|
-| 1 | The host serves the same version as Vercel (`/openapi.json`, `info.version`) | Read-only |
-| 2 | `www.swapi.build`: A → host IP, DNS-only, TTL 60 (an A, not a CNAME, so rollback only changes values) | DNS, maintainer's go |
-| 3 | Wait 90 s; add `www.swapi.build` to the `Caddyfile` site address; validate; restart; wait for "certificate obtained successfully" | Host |
-| 4 | `scripts/verify-deploy.sh origin www.swapi.build` | Read-only |
-| 5 | `swapi.build`: A → host IP, DNS-only, TTL 60 | DNS, maintainer's go |
-| 6 | Same as step 3 for `swapi.build` | Host |
-| 7 | `scripts/verify-deploy.sh origin swapi.build`; `dig @1.1.1.1` and `dig @8.8.8.8` for both names; `systemctl status swapi caddy invite-role-bot` | Read-only and host |
-| 8 | Remove `oracle.swapi.build` from the `Caddyfile` (restart) and delete its DNS record, so no indexable copy of the site is left behind | Host; DNS, maintainer's go |
-| 9 | Turn the uptime monitor on (below) | Maintainer |
-| 10 | After 24 h without trouble: TTL back to 300 | DNS, maintainer's go |
+`www.swapi.build` (19:22 BRT) and `swapi.build` (19:23 BRT) were switched to
+A records pointing at the host, DNS-only, TTL 60, each name entering the
+`Caddyfile` only after its DNS pointed at the host. Certificates were issued
+and the probes went green on both names; `oracle.swapi.build` was then removed
+from the `Caddyfile` and from the DNS. TTL goes back to 300 after 24 hours
+without trouble (DNS, maintainer's go).
 
 Final site address in the `Caddyfile`: `swapi.build, www.swapi.build {`. The
-`www` name is served as-is (200, no redirect), as on Vercel.
+`www` name is served as-is (200, no redirect).
 
-**Uptime monitor.** `.github/workflows/uptime.yml` was merged with only a
-manual trigger, because before the cutover its DNS check fails by design. On
-cutover day: set the repository variable `SWAPI_ORIGIN_IP` to the host's IP,
-uncomment its `schedule` (every 15 minutes) in a PR, merge, and run it once
-from the Actions tab. It checks the API, more than 20 days left on both
-certificates (Caddy renews 30 days ahead), and that both names resolve only to
-the host. GitHub emails the owner on failure, and disables scheduled
-workflows after 60 days without repository activity: re-enable it if so.
+For a future move to another host, the same order holds: TTL down to 60 the day
+before (`swapi.build` sends HSTS for 2 years, so browsers will not let a
+visitor click through a certificate error), then one name at a time: DNS →
+wait 90 s → add the name to the `Caddyfile` → certificate →
+`scripts/verify-deploy.sh origin <name>`. Expect 1 to 2 minutes of TLS errors
+per name for whoever resolves the new address: the cost of having no tunnel.
 
-**Rollback criteria** (any one): certificate not issued within 10 minutes; a
-probe failing for more than 15 minutes without a clear cause; swapi restarting
-in a loop; the bot down.
+**Uptime monitor.** `.github/workflows/uptime.yml` runs every 15 minutes. It
+checks the API, more than 20 days left on both certificates (Caddy renews 30
+days ahead), and that both names resolve only to `SWAPI_ORIGIN_IP`. GitHub
+emails the owner on failure, and disables scheduled workflows after 60 days
+without repository activity: re-enable it if so.
 
-#### Rollback
+### 5. Rollback
 
-`swapi.build` A `76.76.21.21` and `www.swapi.build` CNAME
-`cname.vercel-dns.com`, both DNS-only (values read on 2026-10-19). Takes 5 to
-10 minutes for nearly everyone. The Vercel domains stay attached to the
-project, so Vercel answers at once (one cold start of a few seconds).
+The only way back is the previous version on the host. `swapi-update` keeps the
+active version and the one before it under `/opt/swapi/`.
 
-The fast rollback holds until **2026-12-23**, when Vercel's certificate for
-`www` expires (the apex one on 2026-12-25): with the DNS pointing elsewhere,
-Vercel cannot renew them. After that date, a rollback includes a few minutes
-of TLS errors while Vercel issues new certificates.
+```bash
+ls /opt/swapi/                                   # v<previous> and v<current>
+sudo ln -sfn /opt/swapi/<previous tag> /opt/swapi/current
+sudo systemctl restart swapi
+curl -fsS https://swapi.build/openapi.json | grep -o '"version"[^,]*'
+scripts/verify-deploy.sh origin swapi.build      # from a checkout of <previous tag>
+```
 
-Expect 1 to 2 minutes of TLS errors, for whoever resolves the new address,
-between each name's DNS switch and its certificate. That is the cost of having
-no tunnel.
+`swapi-update` prints the exact `ln` command when a new version does not
+answer. A rollback is a host change (maintainer, or a session he opens for it);
+the next release then goes out through the normal pipeline. Rolling back to a
+version older than the previous one: run `sudo swapi-update <tag> <sha256>` with
+the hash from that release's run summary.
 
-### 5. Reserve period and after
-
-- **No releases during the reserve period.** A tag would deploy the new
-  version to Vercel (no traffic) while the host keeps the old one, and a
-  rollback would silently change versions. If a release cannot wait, update the
-  host the same day (`swapi-update`).
-- After 14 days without a rollback: a PR removes `deploy.yml` and the Vercel
-  files, and the privacy page drops its "previous host" paragraph. **The
-  Vercel project is kept, idle, not deleted**: deleting it ends the DNS
-  rollback, and recreating it means a new deploy.
-- Check once a month on the Vercel bill that `swapi-build.vercel.app` is not
-  waking the container.
+There is no DNS rollback to another provider: nothing of this project runs on
+Vercel any more.
 
 ### Updating the version on the host
 
-After a release (outside the reserve period): open the **Native binary** run of
-that release in the Actions tab, copy the hash from its summary, then on the
-host:
+Normally done by the `deploy` job (see [Automated deploy](#automated-deploy)).
+Manual path, when the job cannot run: open the **Native binary and deploy** run
+of that release in the Actions tab, copy the hash from its summary, then on
+the host:
 
 ```bash
 sudo swapi-update <tag> <sha256 from the run summary>
@@ -912,3 +718,7 @@ curl -fsS https://swapi.build/openapi.json | grep -o '"version"[^,]*'
 | swapi restarts in a loop | `journalctl -u swapi`; an out-of-memory kill shows as `oom-kill` in `journalctl -k`. The ceilings are deliberate: they protect the bot. |
 | The uptime monitor fails on DNS | Someone changed the records, or the VM was recreated: see [Step 0](#step-0-host-lost-recreated-or-account-closed-any-time). |
 | The bot is slow or down | `free -m` and `systemctl status invite-role-bot`. If swapi or Caddy are the cause, their ceilings are too high: lower `MemoryMax`, never touch the bot first. |
+| `deploy` job: `Host key verification failed` | The host key changed (VM recreated or SSH reinstalled) or `ORACLE_KNOWN_HOSTS` is wrong. Read the key on the host (section 2.11) and compare before updating the secret: an unexplained change is a reason to stop, not to overwrite. |
+| `deploy` job: `Permission denied (publickey)` | `ORACLE_DEPLOY_KEY` does not match `~deploy/.ssh/authorized_keys`, or sshd's `AllowUsers` does not include `deploy` (`sudo sshd -T \| grep -i allowusers`). |
+| `deploy` job: `swapi-deploy-gate: refused` | The workflow sent something other than `update vX.Y.Z <sha256>` (an empty hash from a skipped build, a non-release tag). Fix the workflow; never loosen the gate. |
+| `deploy` job: `sudo: a password is required` | `/etc/sudoers.d/swapi-deploy` is missing or the `includedir` line is gone from `/etc/sudoers` (`sudo -l -U deploy`). |
