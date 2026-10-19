@@ -102,11 +102,16 @@ The server is listed as `build.swapi/star-wars`, published from the repo-root
    ```bash
    # login proves control of swapi.build via the apex DNS TXT record
    # (key: ~/.config/swapi.build/mcp-registry-ed25519.pem — local only, never in the repo)
-   PRIVATE_KEY="$(openssl pkey -in ~/.config/swapi.build/mcp-registry-ed25519.pem -noout -text \
-     | grep -A3 'priv:' | tail -n +2 | tr -d ' :\n')"
+   PRIVATE_KEY="$(scripts/registry-key.sh ~/.config/swapi.build/mcp-registry-ed25519.pem)"
    mcp-publisher login dns --domain swapi.build --private-key "${PRIVATE_KEY}"
    mcp-publisher publish   # run from the repo root, next to server.json
    ```
+
+   `scripts/registry-key.sh` prints the raw key in hex (64 characters) only for
+   the shell variable, and exits with an error on anything else. Do not inline an
+   `openssl ... | grep` recipe instead: the old one kept the `pub:` label, gave 67
+   characters and broke the login (2026-10-19). `scripts/registry-key.test.sh`
+   covers it in CI.
 
 3. Verify the new version is live — query the server's **versions** endpoint, not
    the search index:
@@ -138,6 +143,7 @@ first and breaks login.
 | Released version not visible at `/openapi.json` | The tag exists but the deploy did not run — or it ran and is still waiting for the approval gate. Check the Deploy workflow in the Actions tab; a push of *commits* never deploys. See `docs/DEPLOY.md`. |
 | The GitHub Release date is wrong on the retroactive releases | Expected. `gh release create` cannot backdate, so the twelve releases created on 2026-08-03 all carry that date; only the tags are dated correctly. |
 | `mcp-publisher publish` says "Successfully published", but the registry still shows the previous version | Almost certainly the `?search=` index, which lags a few minutes — it is not authoritative and the publish did work. Confirm with the `/versions` endpoint in step 10.3, which shows every version with its `isLatest`. Hit on 2026-08-10 publishing 2.2.1: `?search=` said 2.2.0 while `/versions` already had 2.2.1 as latest. |
+| `mcp-publisher login dns` fails right after deriving the key | Check the key length: `echo "${#PRIVATE_KEY}"` must print 64. Derive it with `scripts/registry-key.sh`, which refuses anything else; the old `grep -A3 'priv:'` recipe produced 67 characters. |
 | `/v0/servers/build.swapi/star-wars/versions` returns 404 | The server name must be URL-encoded in the path: `build.swapi%2Fstar-wars`. |
 
 ## How the retroactive history was built

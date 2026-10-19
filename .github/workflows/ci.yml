@@ -37,6 +37,11 @@ jobs:
         working-directory: swapi-app
         run: ./mvnw package
 
+      # Release scripts live outside Maven and Vitest, so they get their own
+      # plain-bash tests. Throwaway keys only; the runner's OpenSSL 3 is enough.
+      - name: Release script tests
+        run: scripts/registry-key.test.sh
+
       # Maven never runs Vitest: Quinoa's `vite build` bundles the frontend, it
       # does not test it. Without this step the frontend suite — including the
       # "no raw colour" guard in tokens.test.ts — passes locally and gates
