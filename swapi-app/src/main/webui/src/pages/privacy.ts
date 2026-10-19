@@ -4,7 +4,7 @@ export function renderPrivacy(container: HTMLElement): void {
       <h1 class="sw-page-title">Privacy Policy</h1>
 
       <section class="about-section">
-        <p><em>Last updated: August 2, 2026</em></p>
+        <p><em>Last updated: October 19, 2026</em></p>
         <p>
           <strong>The short version: swapi.build has no accounts, sets no cookies, runs no trackers,
           and stores nothing about you.</strong>
@@ -23,10 +23,21 @@ export function renderPrivacy(container: HTMLElement): void {
       <section class="about-section">
         <h2>What gets processed technically</h2>
         <p>
-          swapi.build is hosted on Vercel. Like virtually every hosting provider, Vercel keeps standard
-          operational logs for requests (such as IP address, user agent, and request path) for
-          infrastructure operation and abuse prevention. Those logs are handled and retained under
-          Vercel's own policies; we don't enrich them, export them, or use them to identify anyone.
+          swapi.build runs on a server operated by the project maintainer on Oracle Cloud, in the
+          São Paulo region. The web server keeps no access log: requests to the site, the API and
+          the MCP endpoint are not recorded.
+        </p>
+        <p>
+          The server's operating system keeps technical logs (services starting and stopping,
+          errors, and connection attempts to the server's administrative access, which include the
+          connecting IP address) for up to 30 days, after which they are deleted. They are used only
+          to keep the server running and to block abuse; we don't enrich them, export them, or use
+          them to identify anyone.
+        </p>
+        <p>
+          While the site moves to this server during the last months of 2026, some requests may
+          still be served by Vercel, the previous host, which keeps standard operational logs (such
+          as IP address, user agent, and request path) under its own policies.
         </p>
       </section>
 
@@ -46,8 +57,9 @@ export function renderPrivacy(container: HTMLElement): void {
       <section class="about-section">
         <h2>Third parties</h2>
         <p>
-          Hosting by Vercel; DNS by Cloudflare (DNS-only, no proxying). No data is sold or shared with
-          anyone.
+          Hosting on Oracle Cloud infrastructure, on a server the maintainer operates; DNS by
+          Cloudflare (DNS-only, no proxying: Cloudflare never sees your requests). No data is sold or
+          shared with anyone.
         </p>
       </section>
 

@@ -1,6 +1,5 @@
 package com.eldermoraes.people;
 
-import io.quarkus.logging.Log;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.ws.rs.*;
@@ -69,7 +68,6 @@ public class PeopleResource {
     @APIResponse(responseCode = "200", description = "A randomly selected person",
             content = @Content(schema = @Schema(implementation = People.class)))
     public Response getRandomPeople() {
-        Log.info("Thread name: " + Thread.currentThread().getName());
         return Response.ok().entity(peopleService.getRandomPeople()).build();
     }
 }

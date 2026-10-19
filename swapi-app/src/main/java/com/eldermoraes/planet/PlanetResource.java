@@ -1,7 +1,6 @@
 package com.eldermoraes.planet;
 
 
-import io.quarkus.logging.Log;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.ws.rs.*;
@@ -71,7 +70,6 @@ public class PlanetResource {
     @APIResponse(responseCode = "200", description = "A randomly selected planet",
             content = @Content(schema = @Schema(implementation = Planet.class)))
     public Response getRandomPlanet() {
-        Log.info("Thread name: " + Thread.currentThread().getName());
         return Response.ok().entity(planetService.getRandomPlanet()).build();
     }
 }

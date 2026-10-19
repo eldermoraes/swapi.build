@@ -1,7 +1,6 @@
 package com.eldermoraes.vehicle;
 
 
-import io.quarkus.logging.Log;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.ws.rs.*;
@@ -71,7 +70,6 @@ public class VehicleResource {
     @APIResponse(responseCode = "200", description = "A randomly selected vehicle",
             content = @Content(schema = @Schema(implementation = Vehicle.class)))
     public Response getRandomVehicle() {
-        Log.info("Thread name: " + Thread.currentThread().getName());
         return Response.ok().entity(vehicleService.getRandomVehicle()).build();
     }
 }

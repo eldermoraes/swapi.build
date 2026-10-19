@@ -1,6 +1,5 @@
 package com.eldermoraes.specie;
 
-import io.quarkus.logging.Log;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.ws.rs.*;
@@ -70,7 +69,6 @@ public class SpecieResource {
     @APIResponse(responseCode = "200", description = "A randomly selected species",
             content = @Content(schema = @Schema(implementation = Specie.class)))
     public Response getRandomSpecie() {
-        Log.info("Thread name: " + Thread.currentThread().getName());
         return Response.ok().entity(specieService.getRandomSpecie()).build();
     }
 

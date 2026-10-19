@@ -16,6 +16,23 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+### Changed
+
+- Infrastructure: each published GitHub Release gets the linux/amd64 native
+  binary and its SHA-256 (`native-binary.yml`, UBI9 builder,
+  `march=compatibility`, glibc ≤ 2.35 checked), preparing the move to a
+  self-hosted origin on Oracle Cloud. Runbook, cutover and rollback in
+  `docs/DEPLOY.md`.
+- Privacy policy: hosting on a maintainer-operated Oracle Cloud server, no
+  access log, technical logs kept up to 30 days.
+- `scripts/verify-deploy.sh` gains an `origin` mode for the self-hosted origin;
+  the Vercel Analytics probes are gone.
+
+### Removed
+
+- Vercel Web Analytics and Speed Insights from the SPA.
+- The per-request `Thread name` INFO log of the `/random` endpoints.
+
 ## [2.5.1] - 2026-09-09
 
 ### Fixed

@@ -1,6 +1,5 @@
 package com.eldermoraes.starship;
 
-import io.quarkus.logging.Log;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.ws.rs.*;
@@ -69,7 +68,6 @@ public class StarshipResources {
     @APIResponse(responseCode = "200", description = "A randomly selected starship",
             content = @Content(schema = @Schema(implementation = Starship.class)))
     public Response getRandomStarship() {
-        Log.info("Thread name: " + Thread.currentThread().getName());
         return Response.ok().entity(starshipService.getRandomStarship()).build();
     }
 

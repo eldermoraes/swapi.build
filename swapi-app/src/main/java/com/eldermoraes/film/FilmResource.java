@@ -1,6 +1,5 @@
 package com.eldermoraes.film;
 
-import io.quarkus.logging.Log;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.ws.rs.*;
@@ -71,7 +70,6 @@ public class FilmResource {
     @APIResponse(responseCode = "200", description = "A randomly selected film",
             content = @Content(schema = @Schema(implementation = Film.class)))
     public Response getRandomFilm() {
-        Log.info("Thread name: " + Thread.currentThread().getName());
         return Response.ok().entity(filmService.getRandomFilm()).build();
     }
 
