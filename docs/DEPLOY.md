@@ -69,6 +69,8 @@ and by hand after any change on the host. Every line must read `PASS`.
 
 - **REST**: `GET /api/people/1` returns 200 and embeds `https://<host>/api/...`
   URLs. Proves the per-request base-URL discovery through `X-Forwarded-*`.
+- **Usage counters**: `GET /api/stats` returns 200 with `countingSince` and the
+  `/api/people/{id}` route the REST probe just hit.
 - **OpenAPI**: `/openapi.json` with `Accept: text/html` returns
   `200 application/json` (Quinoa must not swallow the route), and its
   `info.version` equals the pom of the checked-out tag: the deployed version
@@ -435,6 +437,45 @@ If a hardening directive keeps the native binary from starting, remove **only
 that one** (`journalctl -u swapi` names it). Do not spend more than 10 minutes
 on it. First suspect: `ProcSubset=pid`, which also hides `/proc/meminfo` and
 `/proc/cpuinfo`.
+
+**Cloudflare Web Analytics token (2.6.0+).** The page-visit beacon is injected
+into the SPA HTML only when the app finds `CF_WEB_ANALYTICS_TOKEN` in its
+environment at startup (`swapi.analytics.cloudflare-token`, read at runtime by
+the native binary). The token comes from the Cloudflare dashboard, Web
+Analytics, site `swapi.build`: it is the `token` value inside `data-cf-beacon`
+in the JS snippet Cloudflare shows (the zone is DNS-only, so the snippet is the
+only way in; paste only the token, not the snippet). It is not a secret: it
+appears in every page. It lives in a drop-in, so `swapi-update` and edits to the unit leave it
+alone, and turning it on or off needs a restart, not a release:
+
+```bash
+sudo install -d -m 755 /etc/systemd/system/swapi.service.d
+sudo tee /etc/systemd/system/swapi.service.d/analytics.conf >/dev/null <<'EOF'
+[Service]
+Environment=CF_WEB_ANALYTICS_TOKEN=<token from the dashboard>
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart swapi
+journalctl -u swapi -n 20 | grep 'Web Analytics'   # "beacon enabled"
+curl -s https://swapi.build/ | grep -c cloudflareinsights   # 1
+```
+
+A token that is not 16–64 letters and digits is refused with a warning in the
+journal ("beacon disabled") instead of being written into the HTML. To turn the
+beacon off, remove the drop-in, `daemon-reload` and restart. Neither Caddy nor
+the app sends a `Content-Security-Policy` header today; if one is ever added, it
+must allow `script-src https://static.cloudflareinsights.com` and
+`connect-src https://cloudflareinsights.com`.
+
+**Usage counters (2.6.0+).** The app counts requests per route template and per
+UTC day in memory (`com.eldermoraes.stats`): no IP, no User-Agent, nothing about
+the client. `GET /api/stats` returns the last seven days; the counters restart
+from zero on every restart (`countingSince` in the response), which is accepted —
+the disk is read-only and nothing is persisted. For history, the app writes one
+`route-stats <date> UTC total=… <route>=<count> …` line to the journal at 00:00
+UTC for the day that ended, and one marked `(partial, until shutdown)` when it
+stops, so the 30-day journal retention (2.9) keeps a month of daily totals:
+`journalctl -u swapi --since -30d | grep route-stats`.
 
 #### 2.7 Caddy
 

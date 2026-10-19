@@ -13,6 +13,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @ApplicationScoped
@@ -30,6 +31,7 @@ public class SeoRoutes {
 
     @Inject SeoMetadataRegistry metadata;
     @Inject PublicSiteUrlResolver urls;
+    @Inject WebAnalytics analytics;
 
     @RouteFilter(100)
     void route(RoutingContext rc) {
@@ -111,7 +113,12 @@ public class SeoRoutes {
     private String injectSeo(String html, RoutingContext rc, SeoMetadata route) {
         String cleaned = EXISTING_SEO_TAG.matcher(html).replaceAll("");
         String block = seoBlock(rc, route);
-        return cleaned.replaceFirst("(?i)</head>", block + "\n  </head>");
+        String withSeo = cleaned.replaceFirst("(?i)</head>", Matcher.quoteReplacement(block + "\n  </head>"));
+        // The analytics beacon goes before </body>, where Cloudflare recommends it.
+        return analytics.beacon()
+                .map(beacon -> withSeo.replaceFirst("(?i)</body>",
+                        Matcher.quoteReplacement("  " + beacon + "\n  </body>")))
+                .orElse(withSeo);
     }
 
     private String seoBlock(RoutingContext rc, SeoMetadata route) {

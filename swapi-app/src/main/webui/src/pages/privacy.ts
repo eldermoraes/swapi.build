@@ -6,17 +6,36 @@ export function renderPrivacy(container: HTMLElement): void {
       <section class="about-section">
         <p><em>Last updated: October 19, 2026</em></p>
         <p>
-          <strong>The short version: swapi.build has no accounts, sets no cookies, runs no trackers,
-          and stores nothing about you.</strong>
+          <strong>The short version: swapi.build has no accounts, sets no cookies, and stores nothing
+          about you. Page visits are counted without cookies and without personal data, and the
+          server counts requests per route and per day, without your IP address.</strong>
         </p>
       </section>
 
       <section class="about-section">
         <h2>What we don't collect</h2>
         <p>
-          The site and the API have no sign-up, no login, and no user profiles. The frontend sets no
-          cookies and includes no analytics or tracking scripts of any kind. The application does not
-          store any personal data.
+          The site and the API have no sign-up, no login, and no user profiles. The site sets no
+          cookies, uses no local storage for tracking, and runs no advertising or cross-site
+          tracking. The application does not store any personal data.
+        </p>
+      </section>
+
+      <section class="about-section">
+        <h2>How visits are measured</h2>
+        <p>
+          Visits to the site's pages are measured with Cloudflare Web Analytics. Each page loads a
+          small script from Cloudflare that reports the page address, the referring page and how long
+          the page took to load. It sets no cookie, uses no local storage, does not fingerprint your
+          browser, and collects no personal data. The API and the MCP endpoint load no script at all.
+        </p>
+        <p>
+          The server also counts requests per route and per day (UTC), for example how many requests
+          reached <code>/api/people/{id}</code> or <code>/mcp</code> on a given day. Only the route and
+          the count are kept: no IP address, no browser or client details, no ids or search terms. The
+          counts live in memory, are reset whenever the server restarts, and the totals for the last
+          seven days are public at <a href="/api/stats">/api/stats</a>. One line per day with the same
+          counts goes to the server's technical logs described below.
         </p>
       </section>
 
@@ -53,8 +72,9 @@ export function renderPrivacy(container: HTMLElement): void {
         <h2>Third parties</h2>
         <p>
           Hosting on Oracle Cloud infrastructure, on a server the maintainer operates; DNS by
-          Cloudflare (DNS-only, no proxying: Cloudflare never sees your requests). No data is sold or
-          shared with anyone.
+          Cloudflare (DNS-only, no proxying: your requests to the site, the API and the MCP endpoint
+          never pass through Cloudflare). Cloudflare also provides the page-visit measurement described
+          above, which only receives what that script reports. No data is sold or shared with anyone.
         </p>
       </section>
 

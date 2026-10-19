@@ -11,9 +11,10 @@ import { renderTerms } from './pages/terms';
 import { cancelPending } from './api';
 import { applySeoMetadata } from './seo';
 
-// No analytics or performance beacons: Vercel's collection scripts only exist
-// behind its edge, the self-hosted origin (docs/DEPLOY.md) has no such edge, and
-// the privacy page promises no trackers. no-tracking.test.ts keeps it that way.
+// No analytics or performance beacons in the frontend: the only measurement
+// script, the Cloudflare Web Analytics beacon, is injected by the server
+// (WebAnalytics.java) when a token is configured. no-tracking.test.ts keeps the
+// frontend itself free of trackers.
 
 const announcer = document.createElement('div');
 announcer.setAttribute('aria-live', 'polite');
