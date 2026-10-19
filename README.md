@@ -191,7 +191,6 @@ browser, including when served by the Quarkus native executable.
 
 ```
 swapi-app/
-  Dockerfile.vercel           # Native container image used by Vercel deploys
   src/main/
     java/com/eldermoraes/     # Backend (Quarkus + Jakarta REST)
       film/                   # Film model, service, resource
@@ -249,7 +248,7 @@ The frontend is automatically built and bundled by [Quinoa](https://docs.quarkiv
 
 ## Deployment
 
-The app runs on [Vercel](https://vercel.com/) as a native (GraalVM/Mandrel) container image, built from `swapi-app/Dockerfile.vercel`. DNS is managed on Cloudflare (DNS-only records pointing to Vercel). Deploys are done with `npx vercel deploy --prod` from the `swapi-app/` directory.
+The app runs as a native (GraalVM/Mandrel) executable on a self-hosted server on Oracle Cloud, managed by systemd behind [Caddy](https://caddyserver.com/) (TLS via Let's Encrypt). DNS is managed on Cloudflare (DNS-only records pointing to the server). Publishing a GitHub Release runs `.github/workflows/native-binary.yml`: test suite, native build attached to the Release, a manual approval, then the install on the server over SSH and the production probes. The runbook is [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ## Tech Stack
 

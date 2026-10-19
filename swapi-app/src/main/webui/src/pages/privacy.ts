@@ -34,11 +34,6 @@ export function renderPrivacy(container: HTMLElement): void {
           to keep the server running and to block abuse; we don't enrich them, export them, or use
           them to identify anyone.
         </p>
-        <p>
-          While the site moves to this server during the last months of 2026, some requests may
-          still be served by Vercel, the previous host, which keeps standard operational logs (such
-          as IP address, user agent, and request path) under its own policies.
-        </p>
       </section>
 
       <section class="about-section">

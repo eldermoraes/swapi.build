@@ -18,15 +18,10 @@ describe('privacy page', () => {
     expect(text()).toContain('for up to 30 days');
   });
 
-  it('no longer presents Vercel as the host (regression: the policy kept naming Vercel)', () => {
-    const page = text();
-    expect(page).not.toContain('is hosted on Vercel');
-    expect(page).not.toContain('Hosting by Vercel');
-    // Vercel may only appear as the previous host, while the move is under way.
-    const mentions = [...page.matchAll(/[^.]*Vercel[^.]*\./g)].map((m) => m[0]);
-    for (const sentence of mentions) {
-      expect(sentence).toContain('the previous host');
-    }
+  it('does not mention Vercel at all (regression: the policy kept naming it after the move)', () => {
+    // The move to the self-hosted server is finished and nothing of the project
+    // runs on Vercel any more, so not even a "previous host" paragraph remains.
+    expect(text()).not.toMatch(/vercel/i);
   });
 
   it('keeps Cloudflare as DNS only', () => {

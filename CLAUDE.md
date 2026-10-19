@@ -1,8 +1,9 @@
 # CLAUDE.md
 
 swapi.build — Star Wars API (Quarkus 3 / Java 25, native image) with a Quinoa/Vite
-frontend, deployed as a Vercel container function behind Cloudflare DNS. Also serves
-an MCP server (Streamable HTTP) at `/mcp`.
+frontend, served as a native executable on a self-hosted Oracle Cloud server (systemd
+behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
+(Streamable HTTP) at `/mcp`.
 
 ## Development cycle (in this order — do not skip steps)
 
@@ -22,35 +23,42 @@ an MCP server (Streamable HTTP) at `/mcp`.
    on the merged result.
 7. **Release** — only if the change carries a version bump: changelog entry →
    annotated tag → GitHub Release, per `docs/RELEASE.md`.
-8. **Push** — `git push` publishes commits only. **It does not deploy.**
-   Pushing a **release tag** (`v*`) is the exception: it triggers the deploy
-   workflow (`.github/workflows/deploy.yml`).
-9. **Deploy** — the tag-triggered workflow runs `docs/DEPLOY.md` for you:
-   preview → probes → manual approval in the Actions UI → production. Manual
-   fallback: follow `docs/DEPLOY.md` exactly.
-10. **Post-deploy verification** — the curl checks in `docs/DEPLOY.md`.
+8. **Push** — `git push` publishes commits (and tags) only. **It does not deploy.**
+   Publishing the **GitHub Release** is what deploys: it triggers
+   `.github/workflows/native-binary.yml`.
+9. **Deploy** — that workflow runs `docs/DEPLOY.md` for you: suite → native
+   binary attached to the Release → manual approval (environment `production`)
+   → `swapi-update` on the host over SSH → probes on `swapi.build` and
+   `www.swapi.build`. Manual fallback: `docs/DEPLOY.md`, "Updating the version
+   on the host".
+10. **Post-deploy verification** — step 9 of `docs/RELEASE.md`.
 
 ## Non-negotiable facts
 
-- **Deploy always runs from `swapi-app/`**, never from the repo root. From the root
-  it fails with `Expected VCR image registry vcr.vercel.com: <detect>` (the
-  `container` framework can't find the Dockerfile). See `docs/DEPLOY.md`.
-- **There is no commit-push auto-deploy.** Deploys run via the Vercel CLI —
-  manually, or by `.github/workflows/deploy.yml` on a release-tag push (with a
-  manual gate before production). The GitHub repo is linked to the Vercel
-  project, and the root `vercel.json` carries `git.deploymentEnabled: false`
-  to keep git pushes from deploying. Never remove it without first setting
-  `rootDirectory` to `swapi-app` — with `rootDirectory: null` a git-triggered
-  build runs from the repo root and hits the failure above.
+- **Nothing of this project runs on Vercel** (decided 2026-10-19). Production
+  moved to the self-hosted origin that day, and the Vercel deploy pipeline and
+  `Dockerfile.vercel` were removed. Do not reintroduce them. The one exception
+  is the root `vercel.json` (`git.deploymentEnabled: false`): the repository is
+  still connected to the old Vercel project through the Vercel GitHub app, and
+  without that file every push starts a Vercel deployment (seen on PR #25).
+  It stays until the repository is disconnected on the Vercel side;
+  `scripts/vercel-git-off.test.sh` guards it in CI.
+- **There is no commit-push auto-deploy.** Only a published Release deploys,
+  through `native-binary.yml`, and its `deploy` job waits for manual approval
+  (environment `production`). The job reaches the host as the `deploy` user,
+  whose key can only run the forced command `swapi-deploy-gate`
+  (`scripts/swapi-deploy-gate.sh`, tested by `scripts/swapi-deploy-gate.test.sh`
+  in CI): it accepts exactly `update vX.Y.Z <sha256>` and calls
+  `sudo swapi-update`. Never loosen that pattern or give the key a shell.
 - **No analytics or tracking scripts.** Vercel Web Analytics and Speed Insights
-  were removed from the SPA (2026-10-19) to prepare the move to a self-hosted
-  origin on Oracle Cloud, which has no `/_vercel/*` edge, and because the
-  privacy page promises no trackers. `no-tracking.test.ts` fails if a `@vercel/`
-  package or a `/_vercel/` script comes back.
-- **Self-hosted origin (migration target).** `native-binary.yml` attaches the
-  linux/amd64 native binary to each published Release (UBI9 builder, glibc
-  ≤ 2.35 checked); the host runbook, cutover and rollback live in
-  `docs/DEPLOY.md`, "Self-hosted origin on Oracle Cloud". Probes against it use
+  were removed from the SPA (2026-10-19): the self-hosted origin has no
+  `/_vercel/*` edge, and the privacy page promises no trackers.
+  `no-tracking.test.ts` fails if a `@vercel/` package or a `/_vercel/` script
+  comes back.
+- **Self-hosted origin.** `native-binary.yml` attaches the linux/amd64 native
+  binary to each published Release (UBI9 builder, glibc ≤ 2.35 checked); the
+  host runbook, the deploy user and the rollback live in `docs/DEPLOY.md`,
+  "Self-hosted origin on Oracle Cloud". Probes use
   `scripts/verify-deploy.sh origin <host>`.
 - **Tests:** `cd swapi-app && ./mvnw test` (backend) and
   `cd swapi-app/src/main/webui && npm test` (Vitest, frontend). **CI runs both.**
@@ -71,8 +79,9 @@ an MCP server (Streamable HTTP) at `/mcp`.
 - **MCP serves stateful and stateless clients on the same `/mcp` endpoint.**
   Streamable HTTP only. `quarkus.mcp.server.http.streamable.auto-init=true`
   serves an unknown or missing `Mcp-Session-Id` with a throwaway session
-  instead of 404ing — Vercel has no session affinity, and without this a
-  stateful client fails intermittently. A genuine `initialize` still creates a
+  instead of 404ing. It was introduced because Vercel had no session affinity;
+  on the single self-hosted instance it still keeps a client working after a
+  restart drops its session. A genuine `initialize` still creates a
   real session that lives in one instance's heap until idle (default 30 min).
   `GET /mcp` answers 405 (no server→client stream) and `DELETE` answers 204.
   The legacy HTTP+SSE transport (`/mcp/sse`) is rejected on purpose. Never

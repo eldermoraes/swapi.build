@@ -7,9 +7,10 @@ four is how a version reaches production undocumented.
 Release bookkeeping is deliberately manual — no Release Please, no version-bump
 automation: the only failure mode that actually happens (bumping the version and
 forgetting the changelog) is caught by `ChangelogVersionTest` in the normal test
-run. The **deploy pipeline**, however, is automated since 2026-08-05: pushing a
-release tag triggers `.github/workflows/deploy.yml` (suite → preview + probes →
-manual approval → production). See `docs/DEPLOY.md`.
+run. The **deploy pipeline**, however, is automated: publishing the GitHub
+Release (step 7) triggers `.github/workflows/native-binary.yml` (suite → native
+binary attached to the Release → manual approval → install on the self-hosted
+origin → production probes). See `docs/DEPLOY.md`, "Automated deploy".
 
 ## 1. Pick the version
 
@@ -71,11 +72,30 @@ awk '/^## \[x.y.z\] - /{f=1; next} /^## /{f=0} f' CHANGELOG.md \
 ## 8. Deploy
 
 A version bump changes `info.version` in the public spec, so it must reach
-production. Pushing the tag (step 6) triggers the deploy workflow: suite →
-preview deploy + runbook probes → **manual approval in the GitHub UI**
-(environment `production`) → production deploy + post-deploy verification.
-Approve at https://github.com/eldermoraes/swapi.build/actions after checking the
-preview probe output. Manual fallback: follow `docs/DEPLOY.md` step by step.
+production. Publishing the Release (step 7) triggers **Native binary and
+deploy** (`native-binary.yml`). Pushing the tag alone deploys nothing.
+
+1. `test` runs the full suite on the tag; `build` builds the native binary,
+   attaches `application` and `application.sha256` to the Release and prints
+   the hash in the run summary.
+2. `deploy` waits for **manual approval** (environment `production`). Approve
+   in the Actions UI, or through the API:
+
+   ```bash
+   run=<run id of the Native binary and deploy run>
+   env_id=$(gh api repos/eldermoraes/swapi.build/actions/runs/$run/pending_deployments --jq '.[0].environment.id')
+   gh api -X POST repos/eldermoraes/swapi.build/actions/runs/$run/pending_deployments \
+     -F "environment_ids[]=$env_id" -f state=approved -f comment="release vx.y.z"
+   ```
+
+3. After approval, the job connects to the host as `deploy`, runs
+   `swapi-update <tag> <sha256>` through the gate and then
+   `scripts/verify-deploy.sh origin` on `swapi.build` and `www.swapi.build`.
+   Every probe line must read PASS.
+
+If the deploy job fails after the binary is attached (SSH, a probe), fix the
+cause and use **Re-run failed jobs** on the same run: it reuses the hash from
+`build`. Manual fallback: `docs/DEPLOY.md`, "Updating the version on the host".
 
 ## 9. Verify
 
@@ -140,7 +160,7 @@ first and breaks login.
 | `ChangelogVersionTest` fails with "repo root with CHANGELOG.md not found" | The suite was run from outside the checkout. Run it from `swapi-app/`. The lookup stops at the checkout root on purpose, so a worktree never reads the parent repo's changelog. |
 | `OpenApiVersionTest` fails | Someone set `quarkus.smallrye-openapi.info-version` in `application.properties`. Remove it: the version must be inherited from the pom. |
 | `gh release create` fails with "release already exists" | The release was created earlier. Use `gh release edit vx.y.z --notes-file -` instead. |
-| Released version not visible at `/openapi.json` | The tag exists but the deploy did not run — or it ran and is still waiting for the approval gate. Check the Deploy workflow in the Actions tab; a push of *commits* never deploys. See `docs/DEPLOY.md`. |
+| Released version not visible at `/openapi.json` | The Release was not published (a tag alone deploys nothing), or the **Native binary and deploy** run is still waiting for the approval gate, or its `deploy` job failed. Check the run in the Actions tab. See `docs/DEPLOY.md`. |
 | The GitHub Release date is wrong on the retroactive releases | Expected. `gh release create` cannot backdate, so the twelve releases created on 2026-08-03 all carry that date; only the tags are dated correctly. |
 | `mcp-publisher publish` says "Successfully published", but the registry still shows the previous version | Almost certainly the `?search=` index, which lags a few minutes — it is not authoritative and the publish did work. Confirm with the `/versions` endpoint in step 10.3, which shows every version with its `isLatest`. Hit on 2026-08-10 publishing 2.2.1: `?search=` said 2.2.0 while `/versions` already had 2.2.1 as latest. |
 | `mcp-publisher login dns` fails right after deriving the key | Check the key length: `echo "${#PRIVATE_KEY}"` must print 64. Derive it with `scripts/registry-key.sh`, which refuses anything else; the old `grep -A3 'priv:'` recipe produced 67 characters. |

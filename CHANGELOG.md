@@ -16,15 +16,33 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+### Changed
+
+- Deploy: publishing a GitHub Release now deploys to the self-hosted origin on
+  Oracle Cloud. `native-binary.yml` runs the full suite, builds and attaches the
+  native binary, waits for approval (environment `production`), then logs in as
+  the restricted `deploy` user, whose key can only run `swapi-update <tag> <sha256>`
+  through the forced command `scripts/swapi-deploy-gate.sh`, and runs the probes
+  on `swapi.build` and `www.swapi.build`. The gate is covered by
+  `scripts/swapi-deploy-gate.test.sh`, run in CI.
+- Privacy policy: the paragraph about requests still served by the previous host
+  is gone; the move is finished.
+
+### Removed
+
+- Everything that published to Vercel: the `deploy.yml` workflow (preview,
+  production), `swapi-app/Dockerfile.vercel`, `swapi-app/.vercelignore`
+  (the root `vercel.json` with `git.deploymentEnabled: false` stays while the
+  repository is still connected to the Vercel project, guarded by
+  `scripts/vercel-git-off.test.sh`), and the Vercel-only `preview` and `prod` modes of
+  `scripts/verify-deploy.sh`. Rollback is now the previous version on the host.
+
 ### Fixed
 
 - Release runbook: the MCP Registry key is derived by `scripts/registry-key.sh`,
   which rejects anything but 64 hex characters. The previous inline recipe kept the
   `pub:` label, produced 67 characters and broke `mcp-publisher login`. Covered by
   `scripts/registry-key.test.sh`, now run in CI.
-- Deploy workflow: the closing reminder no longer asks to check the Vercel Analytics
-  dashboard, removed in 2.5.2; it points to the production probes and post-deploy
-  checks instead.
 
 ## [2.5.2] - 2026-10-19
 

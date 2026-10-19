@@ -6,12 +6,10 @@ name: Uptime
 # down, a reboot that never came back, the provider stopping the VM, an
 # expiring certificate, and the DNS pointing somewhere else ("step 0").
 #
-# BORN DISABLED ON PURPOSE. Until the DNS cutover, swapi.build resolves to
-# Vercel and the DNS check below would fail on every run. On cutover day:
-#   1. set the repository variable SWAPI_ORIGIN_IP to the host's public IP
-#      (Settings -> Secrets and variables -> Actions -> Variables);
-#   2. uncomment the schedule below in a PR and merge it.
-# The IP lives only in that variable, never in the repository.
+# The host's public IP comes from the repository variable SWAPI_ORIGIN_IP
+# (Settings -> Secrets and variables -> Actions -> Variables), set at the DNS
+# cutover of 2026-10-19. The IP lives only in that variable, never in the
+# repository.
 #
 # Caveat: GitHub disables scheduled workflows after 60 days without activity
 # in the repository. Re-enable it from the Actions tab if that happens.
