@@ -4,11 +4,11 @@ import { escapeHtml } from '../utils';
 /*
  * /stats — a small analytics page over GET /api/stats.
  *
- * Everything shown comes from the server's anonymous counters (route template
- * and count per hour and per UTC day, nothing about any client). The chart is
- * plain CSS bars; no chart library. Filters live in the query string
- * (?period=30d&view=groups) so a view can be linked, and are validated before
- * use.
+ * Everything shown comes from the server's anonymous counters (route template,
+ * count and server time per hour and per UTC day, nothing about any client).
+ * The request chart is plain CSS bars and the latency chart one inline SVG;
+ * no chart library. Filters live in the query string (?period=30d&view=groups)
+ * so a view can be linked, and are validated before use.
  */
 
 export type Period = '24h' | '7d' | '30d';
@@ -19,6 +19,33 @@ export interface StatsBucket {
   start: string;
   total: number;
   groups: Partial<Record<GroupId, number>>;
+}
+
+/** Server times of a route or group in ms; only `count` (0) when it had no timed request. */
+export interface Latency {
+  count: number;
+  mean?: number;
+  min?: number;
+  max?: number;
+  stddev?: number;
+  p50?: number;
+  p95?: number;
+  p99?: number;
+}
+
+export interface LatencyPoint {
+  start: string;
+  count: number;
+  p50?: number;
+  p95?: number;
+}
+
+/** `performance` of GET /api/stats (2.8.0+). */
+export interface Performance {
+  unit: 'ms';
+  routes: Record<string, Latency>;
+  groups: Record<GroupId, Latency>;
+  series: LatencyPoint[];
 }
 
 export interface StatsView {
@@ -39,6 +66,7 @@ export interface StatsView {
     routes: Record<string, number>;
     groups: Record<GroupId, number>;
   };
+  performance?: Performance;
 }
 
 export const PERIODS: { id: Period; label: string; previous: string }[] = [
@@ -339,9 +367,180 @@ function ranking(view: StatsView, mode: View): string {
     </section>`;
 }
 
+/** "0.42", "3.17", "45.3", "1,204"; "—" when there is no value. */
+export function formatMs(value: number | undefined | null): string {
+  if (value === undefined || value === null || !Number.isFinite(value)) return '—';
+  if (value < 10) return value.toFixed(2);
+  if (value < 100) return value.toFixed(1);
+  return numbers.format(Math.round(value));
+}
+
+export interface LatencyRow {
+  key: string;
+  label: string;
+  group: GroupId;
+  latency: Latency;
+}
+
+/** Routes that had timed requests, or all five groups, by timed requests. */
+export function latencyRows(
+  perf: Performance,
+  routeGroups: Record<string, GroupId>,
+  mode: View,
+): LatencyRow[] {
+  if (mode === 'groups') {
+    return GROUPS.map((g) => ({
+      key: g.id,
+      label: g.label,
+      group: g.id,
+      latency: perf.groups[g.id] ?? { count: 0 },
+    })).sort((a, b) => b.latency.count - a.latency.count);
+  }
+  return Object.entries(perf.routes)
+    .filter(([, latency]) => latency.count > 0)
+    .map(([route, latency]) => ({
+      key: route,
+      label: route,
+      group: routeGroups[route] ?? 'other',
+      latency,
+    }))
+    .sort((a, b) => b.latency.count - a.latency.count || a.key.localeCompare(b.key));
+}
+
+/**
+ * SVG path for one percentile line in a 0..n by 0..100 box. Hours or days
+ * without timed requests break the line; a lone point is drawn as a dot
+ * (a zero-length segment with round caps).
+ */
+export function latencyPath(points: (number | undefined)[], max: number): string {
+  const parts: string[] = [];
+  let open = false;
+  points.forEach((value, i) => {
+    if (value === undefined || value === null) {
+      open = false;
+      return;
+    }
+    const x = (i + 0.5).toFixed(2);
+    const y = (100 - (Math.min(value, max) / max) * 100).toFixed(2);
+    const next = points[i + 1];
+    if (open) {
+      parts.push(`L${x} ${y}`);
+    } else {
+      parts.push(`M${x} ${y}`);
+      if (next === undefined || next === null) parts.push('l0 0');
+    }
+    open = true;
+  });
+  return parts.join(' ');
+}
+
+function latencyChart(view: StatsView, perf: Performance): string {
+  const unit = view.granularity === 'hour' ? 'hour' : 'day';
+  const series = perf.series;
+  const timed = series.filter((p) => p.count > 0);
+  const top = Math.max(0, ...timed.map((p) => p.p95 ?? 0));
+  const max = top > 0 ? top : 1;
+  const n = Math.max(1, series.length);
+  const p50 = latencyPath(
+    series.map((p) => p.p50),
+    max,
+  );
+  const p95 = latencyPath(
+    series.map((p) => p.p95),
+    max,
+  );
+  const first = series[0];
+  const middle = series[Math.floor(series.length / 2)];
+  const last = series[series.length - 1];
+  const axis = [first, middle, last]
+    .map((p) => `<span>${escapeHtml(p ? bucketLabel(p.start, view.granularity) : '')}</span>`)
+    .join('');
+  const label = timed.length
+    ? `p50 and p95 server time per ${unit}, all routes: highest p95 ${formatMs(top)} ms`
+    : `p50 and p95 server time per ${unit}: no timed requests yet`;
+  return `
+    <div class="stats-latency">
+      <ul class="stats-latency-legend">
+        <li><span class="stats-swatch stats-swatch--p50" aria-hidden="true"></span>p50 (median)</li>
+        <li><span class="stats-swatch stats-swatch--p95" aria-hidden="true"></span>p95</li>
+      </ul>
+      <div class="stats-latency-plot">
+        <span class="stats-latency-max" aria-hidden="true">${escapeHtml(timed.length ? `${formatMs(top)} ms` : '')}</span>
+        <svg class="stats-latency-svg" viewBox="0 0 ${n} 100" preserveAspectRatio="none" role="img"
+          aria-label="${escapeHtml(label)}">
+          <path class="stats-line stats-line--p95" d="${p95}"></path>
+          <path class="stats-line stats-line--p50" d="${p50}"></path>
+        </svg>
+      </div>
+      <div class="stats-axis" aria-hidden="true">${axis}</div>
+      <details class="stats-numbers">
+        <summary>Show the numbers</summary>
+        <div class="sw-table-wrap">
+          <table class="sw-table stats-table">
+            <thead><tr><th scope="col">${unit === 'hour' ? 'Hour (UTC)' : 'Day (UTC)'}</th><th scope="col">Requests</th><th scope="col">p50 (ms)</th><th scope="col">p95 (ms)</th></tr></thead>
+            <tbody>${series
+              .map(
+                (p) =>
+                  `<tr><td>${escapeHtml(bucketLabel(p.start, view.granularity))}</td><td>${numbers.format(p.count)}</td><td>${formatMs(p.p50)}</td><td>${formatMs(p.p95)}</td></tr>`,
+              )
+              .join('')}</tbody>
+          </table>
+        </div>
+      </details>
+    </div>`;
+}
+
+function performance(view: StatsView, mode: View): string {
+  const perf = view.performance;
+  const intro = `<p class="stats-note">Server time, network excluded: from when the server receives a
+    request until its response is written, in milliseconds. p50, p95 and p99 are estimated from
+    fixed buckets, within 9%.</p>`;
+  if (!perf) {
+    return `
+      <section class="stats-section" aria-labelledby="stats-performance">
+        <h2 class="stats-heading" id="stats-performance">Performance</h2>
+        <p class="stats-empty">Server times are not available from this server yet.</p>
+      </section>`;
+  }
+  const rows = latencyRows(perf, view.routeGroups, mode);
+  const cells = (l: Latency) =>
+    [l.mean, l.min, l.max, l.stddev, l.p50, l.p95, l.p99]
+      .map((v) => `<td class="stats-ms">${formatMs(v)}</td>`)
+      .join('');
+  const body = rows
+    .map((row) => {
+      const name =
+        mode === 'groups'
+          ? `<th scope="row"><span class="stats-swatch stats-seg--${row.group}" aria-hidden="true"></span>${escapeHtml(row.label)}</th>`
+          : `<th scope="row"><code>${escapeHtml(row.label)}</code></th>`;
+      return `
+        <tr data-latency="${escapeHtml(row.key)}">
+          ${name}
+          <td>${numbers.format(row.latency.count)}</td>
+          ${cells(row.latency)}
+        </tr>`;
+    })
+    .join('');
+  const table = rows.length
+    ? `<div class="sw-table-wrap">
+        <table class="sw-table stats-table stats-latency-table">
+          <thead><tr><th scope="col">${mode === 'groups' ? 'Group' : 'Route'}</th><th scope="col">Requests</th><th scope="col">Mean</th><th scope="col">Min</th><th scope="col">Max</th><th scope="col">Std dev</th><th scope="col">p50</th><th scope="col">p95</th><th scope="col">p99</th></tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>`
+    : '<p class="stats-empty">No timed requests in this window yet.</p>';
+  return `
+    <section class="stats-section" aria-labelledby="stats-performance">
+      <h2 class="stats-heading" id="stats-performance">Performance</h2>
+      ${intro}
+      ${table}
+      ${latencyChart(view, perf)}
+    </section>`;
+}
+
 /** The data part of the page for one window and one view. */
 export function renderStatsData(view: StatsView, mode: View): string {
-  return `${kpis(view, mode)}${chart(view, mode)}${ranking(view, mode)}`;
+  return `${kpis(view, mode)}${chart(view, mode)}${ranking(view, mode)}${performance(view, mode)}`;
 }
 
 function toggles<T extends string>(

@@ -58,8 +58,11 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   come back. `no-tracking.test.ts` fails on a `@vercel/` package, a `/_vercel/`
   script, a known tracker, `document.cookie` or a third-party script in
   `index.html`. Server-side usage counting (`com.eldermoraes.stats`) keeps only
-  route templates and counts per UTC hour (14 days) and per UTC day (60 days),
-  never anything about the client; it is public at `/api/stats` and on the
+  route templates, counts and server times (count, sum, sum of squares, min,
+  max and a fixed-bucket histogram, never a single request's time) per UTC hour
+  (14 days) and per UTC day (60 days), never anything about the client; the
+  timing filter is the counting filter (`RouteCountingFilter`), so a route is
+  timed exactly when it is counted. It is public at `/api/stats` and on the
   `/stats` page. The counters are snapshotted to the systemd state directory
   (`STATE_DIRECTORY`, `/var/lib/swapi`) when the host provides one, and stay in
   memory only otherwise; the snapshot reader accepts only templates

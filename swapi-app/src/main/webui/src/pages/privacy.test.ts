@@ -35,7 +35,9 @@ describe('privacy page', () => {
   });
 
   it('says the server counts requests per route, per hour and per day, without IP address', () => {
-    expect(text()).toContain('The server also counts requests per route, per hour and per day (UTC)');
+    expect(text()).toContain(
+      'The server also counts requests per route, per hour and per day (UTC)',
+    );
     expect(text()).toContain('no IP address');
     expect(text()).toContain('/api/stats');
     expect(text()).toContain('usage stats page');
@@ -45,8 +47,18 @@ describe('privacy page', () => {
     // Regression: 2.6.0 promised the counts "are reset whenever the server restarts".
     expect(text()).not.toContain('reset whenever the server restarts');
     expect(text()).toContain('copied to a small file on the server');
-    expect(text()).toContain('the file holds only those routes, times and counts, nothing about you');
+    expect(text()).toContain(
+      'the file holds only those routes, times, counts and response times, nothing about you',
+    );
     expect(text()).toContain('Hourly counts are kept for 14 days and daily counts for 60 days');
+  });
+
+  it('says the server times its answers, only added up per route, never per request (2.8.0)', () => {
+    expect(text()).toContain('how long the server took to answer them');
+    expect(text()).toContain("the server's response times added up per route");
+    expect(text()).toContain('no record of any single request');
+    expect(text()).toContain('the response times for as long as their counts');
+    expect(text()).toContain('The counts and response times are public on the usage stats page');
   });
 
   it('no longer promises "no analytics" (regression: the policy must match the beacon)', () => {
@@ -54,6 +66,6 @@ describe('privacy page', () => {
   });
 
   it('carries the date of this revision', () => {
-    expect(text()).toContain('Last updated: October 19, 2026');
+    expect(text()).toContain('Last updated: October 20, 2026');
   });
 });

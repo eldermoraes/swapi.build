@@ -16,6 +16,9 @@ import {
   percentChange,
   rankRows,
   bucketLabel,
+  formatMs,
+  latencyRows,
+  latencyPath,
 } from './stats';
 
 function view(period: '24h' | '7d' | '30d'): StatsView {
@@ -46,6 +49,39 @@ function view(period: '24h' | '7d' | '30d'): StatsView {
       routes: { '/api/people/{id}': 5 },
       groups: { rest: 5, mcp: 0, pages: 0, seo: 0, other: 0 },
     },
+    performance: {
+      unit: 'ms',
+      routes: {
+        '/api/people/{id}': latency(6, 1.5),
+        '/mcp': latency(3, 40),
+        '/docs': latency(1, 0.4),
+      },
+      groups: {
+        rest: latency(6, 1.5),
+        mcp: latency(3, 40),
+        pages: latency(1, 0.4),
+        seo: { count: 0 },
+        other: { count: 0 },
+      },
+      series: series.map((b, i) =>
+        i === n - 1 || i === n - 3
+          ? { start: b.start, count: 10, p50: 1.6, p95: 42 }
+          : { start: b.start, count: 0 },
+      ),
+    },
+  };
+}
+
+function latency(count: number, mean: number) {
+  return {
+    count,
+    mean,
+    min: mean / 2,
+    max: mean * 3,
+    stddev: mean / 4,
+    p50: mean,
+    p95: mean * 2,
+    p99: mean * 2.5,
   };
 }
 
@@ -103,7 +139,115 @@ describe('stats page helpers', () => {
     const v = view('7d');
     v.routes = { '<img src=x>': 1 };
     v.routeGroups = { '<img src=x>': 'other' };
+    v.performance!.routes = { '<img src=x>': latency(1, 1) };
     expect(renderStatsData(v, 'routes')).not.toContain('<img src=x>');
+  });
+});
+
+describe('performance section', () => {
+  function render(v: StatsView, mode: 'routes' | 'groups'): HTMLElement {
+    const el = document.createElement('div');
+    el.innerHTML = renderStatsData(v, mode);
+    return el;
+  }
+
+  it('formats milliseconds by size and shows a dash without data', () => {
+    expect(formatMs(0.4213)).toBe('0.42');
+    expect(formatMs(3.171)).toBe('3.17');
+    expect(formatMs(45.27)).toBe('45.3');
+    expect(formatMs(1204.4)).toBe('1,204');
+    expect(formatMs(undefined)).toBe('—');
+  });
+
+  it('lists routes with timed requests, or all five groups, by count', () => {
+    const v = view('7d');
+    expect(latencyRows(v.performance!, v.routeGroups, 'routes').map((r) => r.key)).toEqual([
+      '/api/people/{id}',
+      '/mcp',
+      '/docs',
+    ]);
+    expect(latencyRows(v.performance!, v.routeGroups, 'groups').map((r) => r.key)).toEqual([
+      'rest',
+      'mcp',
+      'pages',
+      'seo',
+      'other',
+    ]);
+  });
+
+  it('shows requests, mean, min, max, std dev and p50/p95/p99 in ms per route', () => {
+    const el = render(view('7d'), 'routes');
+    expect(el.querySelector('#stats-performance')!.textContent).toBe('Performance');
+    expect(el.querySelector('.stats-note')!.textContent!.toLowerCase()).toContain(
+      'server time, network excluded',
+    );
+    const heads = [...el.querySelectorAll('.stats-latency-table thead th')].map(
+      (th) => th.textContent,
+    );
+    expect(heads).toEqual([
+      'Route',
+      'Requests',
+      'Mean',
+      'Min',
+      'Max',
+      'Std dev',
+      'p50',
+      'p95',
+      'p99',
+    ]);
+    const row = el.querySelector('[data-latency="/mcp"]')!;
+    expect([...row.querySelectorAll('td')].map((td) => td.textContent)).toEqual([
+      '3',
+      '40.0',
+      '20.0',
+      '120',
+      '10.0',
+      '40.0',
+      '80.0',
+      '100',
+    ]);
+  });
+
+  it('follows the grouping, with a dash for a group without requests', () => {
+    const el = render(view('7d'), 'groups');
+    const rows = [...el.querySelectorAll('[data-latency]')].map((r) =>
+      r.getAttribute('data-latency'),
+    );
+    expect(rows).toEqual(['rest', 'mcp', 'pages', 'seo', 'other']);
+    const seo = el.querySelector('[data-latency="seo"]')!;
+    expect([...seo.querySelectorAll('td')].map((td) => td.textContent)).toEqual([
+      '0',
+      '—',
+      '—',
+      '—',
+      '—',
+      '—',
+      '—',
+      '—',
+    ]);
+  });
+
+  it('draws p50 and p95 over time in one SVG, with the numbers behind it', () => {
+    const el = render(view('7d'), 'routes');
+    const svg = el.querySelector('svg.stats-latency-svg')!;
+    expect(svg.getAttribute('viewBox')).toBe('0 0 7 100');
+    expect(svg.querySelector('.stats-line--p50')!.getAttribute('d')).toBeTruthy();
+    expect(svg.querySelector('.stats-line--p95')!.getAttribute('d')).toBeTruthy();
+    expect(svg.getAttribute('aria-label')).toContain('highest p95 42.0 ms');
+    expect(el.querySelectorAll('.stats-latency tbody tr')).toHaveLength(7);
+  });
+
+  it('breaks the line on buckets without timed requests and draws a lone point as a dot', () => {
+    expect(latencyPath([10, 20, undefined, 5], 20)).toBe('M0.50 50.00 L1.50 0.00 M3.50 75.00 l0 0');
+    expect(latencyPath([undefined, undefined], 1)).toBe('');
+  });
+
+  it('says so when the server sends no performance block', () => {
+    const v = view('7d');
+    delete v.performance;
+    expect(
+      render(v, 'routes').querySelector('#stats-performance')!.parentElement!.textContent,
+    ).toContain('not available');
   });
 });
 

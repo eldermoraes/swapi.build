@@ -35,9 +35,12 @@ Successful responses return `200`; unknown or non-numeric ids return `404`.
 `/api/people/{id}` or `/mcp`) and per group (REST API, MCP, pages, SEO, other)
 for the last 24 hours (`?period=24h`, per hour), 7 days (default, per day;
 `&granularity=hour` for hourly) or 30 days (`?period=30d`, per day), each with
-the window before it for comparison. They are counted with no IP address or
-client details. The [`/stats`](https://swapi.build/stats) page shows the same
-numbers with filters, a trend chart and a ranking.
+the window before it for comparison, plus server response times per route and
+per group under `performance` (requests, mean, min, max, standard deviation and
+approximate p50/p95/p99 in milliseconds, network excluded). They are counted with
+no IP address or client details. The [`/stats`](https://swapi.build/stats) page
+shows the same numbers with filters, a trend chart, a ranking and a Performance
+section.
 
 All responses are JSON. Example:
 

@@ -4,11 +4,12 @@ export function renderPrivacy(container: HTMLElement): void {
       <h1 class="sw-page-title">Privacy Policy</h1>
 
       <section class="about-section">
-        <p><em>Last updated: October 19, 2026</em></p>
+        <p><em>Last updated: October 20, 2026</em></p>
         <p>
           <strong>The short version: swapi.build has no accounts, sets no cookies, and stores nothing
           about you. Page visits are counted without cookies and without personal data, and the
-          server counts requests per route and per hour, without your IP address.</strong>
+          server counts requests and its own response times per route and per hour, without your IP
+          address.</strong>
         </p>
       </section>
 
@@ -31,14 +32,17 @@ export function renderPrivacy(container: HTMLElement): void {
         </p>
         <p>
           The server also counts requests per route, per hour and per day (UTC), for example how many
-          requests reached <code>/api/people/{id}</code> or <code>/mcp</code> in a given hour. Only the
-          route, the hour or day and the count are kept: no IP address, no browser or client details,
-          no ids or search terms. Hourly counts are kept for 14 days and daily counts for 60 days.
+          requests reached <code>/api/people/{id}</code> or <code>/mcp</code> in a given hour, and how
+          long the server took to answer them. Only the route, the hour or day, the count and the
+          server's response times added up per route (their total, the fastest, the slowest and how
+          many fell in each range of time) are kept: no IP address, no browser or client details, no
+          ids or search terms, and no record of any single request. Hourly counts are kept for 14
+          days and daily counts for 60 days, and the response times for as long as their counts.
           They live in memory and are copied to a small file on the server, so a restart does not
-          reset them; the file holds only those routes, times and counts, nothing about you. The
-          counts are public on the <a href="/stats">usage stats page</a> and at
-          <a href="/api/stats">/api/stats</a>. One line per day with the daily counts goes to the
-          server's technical logs described below.
+          reset them; the file holds only those routes, times, counts and response times, nothing
+          about you. The counts and response times are public on the
+          <a href="/stats">usage stats page</a> and at <a href="/api/stats">/api/stats</a>. One line
+          per day with the daily counts goes to the server's technical logs described below.
         </p>
       </section>
 

@@ -14,6 +14,8 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.containsString;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 class StatsResourceTest {
@@ -146,5 +148,91 @@ class StatsResourceTest {
         given().when().get("/openapi.json").then()
                 .statusCode(200)
                 .body("paths.'/api/stats'.get.summary", notNullValue());
+    }
+
+    // --- Server times (2.8.0) ------------------------------------------------
+
+    /**
+     * Timed requests of a route in the last 24 hours. The time is recorded when
+     * the response has been written, which can be a moment after the client
+     * read it, so callers wait for the number they expect.
+     */
+    private static long timed(String route) {
+        Number n = given().get("/api/stats?period=24h").then().statusCode(200)
+                .extract().path("performance.routes.'" + route + "'.count");
+        return n == null ? 0 : n.longValue();
+    }
+
+    private static long awaitTimed(String route, long atLeast) throws InterruptedException {
+        long n = timed(route);
+        for (int i = 0; i < 100 && n < atLeast; i++) {
+            Thread.sleep(20);
+            n = timed(route);
+        }
+        return n;
+    }
+
+    @Test
+    void timesRequestsUnderTheirRouteTemplate() throws InterruptedException {
+        long before = timed("/api/people/{id}");
+        given().get("/api/people/1").then().statusCode(200);
+        given().get("/api/people/99999").then().statusCode(404);
+
+        assertTrue(awaitTimed("/api/people/{id}", before + 2) >= before + 2);
+        given().when().get("/api/stats?period=24h").then()
+                .statusCode(200)
+                .body("performance.unit", equalTo("ms"))
+                .body("performance.routes", not(hasKey("/api/people/1")))
+                .body("performance.routes.'/api/people/{id}'.mean", greaterThanOrEqualTo(0f))
+                .body("performance.routes.'/api/people/{id}'.min", notNullValue())
+                .body("performance.routes.'/api/people/{id}'.max", notNullValue())
+                .body("performance.routes.'/api/people/{id}'.stddev", notNullValue())
+                .body("performance.routes.'/api/people/{id}'.p50", notNullValue())
+                .body("performance.routes.'/api/people/{id}'.p95", notNullValue())
+                .body("performance.routes.'/api/people/{id}'.p99", notNullValue())
+                .body("performance.groups.keySet()", hasItems("rest", "mcp", "pages", "seo", "other"))
+                .body("performance.groups.rest.count", greaterThanOrEqualTo(2))
+                .body("performance.series.size()", equalTo(24));
+    }
+
+    @Test
+    void requestsAnsweredByTheTransportFilterAreTimed() throws InterruptedException {
+        long before = timed("/mcp");
+        given().get("/mcp").then().statusCode(405);
+
+        assertTrue(awaitTimed("/mcp", before + 1) >= before + 1);
+    }
+
+    @Test
+    void preflightHeadAndStaticFilesAreNotTimed() throws InterruptedException {
+        long mcp = timed("/mcp");
+        long other = timed("other");
+        long films = timed("/api/films");
+        given().header("Origin", "https://example.org")
+                .header("Access-Control-Request-Method", "POST")
+                .options("/mcp");
+        given().head("/mcp");
+        given().get("/favicon.svg");
+        given().get("/assets/does-not-exist.js");
+        // A timed request after them: once it shows, the ones before have ended too.
+        given().get("/api/films").then().statusCode(200);
+        assertTrue(awaitTimed("/api/films", films + 1) >= films + 1);
+
+        assertEquals(mcp, timed("/mcp"));
+        assertEquals(other, timed("other"));
+        given().get("/api/stats?period=24h").then()
+                .body("performance.routes", not(hasKey("/favicon.svg")))
+                .body("performance.routes", not(hasKey("/assets/does-not-exist.js")));
+    }
+
+    @Test
+    void everyWindowCarriesPerformance() {
+        given().when().get("/api/stats?period=30d").then()
+                .statusCode(200)
+                .body("performance.series.size()", equalTo(30))
+                .body("performance.groups.size()", equalTo(5));
+        given().when().get("/api/stats?period=7d&granularity=hour").then()
+                .statusCode(200)
+                .body("performance.series.size()", equalTo(168));
     }
 }

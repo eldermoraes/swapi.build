@@ -21,20 +21,29 @@ import java.util.function.Consumer;
  * The counters on disk: one small text file in the state directory.
  *
  * <pre>
- * swapi-route-stats 1
+ * swapi-route-stats 2
  * since 2026-10-19T12:00:00Z
  * h 2026-10-19T12:00:00Z /api/people/{id} 7
  * d 2026-10-19 /api/people/{id} 7
+ * th 2026-10-19T12:00:00Z /api/people/{id} 7 8400 1.0E7 900 1800 21:3,22:2,24:2
+ * td 2026-10-19 /api/people/{id} 7 8400 1.0E7 900 1800 21:3,22:2,24:2
  * </pre>
  *
- * Only route templates, bucket starts and counts — the same things
+ * {@code h} and {@code d} are counts per hour and per day. {@code th} and
+ * {@code td} (format 2, release 2.8.0) are server times per hour and per day:
+ * timed requests, sum of the times, sum of their squares, minimum and maximum
+ * (microseconds), then the non-empty {@link LatencyHistogram} buckets as
+ * {@code index:count}. Format 1 (2.7.0) has no time lines and still loads: its
+ * counts come back and the times start empty.
+ *
+ * Only route templates, bucket starts, counts and times — the same things
  * {@code GET /api/stats} publishes — so the file holds nothing about any client.
  *
  * Reading is strict: a missing header, an unknown line, a route that
- * {@link RouteNormalizer} would not produce, a negative count or a file larger
- * than {@link #MAX_BYTES} makes the whole file count as corrupt. It is then
- * ignored with one warning and the next snapshot replaces it; the app never
- * fails to start because of it.
+ * {@link RouteNormalizer} would not produce, a negative number, time numbers
+ * that do not add up, or a file larger than {@link #MAX_BYTES} makes the whole
+ * file count as corrupt. It is then ignored with one warning and the next
+ * snapshot replaces it; the app never fails to start because of it.
  *
  * Writing is atomic: the snapshot goes to a temporary file in the same
  * directory, is flushed to disk, and is renamed over the previous one, so a
@@ -43,10 +52,15 @@ import java.util.function.Consumer;
 public final class SnapshotFile {
 
     static final String FILE_NAME = "route-stats.txt";
-    static final String HEADER = "swapi-route-stats 1";
+    static final String HEADER_V1 = "swapi-route-stats 1";
+    static final String HEADER = "swapi-route-stats 2";
 
-    /** Far above the largest legitimate snapshot (a few hundred KB). */
-    static final long MAX_BYTES = 4L * 1024 * 1024;
+    /**
+     * Far above the largest legitimate snapshot: with all 45 routes busy every
+     * retained hour and day, counts and times come to about 6 MB; in practice
+     * the file is a few tens of KB.
+     */
+    static final long MAX_BYTES = 16L * 1024 * 1024;
 
     private final Path file;
     private final Path temp;
@@ -119,18 +133,43 @@ public final class SnapshotFile {
                 out.append("h ").append(start).append(' ').append(route).append(' ').append(n).append('\n')));
         new TreeMap<>(data.days()).forEach((day, counts) -> new TreeMap<>(counts).forEach((route, n) ->
                 out.append("d ").append(day).append(' ').append(route).append(' ').append(n).append('\n')));
+        new TreeMap<>(data.hourTimes()).forEach((start, times) -> new TreeMap<>(times).forEach((route, t) ->
+                timing(out.append("th ").append(start).append(' ').append(route), t)));
+        new TreeMap<>(data.dayTimes()).forEach((day, times) -> new TreeMap<>(times).forEach((route, t) ->
+                timing(out.append("td ").append(day).append(' ').append(route), t)));
         return out.toString();
+    }
+
+    private static void timing(StringBuilder out, TimingData t) {
+        out.append(' ').append(t.count()).append(' ').append(t.sumMicros()).append(' ').append(t.sumSquares())
+                .append(' ').append(t.minMicros()).append(' ').append(t.maxMicros()).append(' ');
+        boolean first = true;
+        for (int i = 0; i < LatencyHistogram.BUCKETS; i++) {
+            long n = t.bucket(i);
+            if (n > 0) {
+                out.append(first ? "" : ",").append(i).append(':').append(n);
+                first = false;
+            }
+        }
+        out.append('\n');
     }
 
     /** @throws IllegalArgumentException on anything this class did not write */
     static StatsData decode(String text) {
         String[] lines = text.split("\n", -1);
-        if (lines.length == 0 || !HEADER.equals(lines[0])) {
+        boolean v2;
+        if (lines.length > 0 && HEADER.equals(lines[0])) {
+            v2 = true;
+        } else if (lines.length > 0 && HEADER_V1.equals(lines[0])) {
+            v2 = false;
+        } else {
             throw new IllegalArgumentException("missing header");
         }
         Instant since = null;
         Map<Instant, Map<String, Long>> hours = new TreeMap<>();
         Map<LocalDate, Map<String, Long>> days = new TreeMap<>();
+        Map<Instant, Map<String, TimingData>> hourTimes = new TreeMap<>();
+        Map<LocalDate, Map<String, TimingData>> dayTimes = new TreeMap<>();
         for (int i = 1; i < lines.length; i++) {
             String line = lines[i];
             if (line.isEmpty()) {
@@ -145,16 +184,29 @@ public final class SnapshotFile {
                     }
                     case "h" -> {
                         expect(f, 4, i);
-                        Instant start = Instant.parse(f[1]);
-                        if (start.getEpochSecond() % 3600 != 0) {
-                            throw new IllegalArgumentException("line " + (i + 1) + ": not an hour start");
-                        }
-                        hours.computeIfAbsent(start, k -> new TreeMap<>()).put(route(f[2], i), count(f[3], i));
+                        hours.computeIfAbsent(hourStart(f[1], i), k -> new TreeMap<>())
+                                .put(route(f[2], i), count(f[3], i));
                     }
                     case "d" -> {
                         expect(f, 4, i);
                         days.computeIfAbsent(LocalDate.parse(f[1]), k -> new TreeMap<>())
                                 .put(route(f[2], i), count(f[3], i));
+                    }
+                    case "th" -> {
+                        if (!v2) {
+                            throw new IllegalArgumentException("line " + (i + 1) + ": unknown record");
+                        }
+                        expect(f, 9, i);
+                        hourTimes.computeIfAbsent(hourStart(f[1], i), k -> new TreeMap<>())
+                                .put(route(f[2], i), timing(f, i));
+                    }
+                    case "td" -> {
+                        if (!v2) {
+                            throw new IllegalArgumentException("line " + (i + 1) + ": unknown record");
+                        }
+                        expect(f, 9, i);
+                        dayTimes.computeIfAbsent(LocalDate.parse(f[1]), k -> new TreeMap<>())
+                                .put(route(f[2], i), timing(f, i));
                     }
                     default -> throw new IllegalArgumentException("line " + (i + 1) + ": unknown record");
                 }
@@ -162,7 +214,61 @@ public final class SnapshotFile {
                 throw new IllegalArgumentException("line " + (i + 1) + ": bad date");
             }
         }
-        return new StatsData(since, hours, days);
+        return new StatsData(since, hours, days, hourTimes, dayTimes);
+    }
+
+    private static Instant hourStart(String value, int line) {
+        Instant start = Instant.parse(value);
+        if (start.getEpochSecond() % 3600 != 0) {
+            throw new IllegalArgumentException("line " + (line + 1) + ": not an hour start");
+        }
+        return start;
+    }
+
+    /** Fields 3 to 8 of a {@code th}/{@code td} line, checked to add up. */
+    private static TimingData timing(String[] f, int line) {
+        long n = count(f[3], line);
+        long sum = count(f[4], line);
+        double squares;
+        try {
+            squares = Double.parseDouble(f[5]);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("line " + (line + 1) + ": bad sum of squares");
+        }
+        if (!Double.isFinite(squares) || squares < 0 || !f[5].matches("[0-9.E]+")) {
+            throw new IllegalArgumentException("line " + (line + 1) + ": bad sum of squares");
+        }
+        long min = count(f[6], line);
+        long max = count(f[7], line);
+        if (n == 0 || min > max) {
+            throw new IllegalArgumentException("line " + (line + 1) + ": bad timing");
+        }
+        long[] buckets = new long[LatencyHistogram.BUCKETS];
+        long total = 0;
+        int previous = -1;
+        for (String pair : f[8].split(",", -1)) {
+            String[] kv = pair.split(":", -1);
+            if (kv.length != 2) {
+                throw new IllegalArgumentException("line " + (line + 1) + ": bad histogram");
+            }
+            int index;
+            try {
+                index = Integer.parseInt(kv[0]);
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("line " + (line + 1) + ": bad histogram");
+            }
+            long c = count(kv[1], line);
+            if (index <= previous || index >= LatencyHistogram.BUCKETS || c == 0) {
+                throw new IllegalArgumentException("line " + (line + 1) + ": bad histogram");
+            }
+            buckets[index] = c;
+            total += c;
+            previous = index;
+        }
+        if (total != n) {
+            throw new IllegalArgumentException("line " + (line + 1) + ": histogram does not add up");
+        }
+        return new TimingData(n, sum, squares, min, max, buckets);
     }
 
     private static void expect(String[] fields, int n, int line) {

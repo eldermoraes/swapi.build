@@ -71,8 +71,9 @@ and by hand after any change on the host. Every line must read `PASS`.
   URLs. Proves the per-request base-URL discovery through `X-Forwarded-*`.
 - **Usage counters**: `GET /api/stats` returns 200 with `countingSince` and the
   `/api/people/{id}` route the REST probe just hit; `?period=24h` answers 24
-  hourly buckets and `?period=30d` 30 daily ones (2.7.0+), and `/stats` serves
-  the page with its own title.
+  hourly buckets and `?period=30d` 30 daily ones (2.7.0+), each with a
+  `performance` block holding all five groups and one latency point per bucket
+  (2.8.0+), and `/stats` serves the page with its own title.
 - **OpenAPI**: `/openapi.json` with `Accept: text/html` returns
   `200 application/json` (Quinoa must not swallow the route), and its
   `info.version` equals the pom of the checked-out tag: the deployed version
@@ -476,13 +477,26 @@ which is what the windows of `GET /api/stats?period=24h|7d|30d` and the `/stats`
 page need, each compared with the window before it; that is a few hundred KB at
 most.
 
+**Server times (2.8.0+).** The same filter times each counted request, from the
+first route filter to the end of the response (server time; the network is not
+in it), under the same route template. Per route and bucket it keeps a count,
+the sum, the sum of squares, the minimum, the maximum and 84 fixed histogram
+buckets (four per doubling from 0.05 ms to about 74 s, so p50/p95/p99 are within
+about 9 %; see `LatencyHistogram`). One cell is about 0.5 KB; with all 45 routes
+busy every retained hour and day that is under 9 MB, against `MemoryMax=300M`,
+and in practice a small fraction of it. The restore line in the log reports the
+live cell count and its size.
+
 The counters live in memory and, when the unit has a state directory, are also
 written to `/var/lib/swapi/route-stats.txt`: every 10 minutes if they changed,
 and on shutdown, by writing a temporary file and renaming it over the old one.
 At startup the app restores that file, so a deploy no longer resets the counters
 (a crash loses at most 10 minutes). The file holds only route templates, bucket
-starts and counts, the same things `/api/stats` publishes. A corrupt or
-unreadable file is ignored with one warning and replaced by the next snapshot.
+starts, counts and the aggregated server times, the same things `/api/stats`
+publishes. Its header names the format: `swapi-route-stats 2` from 2.8.0 (with
+`th`/`td` time lines); a `swapi-route-stats 1` file from 2.7.0 still loads, with
+its counts and no times. A corrupt or unreadable file is ignored with one
+warning and replaced by the next snapshot.
 
 `ProtectSystem=strict` keeps the rest of the disk read-only. The writable
 directory comes from a drop-in with `StateDirectory=swapi`: systemd creates

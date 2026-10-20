@@ -286,4 +286,137 @@ class RouteStatsTest {
         assertEquals(8000L, stats.day(LocalDate.parse("2026-10-19")).get("/mcp"));
         assertEquals(8000L, stats.hour(Instant.parse("2026-10-19T12:00:00Z")).get("/mcp"));
     }
+
+    // --- Server times (2.8.0) ------------------------------------------------
+
+    private static final long MS = 1_000_000L;    // nanoseconds
+
+    @Test
+    void durationsAreKeptInMicrosecondsPerHourAndPerDay() {
+        stats.recordDuration("/mcp", 2 * MS + 999);       // 12:30, sub-microsecond part dropped
+        clock.advance(Duration.ofHours(1));
+        stats.recordDuration("/mcp", 4 * MS);             // 13:30
+
+        TimingData h12 = stats.hourTime(Instant.parse("2026-10-19T12:00:00Z"), "/mcp");
+        assertEquals(1, h12.count());
+        assertEquals(2000, h12.sumMicros());
+        TimingData day = stats.dayTime(LocalDate.parse("2026-10-19"), "/mcp");
+        assertEquals(2, day.count());
+        assertEquals(2000, day.minMicros());
+        assertEquals(4000, day.maxMicros());
+    }
+
+    @Test
+    void hoursMergeIntoTheirDayExactly() {
+        long[] times = {1 * MS, 3 * MS, 250 * MS, 7 * MS, 90 * MS, 2 * MS};
+        for (long t : times) {
+            stats.recordDuration("/api/films", t);
+            clock.advance(Duration.ofMinutes(50));          // spreads them over five hours of the day
+        }
+
+        TimingData merged = TimingData.EMPTY;
+        for (int h = 12; h <= 16; h++) {
+            merged = merged.merge(stats.hourTime(Instant.parse("2026-10-19T%02d:00:00Z".formatted(h)), "/api/films"));
+        }
+        assertEquals(6, merged.count());
+        assertEquals(stats.dayTime(LocalDate.parse("2026-10-19"), "/api/films"), merged,
+                "the hourly buckets add up to the daily one, histogram included");
+    }
+
+    @Test
+    void sevenDayViewMergesDaysAndReportsMilliseconds() {
+        clock.now = Instant.parse("2026-10-13T08:00:00Z");
+        stats.record("/api/films");
+        stats.recordDuration("/api/films", 1 * MS);
+        stats.recordDuration("/api/films", 2 * MS);
+        clock.now = Instant.parse("2026-10-19T08:00:00Z");
+        stats.recordDuration("/api/films", 3 * MS);
+        stats.recordDuration("/api/films", 4 * MS);
+        stats.recordDuration("/api/films", 5 * MS);
+        stats.recordDuration("/mcp", 40 * MS);
+        clock.now = Instant.parse("2026-10-12T08:00:00Z");
+        stats.recordDuration("/api/films", 999 * MS);     // previous window: not in this one
+        clock.now = Instant.parse("2026-10-19T09:00:00Z");
+
+        RouteStats.Performance perf = stats.view(StatsPeriod.LAST_7_DAYS, Granularity.DAY).performance();
+        assertEquals("ms", perf.unit());
+        RouteStats.Latency films = perf.routes().get("/api/films");
+        assertEquals(5, films.count());
+        assertEquals(3.0, films.mean(), 1e-9);
+        assertEquals(1.0, films.min(), 1e-9);
+        assertEquals(5.0, films.max(), 1e-9);
+        assertEquals(Math.sqrt(2), films.stddev(), 0.001);
+        assertEquals(3.0, films.p50(), 3.0 * LatencyHistogram.MAX_RELATIVE_ERROR);
+        assertEquals(5.0, films.p99(), 5.0 * LatencyHistogram.MAX_RELATIVE_ERROR);
+        assertEquals(List.of("/api/films", "/mcp"), List.copyOf(perf.routes().keySet()), "by count");
+
+        assertEquals(7, perf.series().size());
+        assertEquals("2026-10-13", perf.series().get(0).start());
+        assertEquals(2, perf.series().get(0).count());
+        assertEquals(4, perf.series().get(6).count(), "all routes of the day");
+        assertNull(perf.series().get(3).p50(), "a day without timed requests has no percentiles");
+    }
+
+    @Test
+    void groupsMergeTheirRoutesAndAllFiveArePresent() {
+        stats.recordDuration("/api/films", 2 * MS);
+        stats.recordDuration("/openapi.json", 6 * MS);
+        stats.recordDuration("/mcp", 30 * MS);
+
+        RouteStats.Performance perf = stats.view(StatsPeriod.LAST_24_HOURS, Granularity.HOUR).performance();
+        assertEquals(List.of("rest", "mcp", "pages", "seo", "other"), List.copyOf(perf.groups().keySet()));
+        RouteStats.Latency rest = perf.groups().get("rest");
+        assertEquals(2, rest.count());
+        assertEquals(4.0, rest.mean(), 1e-9);
+        assertEquals(2.0, rest.min(), 1e-9);
+        assertEquals(6.0, rest.max(), 1e-9);
+        assertEquals(0, perf.groups().get("seo").count());
+        assertNull(perf.groups().get("seo").mean());
+        assertEquals(24, perf.series().size());
+        assertEquals(3, perf.series().get(23).count());
+    }
+
+    @Test
+    void timesArePrunedWithTheirBuckets() {
+        stats.recordDuration("/api/films", MS);
+        clock.advance(Duration.ofHours(RouteStats.RETAINED_HOURS));
+        stats.recordDuration("/mcp", MS);
+
+        assertEquals(0, stats.hourTime(Instant.parse("2026-10-19T12:00:00Z"), "/api/films").count());
+        assertEquals(1, stats.dayTime(LocalDate.parse("2026-10-19"), "/api/films").count());
+
+        clock.advance(Duration.ofDays(RouteStats.RETAINED_DAYS));
+        stats.recordDuration("/mcp", MS);
+        assertEquals(0, stats.dayTime(LocalDate.parse("2026-10-19"), "/api/films").count());
+    }
+
+    @Test
+    void timesSurviveExportAndRestore() {
+        stats.recordDuration("/mcp", 12 * MS);
+        stats.recordDuration("/mcp", 18 * MS);
+        StatsData saved = stats.export();
+
+        RouteStats fresh = new RouteStats(clock);
+        fresh.recordDuration("/mcp", 3 * MS);           // timed before the restore ran
+        fresh.restore(saved);
+
+        TimingData day = fresh.dayTime(LocalDate.parse("2026-10-19"), "/mcp");
+        assertEquals(3, day.count());
+        assertEquals(3000, day.minMicros());
+        assertEquals(18000, day.maxMicros());
+        assertEquals(2, fresh.timingCells(), "one hour cell and one day cell");
+    }
+
+    @Test
+    void restoringASnapshotWithoutTimesKeepsTheCountsAndStartsTimesEmpty() {
+        StatsData counts = new StatsData(Instant.parse("2026-10-19T00:00:00Z"),
+                Map.of(Instant.parse("2026-10-19T12:00:00Z"), Map.of("/mcp", 5L)),
+                Map.of(LocalDate.parse("2026-10-19"), Map.of("/mcp", 5L)));
+        stats.restore(counts);
+
+        RouteStats.StatsView view = stats.lastDays();
+        assertEquals(5, view.total());
+        assertTrue(view.performance().routes().isEmpty());
+        assertEquals(0, view.performance().groups().get("mcp").count());
+    }
 }

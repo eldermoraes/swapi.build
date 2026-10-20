@@ -63,6 +63,24 @@ assert "total" in v["previous"]
     fail "/api/stats?period=$p" "$n $g buckets with groups and previous" "$(echo "$window" | head -c 160)"
   fi
 done
+
+# Server times (2.8.0+): the REST probe above was timed under its template too.
+perf=$("${CURL[@]}" "$BASE/api/stats?period=24h")
+if echo "$perf" | python3 -c '
+import json, sys
+p = json.load(sys.stdin)["performance"]
+assert p["unit"] == "ms"
+assert set(p["groups"]) == {"rest", "mcp", "pages", "seo", "other"}
+assert len(p["series"]) == 24
+r = p["routes"]["/api/people/{id}"]
+assert r["count"] >= 1
+for k in ("mean", "min", "max", "stddev", "p50", "p95", "p99"):
+    assert r[k] >= 0
+' 2>/dev/null; then
+  pass "/api/stats performance -> server times per route and group, 24 latency points"
+else
+  fail "/api/stats performance" "performance with routes, 5 groups and 24 points" "$(echo "$perf" | head -c 160)"
+fi
 code=$("${CURL[@]}" -o /dev/null -w '%{http_code}' "$BASE/api/stats?period=1y")
 [ "$code" = "400" ] && pass "/api/stats?period=1y -> 400" || fail "/api/stats?period=1y" "400" "$code"
 stats_html=$("${CURL[@]}" -H 'Accept: text/html' "$BASE/stats")

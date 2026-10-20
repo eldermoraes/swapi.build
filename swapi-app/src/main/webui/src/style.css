@@ -783,7 +783,8 @@
   padding: 0 0.5rem;
 }
 
-.stats-legend {
+.stats-legend,
+.stats-latency-legend {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 1.25rem;
@@ -793,6 +794,7 @@
 }
 
 .stats-legend li,
+.stats-latency-legend li,
 .stats-tag {
   display: inline-flex;
   align-items: center;
@@ -800,7 +802,8 @@
   white-space: nowrap;
 }
 
-.stats-ranking th[scope='row'] > .stats-swatch {
+.stats-ranking th[scope='row'] > .stats-swatch,
+.stats-latency-table th[scope='row'] > .stats-swatch {
   margin-right: 0.45rem;
 }
 
@@ -813,7 +816,8 @@
 }
 
 /* Row headers carry route names: not the uppercase mono of column headers. */
-.stats-ranking th[scope='row'] {
+.stats-ranking th[scope='row'],
+.stats-latency-table th[scope='row'] {
   font-family: var(--sw-font-body);
   font-size: 0.9rem;
   font-weight: 400;
@@ -823,6 +827,7 @@
 }
 
 .stats-ranking code,
+.stats-latency-table code,
 .stats-group-routes code {
   font-family: var(--sw-font-mono);
   font-size: 0.82rem;
@@ -911,6 +916,70 @@
   gap: 1rem;
 }
 
+/* Performance: server-time table and the p50/p95 line chart (one inline SVG) */
+.stats-note {
+  color: var(--sw-text-sub);
+  font-size: 0.9rem;
+  max-width: var(--sw-width-prose);
+}
+
+.stats-ms {
+  font-family: var(--sw-font-mono);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.stats-latency {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.stats-latency-plot {
+  position: relative;
+  height: 10rem;
+  padding: 0.5rem;
+  background: var(--sw-term-bg);
+  border: 1px solid var(--sw-term-border);
+  border-radius: var(--sw-radius-panel);
+}
+
+.stats-latency-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.stats-latency-max {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.6rem;
+  font-family: var(--sw-font-mono);
+  font-size: 0.72rem;
+  color: var(--sw-text-dim);
+}
+
+.stats-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.stats-line--p50,
+.stats-swatch--p50 {
+  stroke: var(--sw-chart-rest);
+  background: var(--sw-chart-rest);
+}
+
+.stats-line--p95,
+.stats-swatch--p95 {
+  stroke: var(--sw-chart-pages);
+  background: var(--sw-chart-pages);
+}
+
 @media (max-width: 640px) {
   .stats-bars {
     height: 9rem;
@@ -919,6 +988,10 @@
 
   .stats-share-bar {
     display: none;
+  }
+
+  .stats-latency-plot {
+    height: 8rem;
   }
 
   .stats-kpi-value {
