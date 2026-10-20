@@ -86,9 +86,17 @@ export async function fetchEndpoint<T = unknown>(path: string): Promise<ApiRespo
   return request<T>(url);
 }
 
-/** Usage counters for one window (`/stats` page). Cancelled by navigation like any page request. */
-export async function fetchStats<T = unknown>(period: string): Promise<ApiResponse<T>> {
-  return request<T>(`${BASE}/stats?period=${encodeURIComponent(period)}`);
+/**
+ * Usage counters for one window. Without a signal (the `/stats` page) it is
+ * cancelled by navigation like any page request. With one (the home page's live
+ * count) it is scoped to that signal instead, so a terminal query on the same
+ * page, which cancels pending requests, does not abort it.
+ */
+export async function fetchStats<T = unknown>(
+  period: string,
+  signal?: AbortSignal,
+): Promise<ApiResponse<T>> {
+  return request<T>(`${BASE}/stats?period=${encodeURIComponent(period)}`, signal);
 }
 
 // Direct fetch (outside request()): the spec does not take part in navigation

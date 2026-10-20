@@ -16,6 +16,20 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.8.1] - 2026-10-20
+
+### Added
+
+- A "Stats" item in the header menu, right after "Documentation", linking to
+  `/stats` and marked active there.
+- A live line under the home page's actions: "N requests in the last 24 h · see
+  stats", with the total of `GET /api/stats?period=24h` formatted in the site's
+  locale and a link to `/stats`. It starts hidden and is removed if the request
+  fails, takes longer than 3 seconds or returns no usable total, so the rest of
+  the home never depends on it. The count is reused for 60 seconds (the
+  endpoint's own `max-age`) across visits within the site, and the request
+  carries its own signal, so a query in the home terminal does not cancel it.
+
 ## [2.8.0] - 2026-10-20
 
 ### Added
@@ -614,3 +628,5 @@ snapshot version is not a release. -->
 [2.7.0]: https://github.com/eldermoraes/swapi.build/compare/v2.6.0...v2.7.0
 
 [2.8.0]: https://github.com/eldermoraes/swapi.build/compare/v2.7.0...v2.8.0
+
+[2.8.1]: https://github.com/eldermoraes/swapi.build/compare/v2.8.0...v2.8.1

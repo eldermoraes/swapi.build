@@ -12,6 +12,7 @@ import { renderStats } from './pages/stats';
 import { isServerPath } from './spa-links';
 import { cancelPending } from './api';
 import { applySeoMetadata } from './seo';
+import { activeNavHref } from './nav';
 
 // No analytics or performance beacons in the frontend: the only measurement
 // script, the Cloudflare Web Analytics beacon, is injected by the server
@@ -55,15 +56,9 @@ function getRoute(): { page: string; type?: string; id?: string } {
 }
 
 function updateActiveNav() {
-  const route = getRoute();
+  const active = activeNavHref(getRoute().page);
   document.querySelectorAll('.nav-link').forEach((link) => {
-    link.classList.remove('active');
-    const href = link.getAttribute('href') || '';
-    if (route.page === 'home' && href === '/') link.classList.add('active');
-    if ((route.page === 'docs' || route.page === 'webmcp') && href === '/docs')
-      link.classList.add('active');
-    if (route.page === 'mcp' && href === '/docs/mcp') link.classList.add('active');
-    if (route.page === 'about' && href === '/about') link.classList.add('active');
+    link.classList.toggle('active', active !== null && link.getAttribute('href') === active);
   });
 }
 
@@ -104,7 +99,8 @@ async function navigate() {
 
   switch (route.page) {
     case 'home':
-      renderHome(container);
+      // The live request count fills in on its own; the page does not wait for it.
+      void renderHome(container);
       break;
     case 'docs':
       await renderDocumentation(container, () => generation === navigationGeneration);
@@ -155,7 +151,7 @@ async function navigate() {
       return;
     }
     default:
-      renderHome(container);
+      void renderHome(container);
   }
 
   // An async render can finish after another navigation: do not steal the new page's focus/announcement
