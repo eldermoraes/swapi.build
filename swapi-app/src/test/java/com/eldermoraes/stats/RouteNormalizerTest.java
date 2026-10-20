@@ -36,6 +36,7 @@ class RouteNormalizerTest {
             "/about, /about",
             "/privacy, /privacy",
             "/terms, /terms",
+            "/stats, /stats",
             "/resource/planets, /resource/planets",
             "/resource/planets/3, /resource/planets/{id}",
     })

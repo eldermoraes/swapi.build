@@ -2,11 +2,15 @@ package com.eldermoraes.stats;
 
 import io.quarkus.test.junit.QuarkusTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.hasKey;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.containsString;
@@ -75,6 +79,66 @@ class StatsResourceTest {
     private static long mcpCount() {
         Number n = given().get("/api/stats").then().statusCode(200).extract().path("routes.'/mcp'");
         return n == null ? 0 : n.longValue();
+    }
+
+    @Test
+    void periodsSelectTheWindowAndTheTrendBuckets() {
+        given().get("/api/people/1").then().statusCode(200);
+
+        given().when().get("/api/stats?period=24h").then()
+                .statusCode(200)
+                .header("Cache-Control", equalTo(StatsResource.CACHE_CONTROL))
+                .body("period", equalTo("24h"))
+                .body("granularity", equalTo("hour"))
+                .body("series.size()", equalTo(24))
+                .body("daily", nullValue())
+                .body("groups.keySet()", hasItems("rest", "mcp", "pages", "seo", "other"))
+                .body("routeGroups.'/api/people/{id}'", equalTo("rest"))
+                .body("previous.total", greaterThanOrEqualTo(0))
+                .body(containsString("\"countingSince\""));
+
+        given().when().get("/api/stats?period=30d").then()
+                .statusCode(200)
+                .body("period", equalTo("30d"))
+                .body("granularity", equalTo("day"))
+                .body("days", equalTo(30))
+                .body("series.size()", equalTo(30))
+                .body("daily.size()", equalTo(30))
+                .body("routes.'/api/people/{id}'", greaterThanOrEqualTo(1));
+
+        given().when().get("/api/stats?period=7d&granularity=hour").then()
+                .statusCode(200)
+                .body("series.size()", equalTo(168));
+    }
+
+    @Test
+    void defaultIsSevenDaysPerDay() {
+        given().when().get("/api/stats").then()
+                .statusCode(200)
+                .body("period", equalTo("7d"))
+                .body("granularity", equalTo("day"))
+                .body("series.size()", equalTo(7));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"period=1y", "period=24H", "granularity=minute", "period=24h&granularity=day",
+            "period=30d&granularity=hour", "period=%3Cscript%3E"})
+    void invalidParametersAre400WithAFixedMessage(String query) {
+        given().when().get("/api/stats?" + query).then()
+                .statusCode(400)
+                .header("Cache-Control", equalTo("no-store"))
+                .body(not(containsString("<script>")))
+                .body(not(containsString("1y")));
+    }
+
+    @Test
+    void theStatsPageIsCountedAsAPage() {
+        given().accept("text/html").get("/stats").then().statusCode(200);
+
+        given().when().get("/api/stats").then()
+                .statusCode(200)
+                .body("routes.'/stats'", greaterThanOrEqualTo(1))
+                .body("routeGroups.'/stats'", equalTo("pages"));
     }
 
     @Test

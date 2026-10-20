@@ -14,12 +14,12 @@ import java.util.stream.Collectors;
 /**
  * One journal line per UTC day with that day's counts.
  *
- * Why a log line: the in-memory counters only cover seven days and vanish on a
- * restart, and the app cannot write to disk. The journal already keeps the
- * host's logs for 30 days (docs/DEPLOY.md, journald retention), so one line a
- * day gives a month of history across restarts at the cost of a few hundred
- * bytes, with no file, no database and no access log. The line carries only
- * route templates and counts, like {@code GET /api/stats}.
+ * Why a log line: it is a second, independent record of the daily totals that
+ * does not depend on the state directory ({@link StatsPersistence}), which a
+ * host may not have. The journal keeps the host's logs for 30 days
+ * (docs/DEPLOY.md, journald retention), so one line a day gives a month of
+ * history across restarts at the cost of a few hundred bytes. The line carries
+ * only route templates and counts, like {@code GET /api/stats}.
  *
  * The line is written at 00:00 UTC for the day that just ended, and on shutdown
  * for the partial current day, so a deploy does not silently drop its numbers.

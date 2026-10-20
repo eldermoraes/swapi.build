@@ -639,3 +639,289 @@
     font-size: 0.8rem;
   }
 }
+
+/* Usage stats (/stats) — CSS bars, no chart library */
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.stats-intro {
+  color: var(--sw-text-sub);
+  max-width: var(--sw-width-prose);
+}
+
+.stats-intro a {
+  color: var(--sw-cyan);
+}
+
+.stats-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2.5rem;
+}
+
+.stats-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.stats-filter-label,
+.stats-kpi-label {
+  font-family: var(--sw-font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sw-text-dim);
+}
+
+.stats-data {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  min-height: 12rem;
+}
+
+.stats-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+  gap: 1rem;
+}
+
+.stats-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem 1.1rem;
+  min-width: 0;
+}
+
+.stats-kpi-value {
+  font-family: var(--sw-font-mono);
+  font-size: 1.5rem;
+  color: var(--sw-cyan);
+  overflow-wrap: anywhere;
+}
+
+.stats-kpi-note {
+  font-size: 0.85rem;
+  color: var(--sw-text-sub);
+}
+
+.stats-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.stats-heading {
+  font-family: var(--sw-font-display);
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.stats-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12rem;
+  padding: 0.5rem;
+  background: var(--sw-term-bg);
+  border: 1px solid var(--sw-term-border);
+  border-radius: var(--sw-radius-panel);
+}
+
+.stats-bar {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.stats-bar:hover {
+  background: var(--sw-term-glow);
+}
+
+.stats-seg {
+  display: block;
+  width: 100%;
+  min-height: 1px;
+}
+
+.stats-seg--total,
+.stats-seg--rest {
+  background: var(--sw-chart-rest);
+}
+
+.stats-seg--mcp {
+  background: var(--sw-chart-mcp);
+}
+
+.stats-seg--pages {
+  background: var(--sw-chart-pages);
+}
+
+.stats-seg--seo {
+  background: var(--sw-chart-seo);
+}
+
+.stats-seg--other {
+  background: var(--sw-chart-other);
+}
+
+.stats-axis {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--sw-font-mono);
+  font-size: 0.72rem;
+  color: var(--sw-text-dim);
+  padding: 0 0.5rem;
+}
+
+.stats-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  list-style: none;
+  font-size: 0.85rem;
+  color: var(--sw-text-sub);
+}
+
+.stats-legend li,
+.stats-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.stats-ranking th[scope='row'] > .stats-swatch {
+  margin-right: 0.45rem;
+}
+
+.stats-swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 2px;
+  flex: none;
+}
+
+/* Row headers carry route names: not the uppercase mono of column headers. */
+.stats-ranking th[scope='row'] {
+  font-family: var(--sw-font-body);
+  font-size: 0.9rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--sw-text);
+}
+
+.stats-ranking code,
+.stats-group-routes code {
+  font-family: var(--sw-font-mono);
+  font-size: 0.82rem;
+  color: var(--sw-cyan);
+}
+
+.stats-rank,
+.stats-change {
+  font-family: var(--sw-font-mono);
+  font-size: 0.82rem;
+  color: var(--sw-text-sub);
+  white-space: nowrap;
+}
+
+.stats-hint {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--sw-text-dim);
+}
+
+.stats-share {
+  white-space: nowrap;
+  font-family: var(--sw-font-mono);
+  font-size: 0.82rem;
+}
+
+.stats-share-bar {
+  display: inline-block;
+  vertical-align: middle;
+  width: 5rem;
+  height: 0.45rem;
+  margin-right: 0.5rem;
+  background: var(--sw-chart-track);
+  border-radius: var(--sw-radius-chip);
+  overflow: hidden;
+}
+
+.stats-share-bar span {
+  display: block;
+  height: 100%;
+  background: var(--sw-chart-rest);
+}
+
+.stats-numbers summary,
+.stats-group-routes summary {
+  cursor: pointer;
+  color: var(--sw-text-sub);
+  font-size: 0.9rem;
+}
+
+.stats-numbers summary:hover,
+.stats-group-routes summary:hover {
+  color: var(--sw-gold);
+}
+
+.stats-numbers .sw-table-wrap {
+  max-height: 22rem;
+  overflow-y: auto;
+  margin-top: 0.5rem;
+}
+
+.stats-group-routes ul {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.stats-group-routes li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 0.75rem;
+  border-bottom: 1px solid var(--sw-hairline-soft);
+  font-family: var(--sw-font-mono);
+  font-size: 0.82rem;
+}
+
+.stats-empty {
+  color: var(--sw-text-sub);
+}
+
+.stats-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+@media (max-width: 640px) {
+  .stats-bars {
+    height: 9rem;
+    gap: 1px;
+  }
+
+  .stats-share-bar {
+    display: none;
+  }
+
+  .stats-kpi-value {
+    font-size: 1.25rem;
+  }
+}

@@ -31,6 +31,14 @@
   --sw-term-number: #ffd28a; /* JSON numbers */
   --sw-term-glow: rgba(92, 225, 255, 0.07);
 
+  /* Chart series (the /stats page): one per route group. Data, never action — no gold. */
+  --sw-chart-rest: var(--sw-cyan);
+  --sw-chart-mcp: var(--sw-term-string);
+  --sw-chart-pages: var(--sw-term-number);
+  --sw-chart-seo: #c9a8ff;
+  --sw-chart-other: var(--sw-text-dim);
+  --sw-chart-track: #111a22; /* empty part of share bars and chart ground */
+
   /* Status */
   --sw-ok: #4ade80;
   --sw-error: #f85149;

@@ -34,10 +34,19 @@ describe('privacy page', () => {
     expect(text()).toContain('collects no personal data');
   });
 
-  it('says the server counts requests per route and per day, without IP address', () => {
-    expect(text()).toContain('The server also counts requests per route and per day (UTC)');
+  it('says the server counts requests per route, per hour and per day, without IP address', () => {
+    expect(text()).toContain('The server also counts requests per route, per hour and per day (UTC)');
     expect(text()).toContain('no IP address');
     expect(text()).toContain('/api/stats');
+    expect(text()).toContain('usage stats page');
+  });
+
+  it('says the counts are kept on disk, for how long, and that the file holds nothing personal (2.7.0)', () => {
+    // Regression: 2.6.0 promised the counts "are reset whenever the server restarts".
+    expect(text()).not.toContain('reset whenever the server restarts');
+    expect(text()).toContain('copied to a small file on the server');
+    expect(text()).toContain('the file holds only those routes, times and counts, nothing about you');
+    expect(text()).toContain('Hourly counts are kept for 14 days and daily counts for 60 days');
   });
 
   it('no longer promises "no analytics" (regression: the policy must match the beacon)', () => {

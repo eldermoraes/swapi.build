@@ -32,9 +32,12 @@ Ids are the record ids from each entity's `url` field (for films, `1` = A New Ho
 Successful responses return `200`; unknown or non-numeric ids return `404`.
 
 `GET /api/stats` returns anonymous request counts per route (for example
-`/api/people/{id}` or `/mcp`) and per UTC day for the last seven days. They are
-counted in memory with no IP address or client details and restart from zero
-when the server restarts.
+`/api/people/{id}` or `/mcp`) and per group (REST API, MCP, pages, SEO, other)
+for the last 24 hours (`?period=24h`, per hour), 7 days (default, per day;
+`&granularity=hour` for hourly) or 30 days (`?period=30d`, per day), each with
+the window before it for comparison. They are counted with no IP address or
+client details. The [`/stats`](https://swapi.build/stats) page shows the same
+numbers with filters, a trend chart and a ranking.
 
 All responses are JSON. Example:
 

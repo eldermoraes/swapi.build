@@ -8,6 +8,8 @@ import { renderAbout } from './pages/about';
 import { renderMcp } from './pages/mcp';
 import { renderPrivacy } from './pages/privacy';
 import { renderTerms } from './pages/terms';
+import { renderStats } from './pages/stats';
+import { isServerPath } from './spa-links';
 import { cancelPending } from './api';
 import { applySeoMetadata } from './seo';
 
@@ -44,6 +46,7 @@ function getRoute(): { page: string; type?: string; id?: string } {
   if (parts[0] === 'about') return { page: 'about' };
   if (parts[0] === 'privacy') return { page: 'privacy' };
   if (parts[0] === 'terms') return { page: 'terms' };
+  if (parts[0] === 'stats' && parts.length === 1) return { page: 'stats' };
   if (parts[0] === 'resource' && parts.length === 2)
     return { page: 'resource-list', type: parts[1] };
   if (parts[0] === 'resource' && parts.length === 3)
@@ -121,6 +124,9 @@ async function navigate() {
     case 'terms':
       renderTerms(container);
       break;
+    case 'stats':
+      await renderStats(container, () => generation === navigationGeneration);
+      break;
     case 'resource-list':
     case 'resource-detail': {
       container.replaceChildren();
@@ -175,13 +181,14 @@ document.addEventListener(
     if (
       href.startsWith('http') ||
       href.startsWith('#') ||
+      isServerPath(href) ||
       anchor.hasAttribute('target') ||
       anchor.hasAttribute('download')
     )
       return;
 
     e.preventDefault();
-    if (href !== window.location.pathname) {
+    if (href !== window.location.pathname + window.location.search) {
       history.pushState(null, '', href);
     }
     void navigate();
