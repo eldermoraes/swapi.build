@@ -31,10 +31,20 @@ class SnapshotFileTest {
         return new SnapshotFile(dir, warnings::add);
     }
 
+    private static TimingData times(long... micros) {
+        TimingCell cell = new TimingCell();
+        for (long m : micros) {
+            cell.record(m);
+        }
+        return cell.data();
+    }
+
     private static StatsData sample() {
         return new StatsData(Instant.parse("2026-10-19T12:30:00Z"),
                 Map.of(Instant.parse("2026-10-19T12:00:00Z"), Map.of("/api/people/{id}", 7L, "/mcp", 5L)),
-                Map.of(LocalDate.parse("2026-10-19"), Map.of("/api/people/{id}", 7L, "/mcp", 5L, "other", 1L)));
+                Map.of(LocalDate.parse("2026-10-19"), Map.of("/api/people/{id}", 7L, "/mcp", 5L, "other", 1L)),
+                Map.of(Instant.parse("2026-10-19T12:00:00Z"), Map.of("/mcp", times(900, 1200, 1800))),
+                Map.of(LocalDate.parse("2026-10-19"), Map.of("/mcp", times(900, 1200, 1800))));
     }
 
     @Test
@@ -46,18 +56,46 @@ class SnapshotFileTest {
     }
 
     @Test
-    void fileHoldsOnlyRoutesBucketsAndCounts() throws IOException {
+    void fileHoldsOnlyRoutesBucketsCountsAndTimes() throws IOException {
         file().write(sample());
 
         assertEquals("""
-                swapi-route-stats 1
+                swapi-route-stats 2
                 since 2026-10-19T12:30:00Z
                 h 2026-10-19T12:00:00Z /api/people/{id} 7
                 h 2026-10-19T12:00:00Z /mcp 5
                 d 2026-10-19 /api/people/{id} 7
                 d 2026-10-19 /mcp 5
                 d 2026-10-19 other 1
+                th 2026-10-19T12:00:00Z /mcp 3 3900 5490000.0 900 1800 17:1,19:1,21:1
+                td 2026-10-19 /mcp 3 3900 5490000.0 900 1800 17:1,19:1,21:1
                 """, Files.readString(dir.resolve(SnapshotFile.FILE_NAME)));
+    }
+
+    @Test
+    void aFormatOneSnapshotWithoutTimesStillLoads() throws IOException {
+        // What 2.7.0 wrote: counts only.
+        Files.writeString(dir.resolve(SnapshotFile.FILE_NAME), """
+                swapi-route-stats 1
+                since 2026-10-19T12:30:00Z
+                h 2026-10-19T12:00:00Z /mcp 5
+                d 2026-10-19 /mcp 5
+                """, StandardCharsets.UTF_8);
+
+        StatsData data = file().read().orElseThrow();
+        assertEquals(Map.of(LocalDate.parse("2026-10-19"), Map.of("/mcp", 5L)), data.days());
+        assertTrue(data.hourTimes().isEmpty());
+        assertTrue(data.dayTimes().isEmpty());
+        assertTrue(warnings.isEmpty());
+    }
+
+    @Test
+    void aSnapshotWithoutTimesIsWrittenAsFormatTwoAndReadBack() throws IOException {
+        StatsData countsOnly = new StatsData(Instant.parse("2026-10-19T12:30:00Z"), Map.of(),
+                Map.of(LocalDate.parse("2026-10-19"), Map.of("/mcp", 1L)));
+        file().write(countsOnly);
+
+        assertEquals(Optional.of(countsOnly), file().read());
     }
 
     @Test
@@ -83,7 +121,19 @@ class SnapshotFileTest {
     @ValueSource(strings = {
             "",                                                         // empty
             "garbage\n",                                                // no header
-            "swapi-route-stats 2\nd 2026-10-19 /mcp 1\n",               // unknown version
+            "swapi-route-stats 3\nd 2026-10-19 /mcp 1\n",               // unknown version
+            // Server times (format 2).
+            "swapi-route-stats 1\ntd 2026-10-19 /mcp 1 900 810000.0 900 900 17:1\n",   // times in format 1
+            "swapi-route-stats 2\ntd 2026-10-19 /mcp 1 900 810000.0 900 900\n",        // missing histogram
+            "swapi-route-stats 2\ntd 2026-10-19 /mcp 2 900 810000.0 900 900 17:1\n",   // histogram short of count
+            "swapi-route-stats 2\ntd 2026-10-19 /mcp 0 0 0.0 0 0 17:0\n",              // empty cell
+            "swapi-route-stats 2\ntd 2026-10-19 /mcp 1 900 810000.0 950 900 17:1\n",   // min above max
+            "swapi-route-stats 2\ntd 2026-10-19 /mcp 1 900 NaN 900 900 17:1\n",        // not a number
+            "swapi-route-stats 2\ntd 2026-10-19 /mcp 1 900 -1.0 900 900 17:1\n",       // negative squares
+            "swapi-route-stats 2\ntd 2026-10-19 /mcp 1 900 810000.0 900 900 84:1\n",   // no such bucket
+            "swapi-route-stats 2\ntd 2026-10-19 /mcp 2 900 810000.0 900 900 17:1,17:1\n", // bucket twice
+            "swapi-route-stats 2\nth 2026-10-19T12:30:00Z /mcp 1 900 810000.0 900 900 17:1\n", // not an hour
+            "swapi-route-stats 2\ntd 2026-10-19 /api/people/1 1 900 810000.0 900 900 17:1\n", // an id
             "swapi-route-stats 1\nd 2026-10-19 /mcp\n",                 // missing field
             "swapi-route-stats 1\nd 2026-10-19 /mcp -1\n",              // negative count
             "swapi-route-stats 1\nd 2026-10-19 /mcp many\n",            // not a number
@@ -124,7 +174,8 @@ class SnapshotFileTest {
         String text = SnapshotFile.encode(sample());
         assertFalse(text.contains("/api/people/1 "));
         for (String line : text.split("\n")) {
-            assertTrue(line.matches("swapi-route-stats 1|since \\S+|[hd] \\S+ \\S+ \\d+"), line);
+            assertTrue(line.matches("swapi-route-stats 2|since \\S+|[hd] \\S+ \\S+ \\d+"
+                    + "|t[hd] \\S+ \\S+ \\d+ \\d+ [0-9.E]+ \\d+ \\d+ \\d+:\\d+(,\\d+:\\d+)*"), line);
         }
     }
 }

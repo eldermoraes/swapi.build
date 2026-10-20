@@ -81,7 +81,9 @@ public class StatsPersistence {
         snapshot.read().ifPresent(data -> {
             stats.restore(data);
             info.accept("usage counters restored from " + snapshot.path() + " (" + data.hours().size()
-                    + " hourly and " + data.days().size() + " daily buckets)");
+                    + " hourly and " + data.days().size() + " daily buckets, " + stats.timingCells()
+                    + " timing cells, about " + Math.max(1, stats.timingCells() * RouteStats.TIMING_CELL_BYTES / 1024)
+                    + " KB)");
         });
     }
 

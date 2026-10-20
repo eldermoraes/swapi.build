@@ -16,6 +16,39 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-10-20
+
+### Added
+
+- Server response times in the usage stats. The counting filter now also times
+  every request it counts, from the first route filter to the end of the
+  response (server time, network excluded), under the same route template;
+  static files, `OPTIONS` and `HEAD` are neither counted nor timed. Per route,
+  per UTC hour (14 days) and per UTC day (60 days) the server keeps a count,
+  the sum, the sum of squares, the minimum, the maximum and a fixed-bucket
+  histogram (84 buckets, four per doubling from 0.05 ms to about 74 s), never
+  the time of a single request. Mean, minimum, maximum and standard deviation
+  are exact; p50, p95 and p99 come from the buckets, within about 9 %. One
+  timing cell is about 0.5 KB, under 9 MB with every route busy every retained
+  hour and day.
+- `GET /api/stats` carries a `performance` block in every window: per route and
+  per group (all five), requests, mean, min, max, standard deviation, p50, p95
+  and p99 in milliseconds, and p50/p95 over all routes per hour or per day. All
+  2.7.0 fields are unchanged.
+- `/stats` page: a Performance section with the same filters and grouping, a
+  table per route or per group in milliseconds, a p50/p95 line chart over time
+  (one inline SVG, no chart library) with its numbers, and the note "server
+  time, network excluded".
+
+### Changed
+
+- Snapshot file format 2 (`swapi-route-stats 2`) with `th`/`td` lines for the
+  server times; a format 1 file written by 2.7.0 still loads, with its counts
+  and no times. The size cap for the file went from 4 MB to 16 MB.
+- Privacy policy: the server's response times, added up per route, are kept and
+  published with the counts.
+- `verify-deploy.sh` checks the `performance` block of `/api/stats?period=24h`.
+
 ## [2.7.0] - 2026-10-19
 
 ### Added
@@ -579,3 +612,5 @@ snapshot version is not a release. -->
 [2.6.0]: https://github.com/eldermoraes/swapi.build/compare/v2.5.2...v2.6.0
 
 [2.7.0]: https://github.com/eldermoraes/swapi.build/compare/v2.6.0...v2.7.0
+
+[2.8.0]: https://github.com/eldermoraes/swapi.build/compare/v2.7.0...v2.8.0
