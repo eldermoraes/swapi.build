@@ -94,6 +94,20 @@
   flex-wrap: wrap;
 }
 
+/* Live request count under the actions: discreet, the number is data (cyan).
+   No display rule here, so the [hidden] attribute keeps it out until it loads. */
+.sw-hero .sw-live {
+  margin: 1.4rem 0 0;
+  color: var(--sw-text-dim);
+  font-family: var(--sw-font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+.sw-hero .sw-live-count {
+  color: var(--sw-cyan);
+}
+
 /* Hero children sit above the starfield layer */
 .sw-hero > *:not(.sw-starfield) {
   position: relative;
