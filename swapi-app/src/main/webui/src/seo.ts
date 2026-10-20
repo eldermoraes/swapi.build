@@ -43,6 +43,11 @@ export const PUBLIC_SEO_ROUTES: SeoMetadata[] = [
     ),
   ),
   route(
+    '/stats',
+    'Usage stats - SWAPI',
+    'Anonymous request counts for the SWAPI REST API, MCP server and site, per route and per group, for the last 24 hours, 7 days or 30 days.',
+  ),
+  route(
     '/privacy',
     'Privacy Policy - SWAPI',
     'Plain-language privacy policy for the public Star Wars API and MCP server.',

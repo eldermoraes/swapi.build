@@ -8,7 +8,7 @@ export function renderPrivacy(container: HTMLElement): void {
         <p>
           <strong>The short version: swapi.build has no accounts, sets no cookies, and stores nothing
           about you. Page visits are counted without cookies and without personal data, and the
-          server counts requests per route and per day, without your IP address.</strong>
+          server counts requests per route and per hour, without your IP address.</strong>
         </p>
       </section>
 
@@ -30,12 +30,15 @@ export function renderPrivacy(container: HTMLElement): void {
           browser, and collects no personal data. The API and the MCP endpoint load no script at all.
         </p>
         <p>
-          The server also counts requests per route and per day (UTC), for example how many requests
-          reached <code>/api/people/{id}</code> or <code>/mcp</code> on a given day. Only the route and
-          the count are kept: no IP address, no browser or client details, no ids or search terms. The
-          counts live in memory, are reset whenever the server restarts, and the totals for the last
-          seven days are public at <a href="/api/stats">/api/stats</a>. One line per day with the same
-          counts goes to the server's technical logs described below.
+          The server also counts requests per route, per hour and per day (UTC), for example how many
+          requests reached <code>/api/people/{id}</code> or <code>/mcp</code> in a given hour. Only the
+          route, the hour or day and the count are kept: no IP address, no browser or client details,
+          no ids or search terms. Hourly counts are kept for 14 days and daily counts for 60 days.
+          They live in memory and are copied to a small file on the server, so a restart does not
+          reset them; the file holds only those routes, times and counts, nothing about you. The
+          counts are public on the <a href="/stats">usage stats page</a> and at
+          <a href="/api/stats">/api/stats</a>. One line per day with the daily counts goes to the
+          server's technical logs described below.
         </p>
       </section>
 

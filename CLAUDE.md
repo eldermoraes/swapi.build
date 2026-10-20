@@ -58,8 +58,12 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   come back. `no-tracking.test.ts` fails on a `@vercel/` package, a `/_vercel/`
   script, a known tracker, `document.cookie` or a third-party script in
   `index.html`. Server-side usage counting (`com.eldermoraes.stats`) keeps only
-  route templates and counts per UTC day, in memory, never anything about the
-  client; it is public at `/api/stats`. The privacy page describes both.
+  route templates and counts per UTC hour (14 days) and per UTC day (60 days),
+  never anything about the client; it is public at `/api/stats` and on the
+  `/stats` page. The counters are snapshotted to the systemd state directory
+  (`STATE_DIRECTORY`, `/var/lib/swapi`) when the host provides one, and stay in
+  memory only otherwise; the snapshot reader accepts only templates
+  `RouteNormalizer` produces. The privacy page describes both.
 - **Self-hosted origin.** `native-binary.yml` attaches the linux/amd64 native
   binary to each published Release (UBI9 builder, glibc ≤ 2.35 checked); the
   host runbook, the deploy user and the rollback live in `docs/DEPLOY.md`,

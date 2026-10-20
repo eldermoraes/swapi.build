@@ -16,6 +16,45 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-10-19
+
+### Added
+
+- `/stats` page: a small analytics view over the anonymous counters, in the
+  site's design. Filters for the last 24 hours, 7 days or 30 days, grouping by
+  route or by group (REST API, MCP, pages and docs, SEO, other), a trend chart
+  per hour (24 hours) or per day, totals with the change against the window
+  before, and a ranking of the routes or groups. CSS bars, no chart library;
+  the filters are kept in the query string. Linked from the footer and listed
+  in the sitemap.
+- `GET /api/stats?period=24h|7d|30d` and `&granularity=hour|day` (7 days accepts
+  both): series per bucket with totals per group, totals per group, the group of
+  each route and the previous window. Without parameters it answers the last 7
+  days per day, keeping every field of 2.6.0. Invalid values answer 400 with a
+  fixed message.
+- The counters survive restarts: when systemd gives the app a state directory
+  (`StateDirectory=swapi`, `STATE_DIRECTORY`), they are written to
+  `/var/lib/swapi/route-stats.txt` every 10 minutes when they changed and on
+  shutdown (temporary file and rename), and restored at startup. A corrupt file
+  is ignored with a warning; without the directory the app keeps them in memory
+  only and says so once in the log. `docs/DEPLOY.md` has the drop-in.
+
+### Changed
+
+- Counters are kept per UTC hour for 14 days and per UTC day for 60 days, up
+  from 7 days per day, so every window can be compared with the one before.
+- Privacy policy: the counts are kept per hour and per day, for 14 and 60 days,
+  and copied to a small file on the server that holds only routes, times and
+  counts.
+- `scripts/verify-deploy.sh` also probes the 24-hour and 30-day windows, a 400
+  for an invalid period and the `/stats` page title.
+
+### Fixed
+
+- Links from the site to server paths (`/api/...`, `/mcp`, `/openapi.json`,
+  `robots.txt`, `sitemap.xml`) are no longer taken over by the SPA router: the
+  `/api/stats` link on the privacy page rendered the home page.
+
 ## [2.6.0] - 2026-10-19
 
 ### Added
@@ -538,3 +577,5 @@ snapshot version is not a release. -->
 [2.5.2]: https://github.com/eldermoraes/swapi.build/compare/v2.5.1...v2.5.2
 
 [2.6.0]: https://github.com/eldermoraes/swapi.build/compare/v2.5.2...v2.6.0
+
+[2.7.0]: https://github.com/eldermoraes/swapi.build/compare/v2.6.0...v2.7.0

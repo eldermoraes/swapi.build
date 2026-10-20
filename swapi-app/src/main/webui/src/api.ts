@@ -86,6 +86,11 @@ export async function fetchEndpoint<T = unknown>(path: string): Promise<ApiRespo
   return request<T>(url);
 }
 
+/** Usage counters for one window (`/stats` page). Cancelled by navigation like any page request. */
+export async function fetchStats<T = unknown>(period: string): Promise<ApiResponse<T>> {
+  return request<T>(`${BASE}/stats?period=${encodeURIComponent(period)}`);
+}
+
 // Direct fetch (outside request()): the spec does not take part in navigation
 // cancellation and needs an explicit Accept to guarantee JSON.
 export async function fetchOpenApiSpec(): Promise<OpenApiSpec> {

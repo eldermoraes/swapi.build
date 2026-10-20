@@ -21,6 +21,7 @@ public class SeoMetadataRegistry {
             route("/resource/species", "Species - SWAPI", "Browse Star Wars species records through the SWAPI REST API.", "weekly", "0.7"),
             route("/resource/starships", "Starships - SWAPI", "Browse Star Wars starship records through the SWAPI REST API.", "weekly", "0.7"),
             route("/resource/vehicles", "Vehicles - SWAPI", "Browse Star Wars vehicle records through the SWAPI REST API.", "weekly", "0.7"),
+            route("/stats", "Usage stats - SWAPI", "Anonymous request counts for the SWAPI REST API, MCP server and site, per route and per group, for the last 24 hours, 7 days or 30 days.", "daily", "0.4"),
             route("/privacy", "Privacy Policy - SWAPI", "Plain-language privacy policy for SWAPI, the public Star Wars API and MCP server.", "yearly", "0.3"),
             route("/terms", "Terms of Use - SWAPI", "Terms of use for SWAPI, the free public Star Wars API and MCP server.", "yearly", "0.3"));
 

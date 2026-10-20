@@ -70,7 +70,9 @@ and by hand after any change on the host. Every line must read `PASS`.
 - **REST**: `GET /api/people/1` returns 200 and embeds `https://<host>/api/...`
   URLs. Proves the per-request base-URL discovery through `X-Forwarded-*`.
 - **Usage counters**: `GET /api/stats` returns 200 with `countingSince` and the
-  `/api/people/{id}` route the REST probe just hit.
+  `/api/people/{id}` route the REST probe just hit; `?period=24h` answers 24
+  hourly buckets and `?period=30d` 30 daily ones (2.7.0+), and `/stats` serves
+  the page with its own title.
 - **OpenAPI**: `/openapi.json` with `Accept: text/html` returns
   `200 application/json` (Quinoa must not swallow the route), and its
   `info.version` equals the pom of the checked-out tag: the deployed version
@@ -467,15 +469,59 @@ the app sends a `Content-Security-Policy` header today; if one is ever added, it
 must allow `script-src https://static.cloudflareinsights.com` and
 `connect-src https://cloudflareinsights.com`.
 
-**Usage counters (2.6.0+).** The app counts requests per route template and per
-UTC day in memory (`com.eldermoraes.stats`): no IP, no User-Agent, nothing about
-the client. `GET /api/stats` returns the last seven days; the counters restart
-from zero on every restart (`countingSince` in the response), which is accepted —
-the disk is read-only and nothing is persisted. For history, the app writes one
-`route-stats <date> UTC total=… <route>=<count> …` line to the journal at 00:00
-UTC for the day that ended, and one marked `(partial, until shutdown)` when it
-stops, so the 30-day journal retention (2.9) keeps a month of daily totals:
-`journalctl -u swapi --since -30d | grep route-stats`.
+**Usage counters (2.6.0+, persisted from 2.7.0).** The app counts requests per
+route template, per UTC hour and per UTC day (`com.eldermoraes.stats`): no IP, no
+User-Agent, nothing about the client. Hours are kept 14 days and days 60 days,
+which is what the windows of `GET /api/stats?period=24h|7d|30d` and the `/stats`
+page need, each compared with the window before it; that is a few hundred KB at
+most.
+
+The counters live in memory and, when the unit has a state directory, are also
+written to `/var/lib/swapi/route-stats.txt`: every 10 minutes if they changed,
+and on shutdown, by writing a temporary file and renaming it over the old one.
+At startup the app restores that file, so a deploy no longer resets the counters
+(a crash loses at most 10 minutes). The file holds only route templates, bucket
+starts and counts, the same things `/api/stats` publishes. A corrupt or
+unreadable file is ignored with one warning and replaced by the next snapshot.
+
+`ProtectSystem=strict` keeps the rest of the disk read-only. The writable
+directory comes from a drop-in with `StateDirectory=swapi`: systemd creates
+`/var/lib/swapi` owned by `swapi`, mode 700, makes it writable inside the
+sandbox, and passes the path to the app in `STATE_DIRECTORY`
+(`swapi.stats.state-dir`). Nothing else in the unit changes, and `swapi-update`
+leaves the drop-in alone. The operator script
+`30-state-dir.sh` (kept outside the repository, run in an SSH window) does
+exactly this, idempotently:
+
+```bash
+sudo install -d -m 755 /etc/systemd/system/swapi.service.d
+sudo tee /etc/systemd/system/swapi.service.d/state.conf >/dev/null <<'EOF'
+[Service]
+StateDirectory=swapi
+StateDirectoryMode=0700
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart swapi
+systemctl show swapi -p StateDirectory          # StateDirectory=swapi
+sudo ls -ld /var/lib/swapi                      # drwx------ swapi swapi
+journalctl -u swapi -n 30 | grep -i 'usage counters'
+```
+
+Without the drop-in the app works the same, in memory only, and logs once at
+startup: `no state directory (STATE_DIRECTORY is not set): usage counters are
+kept in memory only and restart from zero on every restart`. With it, that line
+is absent; after the first restart that finds a snapshot the log says `usage
+counters restored from /var/lib/swapi/route-stats.txt`. The restart that installs
+the drop-in starts from zero (there is no snapshot yet), and the first snapshot
+appears 10 minutes later or at the next stop:
+`sudo ls -l /var/lib/swapi/`. To undo, remove `state.conf`, `daemon-reload`,
+restart, and `sudo rm -rf /var/lib/swapi`.
+
+The journal keeps a second, independent record: one
+`route-stats <date> UTC total=… <route>=<count> …` line at 00:00 UTC for the day
+that ended, and one marked `(partial, until shutdown)` when the app stops, so
+the 30-day journal retention (2.9) keeps a month of daily totals even without
+the state directory: `journalctl -u swapi --since -30d | grep route-stats`.
 
 #### 2.7 Caddy
 

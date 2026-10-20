@@ -45,6 +45,30 @@ else
   fail "/api/stats" "200 with countingSince and /api/people/{id}" "$code"
 fi
 
+# Windows and the page (2.7.0+).
+for spec in 24h:hour:24 30d:day:30; do
+  p="${spec%%:*}"; rest="${spec#*:}"; g="${rest%%:*}"; n="${rest#*:}"
+  window=$("${CURL[@]}" "$BASE/api/stats?period=$p")
+  if echo "$window" | python3 -c '
+import json, sys
+period, granularity, buckets = sys.argv[1], sys.argv[2], int(sys.argv[3])
+v = json.load(sys.stdin)
+assert v["period"] == period and v["granularity"] == granularity
+assert len(v["series"]) == buckets
+assert set(v["groups"]) == {"rest", "mcp", "pages", "seo", "other"}
+assert "total" in v["previous"]
+' "$p" "$g" "$n" 2>/dev/null; then
+    pass "/api/stats?period=$p -> $n $g buckets, groups and previous window"
+  else
+    fail "/api/stats?period=$p" "$n $g buckets with groups and previous" "$(echo "$window" | head -c 160)"
+  fi
+done
+code=$("${CURL[@]}" -o /dev/null -w '%{http_code}' "$BASE/api/stats?period=1y")
+[ "$code" = "400" ] && pass "/api/stats?period=1y -> 400" || fail "/api/stats?period=1y" "400" "$code"
+stats_html=$("${CURL[@]}" -H 'Accept: text/html' "$BASE/stats")
+echo "$stats_html" | grep -q '<title>Usage stats - SWAPI</title>' && pass "/stats page title" \
+  || fail "/stats page title" "<title>Usage stats - SWAPI</title>" "missing"
+
 # --- OpenAPI ----------------------------------------------------------------
 ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' -H 'Accept: text/html' "$BASE/openapi.json")
 case "$ct" in "200 application/json"*) pass "OpenAPI served by the backend ($ct)";;

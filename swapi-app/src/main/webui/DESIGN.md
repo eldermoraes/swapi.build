@@ -30,6 +30,7 @@ of pure white — depth, not a colour role.
 | Brand / action | `--sw-gold`, `--sw-gold-hover`, `--sw-gold-dim`                                                                                                          |
 | Data           | `--sw-cyan`, `--sw-cyan-greeting`                                                                                                                        |
 | Terminal       | `--sw-term-bg`, `--sw-term-border`, `--sw-term-border-soft`, `--sw-term-text`, `--sw-term-dim`, `--sw-term-string`, `--sw-term-number`, `--sw-term-glow` |
+| Chart          | `--sw-chart-rest`, `--sw-chart-mcp`, `--sw-chart-pages`, `--sw-chart-seo`, `--sw-chart-other`, `--sw-chart-track` (one series per route group on `/stats`; never gold) |
 | Status         | `--sw-ok`, `--sw-error`, `--sw-error-bg`, `--sw-error-border`                                                                                            |
 | Type           | `--sw-font-display`, `--sw-font-body`, `--sw-font-mono`                                                                                                  |
 | Shape          | `--sw-radius-pill`, `--sw-radius-panel`, `--sw-radius-chip`                                                                                              |

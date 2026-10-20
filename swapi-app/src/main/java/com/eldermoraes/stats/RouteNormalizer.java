@@ -25,7 +25,7 @@ public final class RouteNormalizer {
 
     private static final Set<String> FIXED = Set.of(
             "/", "/api", "/api/stats", "/mcp", "/openapi.json", "/robots.txt", "/sitemap.xml",
-            "/docs", "/docs/mcp", "/docs/webmcp", "/about", "/privacy", "/terms");
+            "/docs", "/docs/mcp", "/docs/webmcp", "/about", "/privacy", "/terms", "/stats");
 
     private RouteNormalizer() {
     }
