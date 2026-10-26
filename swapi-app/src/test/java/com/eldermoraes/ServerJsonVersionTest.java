@@ -4,15 +4,20 @@ import jakarta.json.Json;
 import jakarta.json.JsonArray;
 import jakarta.json.JsonObject;
 import jakarta.json.JsonReader;
+import jakarta.json.JsonString;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -51,6 +56,44 @@ class ServerJsonVersionTest {
         assertFalse(description.isBlank(), "description is required");
         assertTrue(description.length() <= 100,
                 "the registry rejects descriptions over 100 chars at publish time (422)");
+    }
+
+    @Test
+    void descriptionCarriesTheSearchTerms() {
+        String description = serverJson().getString("description", "");
+        for (String term : List.of("Star Wars", "MCP", "SWAPI", "No API key")) {
+            assertTrue(description.contains(term), () -> "description lacks '" + term + "': " + description);
+        }
+    }
+
+    /**
+     * The registry shows these icons, so each must be a file this repo serves on
+     * the production host (webui/public/), in a type the schema allows. The PNG
+     * comes first: clients must render PNG, SVG only should.
+     */
+    @Test
+    void iconsAreHttpsFilesThisRepoServes() throws IOException {
+        JsonArray icons = serverJson().getJsonArray("icons");
+        assertNotNull(icons, "server.json has no icons");
+        assertFalse(icons.isEmpty(), "server.json has no icons");
+        assertEquals("image/png", icons.getJsonObject(0).getString("mimeType", ""), "the first icon must be a PNG");
+        Path publicDir = ReleaseMetadata.repoRoot().resolve("swapi-app/src/main/webui/public");
+        Set<String> allowed = Set.of("image/png", "image/jpeg", "image/jpg", "image/svg+xml", "image/webp");
+        for (JsonObject icon : icons.getValuesAs(JsonObject.class)) {
+            String src = icon.getString("src", "");
+            assertTrue(src.startsWith("https://swapi.build/"), src);
+            Path file = publicDir.resolve(src.substring("https://swapi.build/".length()));
+            assertTrue(Files.isRegularFile(file), () -> src + " is not a file in " + publicDir);
+            String mimeType = icon.getString("mimeType", "");
+            assertTrue(allowed.contains(mimeType), mimeType + " is not in the schema enum");
+            if ("image/png".equals(mimeType)) {
+                // IHDR: width and height are the big-endian ints at bytes 16-23.
+                ByteBuffer header = ByteBuffer.wrap(Files.readAllBytes(file), 16, 8);
+                String size = header.getInt() + "x" + header.getInt();
+                assertEquals(List.of(size), icon.getJsonArray("sizes").getValuesAs(JsonString.class).stream()
+                        .map(JsonString::getString).toList(), src + " sizes must match the PNG header");
+            }
+        }
     }
 
     @Test

@@ -1,10 +1,22 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "build.swapi/star-wars",
-  "title": "Star Wars MCP",
-  "description": "Star Wars API (SWAPI) as a remote MCP server: films, people, planets, species, starships, vehicles.",
-  "version": "2.8.2",
+  "title": "Star Wars API & MCP server (swapi.build)",
+  "description": "Free remote Star Wars MCP server (SWAPI data): people, films, planets, starships. No API key.",
+  "version": "2.9.0",
   "websiteUrl": "https://swapi.build",
+  "icons": [
+    {
+      "src": "https://swapi.build/icon-512.png",
+      "mimeType": "image/png",
+      "sizes": ["512x512"]
+    },
+    {
+      "src": "https://swapi.build/favicon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": ["any"]
+    }
+  ],
   "repository": {
     "url": "https://github.com/eldermoraes/swapi.build",
     "source": "github"

@@ -23,6 +23,11 @@ public class SwapiTools {
 
     public enum SwResource { PEOPLE, FILMS, PLANETS, SPECIES, STARSHIPS, VEHICLES }
 
+    // Shared by the four tools. The error is the extension's argument conversion
+    // ("Invalid argument [resource] - unable to convert value"), a tool error.
+    private static final String RESOURCE_ARG = "Resource type: PEOPLE, FILMS, PLANETS, SPECIES, STARSHIPS or "
+            + "VEHICLES. Any other value returns a tool error.";
+
     @Inject PeopleService peopleService;
     @Inject FilmService filmService;
     @Inject PlanetService planetService;
@@ -57,12 +62,13 @@ public class SwapiTools {
         RequestBaseUrl.set(resolveBaseUrl());
     }
 
-    @Tool(description = "Lists all entities of a Star Wars resource type from swapi.build. "
-            + "Returns a JSON array.",
+    @Tool(description = "Lists every entity of one Star Wars resource type as a JSON array "
+            + "(Episodes I-VI data). Responses are large (all 82 PEOPLE, about 38 KB); to find a "
+            + "single entity, prefer sw_search, then sw_get.",
           annotations = @Tool.Annotations(title = "List Star Wars resources",
                   readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
     public String sw_list(
-            @ToolArg(description = "Resource type") SwResource resource) {
+            @ToolArg(description = RESOURCE_ARG) SwResource resource) {
         applyBaseUrl();
         return jsonb.toJson(switch (resource) {
             case PEOPLE -> peopleService.getAllPeople();
@@ -74,13 +80,16 @@ public class SwapiTools {
         });
     }
 
-    @Tool(description = "Gets one Star Wars entity by numeric id. Ids are the record ids "
-            + "from each entity's url field (e.g. FILMS id 1 = A New Hope). Returns a JSON object.",
+    @Tool(description = "Gets one Star Wars entity by numeric record id and returns it as a JSON "
+            + "object. Take the id from the end of an entity's url field (from sw_search, sw_list or "
+            + "a relation URL). Ids are record ids, not episode numbers: FILMS id 1 is A New Hope "
+            + "(Episode IV). An unknown id returns a tool error, e.g. 'No films found with id 99'.",
           annotations = @Tool.Annotations(title = "Get Star Wars entity by id",
                   readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
     public String sw_get(
-            @ToolArg(description = "Resource type") SwResource resource,
-            @ToolArg(description = "Numeric record id (from the entity's url field)") int id) {
+            @ToolArg(description = RESOURCE_ARG) SwResource resource,
+            @ToolArg(description = "Numeric record id: the last segment of the entity's url field "
+                    + "(1 in .../api/people/1).") int id) {
         applyBaseUrl();
         Object result = switch (resource) {
             case PEOPLE -> peopleService.getPeopleById(id);
@@ -97,12 +106,13 @@ public class SwapiTools {
         return jsonb.toJson(result);
     }
 
-    @Tool(description = "Returns one random Star Wars entity of the given resource type. "
-            + "Great for live demos. Returns a JSON object.",
+    @Tool(description = "Returns one random Star Wars entity of the given resource type as a "
+            + "JSON object. Each call can return a different entity, so it is not idempotent. Useful "
+            + "for demos and quizzes; to fetch a specific entity use sw_search or sw_get.",
           annotations = @Tool.Annotations(title = "Random Star Wars entity",
                   readOnlyHint = true, destructiveHint = false, openWorldHint = false))
     public String sw_random(
-            @ToolArg(description = "Resource type") SwResource resource) {
+            @ToolArg(description = RESOURCE_ARG) SwResource resource) {
         applyBaseUrl();
         return jsonb.toJson(switch (resource) {
             case PEOPLE -> peopleService.getRandomPeople();
@@ -114,13 +124,15 @@ public class SwapiTools {
         });
     }
 
-    @Tool(description = "Searches a Star Wars resource by name (title for FILMS), "
-            + "case-insensitive substring match. Returns a JSON array.",
+    @Tool(description = "Start here. Finds Star Wars entities by name (title for FILMS) with a "
+            + "case-insensitive substring match: 'sky' finds Luke, Anakin and Shmi Skywalker. Returns "
+            + "a JSON array of full entities; an empty array [] means no match. The id to pass to "
+            + "sw_get is the last segment of each entity's url field. Data covers Episodes I-VI only.",
           annotations = @Tool.Annotations(title = "Search Star Wars resources",
                   readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
     public String sw_search(
-            @ToolArg(description = "Resource type") SwResource resource,
-            @ToolArg(description = "Name/title fragment") String query) {
+            @ToolArg(description = RESOURCE_ARG) SwResource resource,
+            @ToolArg(description = "Name or title fragment, case-insensitive (e.g. 'falcon', 'hope').") String query) {
         applyBaseUrl();
         return jsonb.toJson(switch (resource) {
             case PEOPLE -> peopleService.getPeopleByName(query);

@@ -133,7 +133,7 @@ class StatsPersistenceTest {
                 since 2026-10-19T12:00:00Z
                 h 2026-10-19T12:00:00Z /api/films 2
                 d 2026-10-19 /api/films 2
-                d 2026-10-19 /llms.txt 3
+                d 2026-10-19 /not-a-route-yet.txt 3
                 """);
         RouteStats stats = new RouteStats(clock);
         StatsPersistence p = persistence(stats, Optional.of(dir.toString()));
@@ -146,7 +146,7 @@ class StatsPersistenceTest {
         stats.record("/mcp");
         p.save();
         String saved = Files.readString(file);
-        assertFalse(saved.contains("/llms.txt"), saved);
+        assertFalse(saved.contains("/not-a-route-yet.txt"), saved);
         assertTrue(saved.contains("d 2026-10-19 /api/films 2"), saved);
         assertTrue(saved.contains("d 2026-10-19 /mcp 1"), saved);
     }

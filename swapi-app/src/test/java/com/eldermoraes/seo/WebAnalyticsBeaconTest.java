@@ -36,7 +36,7 @@ class WebAnalyticsBeaconTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/api/people/1", "/openapi.json", "/robots.txt", "/api/stats"})
+    @ValueSource(strings = {"/api/people/1", "/openapi.json", "/robots.txt", "/llms.txt", "/api/stats"})
     void nonDocumentsDoNot(String path) {
         given().when().get(path).then()
                 .statusCode(200)

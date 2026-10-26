@@ -29,6 +29,8 @@ class RouteNormalizerTest {
             "/openapi.json, /openapi.json",
             "/robots.txt, /robots.txt",
             "/sitemap.xml, /sitemap.xml",
+            "/llms.txt, /llms.txt",
+            "/llms.txt/, /llms.txt",
             "/, /",
             "/docs, /docs",
             "/docs/mcp, /docs/mcp",

@@ -144,6 +144,17 @@ class StatsResourceTest {
     }
 
     @Test
+    void llmsTxtIsCountedUnderSeo() {
+        given().get("/llms.txt").then().statusCode(200);
+
+        given().when().get("/api/stats").then()
+                .statusCode(200)
+                .body("routes.'/llms.txt'", greaterThanOrEqualTo(1))
+                .body("routeGroups.'/llms.txt'", equalTo("seo"))
+                .body("groups.seo", greaterThanOrEqualTo(1));
+    }
+
+    @Test
     void isDocumentedInTheOpenApiSpec() {
         given().when().get("/openapi.json").then()
                 .statusCode(200)

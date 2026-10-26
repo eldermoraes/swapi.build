@@ -13,8 +13,8 @@ import java.util.Optional;
  *
  * Priority 400 runs ahead of the CORS handler (300), the MCP transport filter
  * (250) and the SEO routes (100) — a higher priority runs earlier — so a
- * request those filters answer themselves (a 405 on GET /mcp, robots.txt, the
- * SPA HTML) is still counted and timed. Only the path is read; the filter never
+ * request those filters answer themselves (a 405 on GET /mcp, robots.txt,
+ * llms.txt, the SPA HTML) is still counted and timed. Only the path is read; the filter never
  * looks at the client's address or headers.
  *
  * The time is server time: from this filter, the first route handler to see the

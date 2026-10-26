@@ -10,6 +10,7 @@ describe('links the SPA router must not swallow', () => {
     '/mcp',
     '/openapi.json',
     '/robots.txt',
+    '/llms.txt',
     '/sitemap.xml',
   ])(
     '%s goes to the server (regression: /api/stats on /privacy rendered the home page)',

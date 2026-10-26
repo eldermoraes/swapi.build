@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { applySeoMetadata, getSeoMetadata, PUBLIC_SEO_ROUTES } from './seo';
+import { applySeoMetadata, getSeoMetadata, PUBLIC_SEO_ROUTES, spokenTitle } from './seo';
 
 const origin = 'https://preview.example';
 
@@ -12,18 +12,47 @@ describe('SEO metadata', () => {
   });
 
   it('returns accurate metadata for public routes', () => {
-    expect(getSeoMetadata('/').title).toBe('SWAPI - The Star Wars API');
-    expect(getSeoMetadata('/docs').title).toBe('Documentation - SWAPI');
-    expect(getSeoMetadata('/docs/mcp').title).toBe('MCP Server - SWAPI');
-    expect(getSeoMetadata('/about').title).toBe('About - SWAPI');
-    expect(getSeoMetadata('/resource/people').title).toBe('People - SWAPI');
-    expect(getSeoMetadata('/privacy').title).toBe('Privacy Policy - SWAPI');
-    expect(getSeoMetadata('/terms').title).toBe('Terms of Use - SWAPI');
+    expect(getSeoMetadata('/').title).toBe(
+      'SWAPI alternative: free Star Wars API and MCP server | swapi.build',
+    );
+    expect(getSeoMetadata('/docs').title).toBe(
+      'SWAPI docs: Star Wars REST API endpoints and OpenAPI | swapi.build',
+    );
+    expect(getSeoMetadata('/docs/mcp').title).toBe(
+      'Star Wars MCP server: remote, no API key | swapi.build',
+    );
+    expect(getSeoMetadata('/about').title).toBe(
+      'About: a SWAPI alternative built with Quarkus | swapi.build',
+    );
+    expect(getSeoMetadata('/resource/people').title).toBe(
+      'Star Wars People API: JSON data | swapi.build',
+    );
+    expect(getSeoMetadata('/stats').title).toBe('Usage stats | swapi.build');
+    expect(getSeoMetadata('/privacy').title).toBe('Privacy Policy | swapi.build');
+    expect(getSeoMetadata('/terms').title).toBe('Terms of Use | swapi.build');
+  });
+
+  it('uses the singular noun as the modifier in resource descriptions', () => {
+    expect(getSeoMetadata('/resource/films').description).toBe(
+      'Browse Star Wars film records as JSON from the free swapi.build REST API and MCP server.',
+    );
+    expect(getSeoMetadata('/resource/starships').description).toContain(
+      'Star Wars starship records',
+    );
+    expect(getSeoMetadata('/resource/people').description).toContain('Star Wars people records');
+    expect(getSeoMetadata('/resource/species').description).toContain('Star Wars species records');
+    expect(getSeoMetadata('/resource/films/3').description).toBe(
+      'Star Wars film record #3 from the swapi.build REST API.',
+    );
+  });
+
+  it('speaks the title without the brand suffix', () => {
+    expect(spokenTitle('Usage stats | swapi.build')).toBe('Usage stats');
   });
 
   it('marks unknown document paths noindex and canonicalizes them to home', () => {
     const meta = getSeoMetadata('/not-a-real-page?x=1#frag');
-    expect(meta.title).toBe('SWAPI - The Star Wars API');
+    expect(meta.title).toBe('SWAPI alternative: free Star Wars API and MCP server | swapi.build');
     expect(meta.canonicalPath).toBe('/');
     expect(meta.robots).toBe('noindex,follow');
   });
@@ -31,7 +60,12 @@ describe('SEO metadata', () => {
   it('applies document title, canonical, social cards, description and robots tags', () => {
     applySeoMetadata('/docs?ignored=1#section', origin);
 
-    expect(document.title).toBe('Documentation - SWAPI');
+    expect(document.title).toBe(
+      'SWAPI docs: Star Wars REST API endpoints and OpenAPI | swapi.build',
+    );
+    expect(document.querySelector('meta[property="og:site_name"]')?.getAttribute('content')).toBe(
+      'swapi.build',
+    );
     expect(document.querySelector('meta[name="description"]')?.getAttribute('content')).toContain(
       'OpenAPI',
     );
@@ -69,7 +103,7 @@ describe('SEO metadata', () => {
 it('gives the WebMCP guide an indexable canonical route', () => {
   expect(getSeoMetadata('/docs/webmcp')).toMatchObject({
     canonicalPath: '/docs/webmcp',
-    title: 'WebMCP in the browser - SWAPI',
+    title: 'Star Wars WebMCP tools in the browser | swapi.build',
     robots: 'index,follow',
   });
 });

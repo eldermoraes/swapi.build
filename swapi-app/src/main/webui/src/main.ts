@@ -11,7 +11,7 @@ import { renderTerms } from './pages/terms';
 import { renderStats } from './pages/stats';
 import { isServerPath } from './spa-links';
 import { cancelPending } from './api';
-import { applySeoMetadata } from './seo';
+import { applySeoMetadata, spokenTitle } from './seo';
 import { activeNavHref } from './nav';
 
 // No analytics or performance beacons in the frontend: the only measurement
@@ -76,7 +76,7 @@ const explorer = new ResourceExplorer(
       if (generation !== navigationGeneration) return;
       window.scrollTo(0, 0);
       container.focus({ preventScroll: true });
-      announce(title.replace(' - SWAPI', ''));
+      announce(spokenTitle(title));
     });
   },
   () => {
@@ -159,7 +159,7 @@ async function navigate() {
 
   window.scrollTo(0, 0);
   container.focus({ preventScroll: true });
-  announce(title.replace(' - SWAPI', ''));
+  announce(spokenTitle(title));
 }
 
 // Intercept clicks on internal links to use History API instead of full page reload

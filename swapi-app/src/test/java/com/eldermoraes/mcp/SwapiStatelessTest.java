@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.not;
@@ -38,6 +39,30 @@ public class SwapiStatelessTest {
                 .body("result.ttlMs", equalTo(0))
                 .body("result.cacheScope", equalTo("public"))
                 .body("result", not(hasKey("cacheControl")));
+    }
+
+    @Test
+    public void discoverCarriesInstructions() {
+        given()
+                .contentType("application/json")
+                .accept("application/json, text/event-stream")
+                .header("Mcp-Method", "server/discover")
+                .header("MCP-Protocol-Version", "2026-07-28")
+                .body("""
+                        {"jsonrpc":"2.0","id":1,"method":"server/discover","params":{
+                          "_meta":{
+                            "io.modelcontextprotocol/protocolVersion":"2026-07-28",
+                            "io.modelcontextprotocol/clientInfo":{"name":"regression-test","version":"1.0"},
+                            "io.modelcontextprotocol/clientCapabilities":{}
+                          }
+                        }}
+                        """)
+        .when()
+                .post("/mcp")
+        .then()
+                .statusCode(200)
+                .body("result.instructions", containsString("sw_search"))
+                .body("result.instructions", containsString("not an episode number"));
     }
 
     @Test

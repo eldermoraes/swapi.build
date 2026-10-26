@@ -10,10 +10,10 @@
 #        verify-deploy.sh redirect <from-host> <to-host>
 #                                          (a name that only redirects, today www.swapi.build ->
 #                                           swapi.build): without following redirects, GET /,
-#                                           GET with a path and query, GET /sitemap.xml and
-#                                           POST /mcp on https://<from-host> must each answer
-#                                           308 with Location exactly https://<to-host> + the
-#                                           same path and query
+#                                           GET with a path and query, GET /sitemap.xml,
+#                                           GET /llms.txt and POST /mcp on https://<from-host>
+#                                           must each answer 308 with Location exactly
+#                                           https://<to-host> + the same path and query
 #
 # The `preview` and `prod` modes probed the former Vercel deployments and were
 # removed with them.
@@ -59,6 +59,7 @@ if [ "$MODE" = "redirect" ]; then
   redirect_probe GET "/"
   redirect_probe GET "/api/people/1?format=json"
   redirect_probe GET "/sitemap.xml"
+  redirect_probe GET "/llms.txt"
   # 308 (not 301) keeps the method and body: an MCP client posting to www must
   # be sent on to the apex still as a POST.
   redirect_probe POST "/mcp" -X POST \
@@ -132,8 +133,9 @@ fi
 code=$("${CURL[@]}" -o /dev/null -w '%{http_code}' "$BASE/api/stats?period=1y")
 [ "$code" = "400" ] && pass "/api/stats?period=1y -> 400" || fail "/api/stats?period=1y" "400" "$code"
 stats_html=$("${CURL[@]}" -H 'Accept: text/html' "$BASE/stats")
-echo "$stats_html" | grep -q '<title>Usage stats - SWAPI</title>' && pass "/stats page title" \
-  || fail "/stats page title" "<title>Usage stats - SWAPI</title>" "missing"
+# grep -F: the title carries a '|', which must not depend on the grep mode.
+echo "$stats_html" | grep -qF '<title>Usage stats | swapi.build</title>' && pass "/stats page title" \
+  || fail "/stats page title" "<title>Usage stats | swapi.build</title>" "missing"
 
 # --- OpenAPI ----------------------------------------------------------------
 ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' -H 'Accept: text/html' "$BASE/openapi.json")
@@ -169,10 +171,44 @@ sitemap=$("${CURL[@]}" "$BASE/sitemap.xml")
 echo "$sitemap" | grep -q "<loc>$BASE/docs</loc>" && pass "sitemap.xml lists /docs on the host" \
   || fail "sitemap.xml /docs" "<loc>$BASE/docs</loc>" "missing"
 webmcp_html=$("${CURL[@]}" -H 'Accept: text/html' "$BASE/docs/webmcp")
-echo "$webmcp_html" | grep -q '<title>WebMCP in the browser - SWAPI</title>' && pass "WebMCP guide title" \
+echo "$webmcp_html" | grep -qF '<title>Star Wars WebMCP tools in the browser | swapi.build</title>' && pass "WebMCP guide title" \
   || fail "WebMCP guide title" "route-specific title" "missing"
 echo "$sitemap" | grep -q "<loc>$BASE/docs/webmcp</loc>" && pass "sitemap.xml lists WebMCP guide" \
   || fail "sitemap.xml WebMCP guide" "<loc>$BASE/docs/webmcp</loc>" "missing"
+
+# llms.txt (2.9.0+): served by the app as text even to an HTML Accept (before
+# 2.9.0 it fell into the SPA shell), with the connection line on the host.
+ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' -H 'Accept: text/html' "$BASE/llms.txt")
+case "$ct" in "200 text/plain"*) pass "llms.txt served as text ($ct)";;
+  *) fail "llms.txt content-type" "200 text/plain" "$ct (text/html = the SPA swallowed it)";; esac
+llms=$("${CURL[@]}" "$BASE/llms.txt")
+if echo "$llms" | grep -qF '# swapi.build' && echo "$llms" | grep -qF "$BASE/mcp"; then
+  pass "llms.txt carries the title and $BASE/mcp"
+else
+  fail "llms.txt body" "# swapi.build and $BASE/mcp" "$(echo "$llms" | head -c 160)"
+fi
+
+# The two icons server.json gives the MCP Registry. Before 2.9.0, /icon-512.png
+# answered the SPA shell (200 text/html).
+ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' "$BASE/favicon.svg")
+case "$ct" in "200 image/svg+xml"*) pass "favicon.svg served as SVG ($ct)";;
+  *) fail "favicon.svg content-type" "200 image/svg+xml" "$ct";; esac
+ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' "$BASE/icon-512.png")
+case "$ct" in "200 image/png"*) pass "icon-512.png served as PNG ($ct)";;
+  *) fail "icon-512.png content-type" "200 image/png" "$ct (text/html = the SPA shell)";; esac
+
+# IndexNow key file (2.9.0+): the one public/*.txt of the checked-out tag, whose
+# body is the key itself.
+for keyfile in "$(dirname "$0")"/../swapi-app/src/main/webui/public/*.txt; do
+  [ -f "$keyfile" ] || { echo "INFO  no IndexNow key file in the checkout"; break; }
+  key=$(basename "$keyfile" .txt)
+  got=$("${CURL[@]}" -w '\n%{http_code} %{content_type}' "$BASE/$key.txt")
+  meta="${got##*$'\n'}"; body="${got%$'\n'*}"
+  case "$meta" in "200 text/plain"*)
+    if [ "$body" = "$key" ]; then pass "IndexNow key file served as text with the key"
+    else fail "IndexNow key file body" "$key" "$(echo "$body" | head -c 80)"; fi;;
+  *) fail "IndexNow key file" "200 text/plain" "$meta";; esac
+done
 
 
 ct=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type}' "$BASE/og-image.png")
@@ -223,6 +259,40 @@ assert "cacheControl" not in result
     fail "MCP $method cache fields" "flat ttlMs=0 and cacheScope=public" "$(echo "$resp" | head -c 200)"
   fi
 done
+
+# --- MCP instructions and tool descriptions (2.9.0+), parsed as JSON ------------
+# Both answer application/json today; if a body ever comes as SSE, the parser
+# reads the last "data:" line.
+MCP_JSON='
+import json, sys
+raw = sys.stdin.read().strip()
+if not raw.startswith("{"):
+    raw = [l[5:].strip() for l in raw.splitlines() if l.startswith("data:")][-1]
+response = json.loads(raw)
+'
+resp=$("${CURL[@]}" -X POST "$BASE/mcp" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"verify-deploy","version":"1.0"}}}')
+if echo "$resp" | python3 -c "$MCP_JSON"'
+instructions = response["result"]["instructions"]
+assert "sw_search" in instructions and "not an episode number" in instructions
+' 2>/dev/null; then
+  pass "MCP initialize carries the instructions"
+else
+  fail "MCP initialize instructions" "result.instructions with sw_search and the id trap" "$(echo "$resp" | head -c 200)"
+fi
+resp=$("${CURL[@]}" -X POST "$BASE/mcp" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'Mcp-Method: tools/list' -H 'MCP-Protocol-Version: 2026-07-28' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"verify-deploy","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}')
+if echo "$resp" | python3 -c "$MCP_JSON"'
+tools = {t["name"]: t for t in response["result"]["tools"]}
+assert "sw_get" in tools["sw_search"]["description"]
+' 2>/dev/null; then
+  pass "MCP tools/list: sw_search description points to sw_get"
+else
+  fail "MCP tools/list descriptions" "sw_search description citing sw_get" "$(echo "$resp" | head -c 200)"
+fi
 
 # --- MCP stateful burst: 12 concurrent calls on one session ---------------------
 SID=$("${CURL[@]}" -D - -o /dev/null -X POST "$BASE/mcp" \
@@ -291,6 +361,10 @@ seo_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/sitemap.xml
 seo_clean=$("${CURL[@]}" "$BASE/sitemap.xml?poison=$$" | grep -c evil.example)
 [ "$seo_poison" = "0" ] && [ "$seo_clean" = "0" ] && pass "poisoning SEO X-Forwarded-Host: 0 occurrences" \
   || fail "poisoning SEO X-Forwarded-Host" "0 and 0" "$seo_poison and $seo_clean (see runbook)"
+llms_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/llms.txt?poison=$$" | grep -c evil.example)
+llms_clean=$("${CURL[@]}" "$BASE/llms.txt?poison=$$" | grep -c evil.example)
+[ "$llms_poison" = "0" ] && [ "$llms_clean" = "0" ] && pass "poisoning llms.txt X-Forwarded-Host: 0 occurrences" \
+  || fail "poisoning llms.txt X-Forwarded-Host" "0 and 0" "$llms_poison and $llms_clean (see runbook)"
 # The SPA HTML embeds canonical/og:url/og:image built from the request host.
 home_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/?poison=$$" | grep -c evil.example)
 home_clean=$("${CURL[@]}" "$BASE/?poison=$$" | grep -c evil.example)
