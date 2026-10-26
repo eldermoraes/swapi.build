@@ -127,8 +127,8 @@ following redirects. Each must answer `308` with `Location` exactly
 fake host on `127.0.0.1` and proves that a correct redirect passes and a wrong
 status, a wrong host or a dropped query fails.
 
-The redirect lives on the host, in the `Caddyfile` (section 4): the deploy
-probe fails until the operator has applied it there.
+The redirect lives on the host, in the `Caddyfile` (section 4). It was
+applied there and verified with the probe on 2026-10-26 (18:25 BRT).
 
 ## Troubleshooting (application)
 
@@ -520,7 +520,9 @@ starts, counts and the aggregated server times, the same things `/api/stats`
 publishes. Its header names the format: `swapi-route-stats 2` from 2.8.0 (with
 `th`/`td` time lines); a `swapi-route-stats 1` file from 2.7.0 still loads, with
 its counts and no times. A corrupt or unreadable file is ignored with one
-warning and replaced by the next snapshot.
+warning and replaced by the next snapshot. From 2.8.2, unknown lines (a route
+or record a later version added) are skipped with one warning; the rest is
+restored, and the next snapshot is written without them.
 
 `ProtectSystem=strict` keeps the rest of the disk read-only. The writable
 directory comes from a drop-in with `StateDirectory=swapi`: systemd creates
@@ -800,8 +802,8 @@ Site address in the `Caddyfile` at the cutover: `swapi.build, www.swapi.build {`
 with the `www` name served as-is (200, no redirect). Since the 2026-10-26
 decision, `www.swapi.build` answers a 308 to `https://swapi.build{uri}`
 instead (see [The www redirect](#the-www-redirect)): `swapi.build` keeps the
-site block and `www.swapi.build` gets a block of its own that only redirects.
-The host edit is the operator's;
+site block and `www.swapi.build` gets a block of its own that only redirects
+(applied on the host on 2026-10-26, 18:25 BRT);
 `scripts/verify-deploy.sh redirect www.swapi.build swapi.build` confirms it.
 
 For a future move to another host, the same order holds: TTL down to 60 the day
@@ -835,6 +837,11 @@ answer. A rollback is a host change (maintainer, or a session he opens for it);
 the next release then goes out through the normal pipeline. Rolling back to a
 version older than the previous one: run `sudo swapi-update <tag> <sha256>` with
 the hash from that release's run summary.
+
+The usage counters survive a rollback: from 2.8.2, a rollback loses only the
+counts of routes the target version does not know (their snapshot lines are
+skipped and the next snapshot drops them). Rolling back to 2.8.1 or older still
+discards the whole snapshot if it holds such a line.
 
 There is no DNS rollback to another provider: nothing of this project runs on
 Vercel any more.

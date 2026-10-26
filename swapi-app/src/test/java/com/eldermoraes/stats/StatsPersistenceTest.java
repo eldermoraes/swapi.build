@@ -123,6 +123,35 @@ class StatsPersistenceTest {
     }
 
     @Test
+    void unknownLinesAreDroppedOnTheNextSave() throws IOException {
+        // What a rollback finds: a snapshot from a later version that counts a route
+        // this one does not know. The known counters come back; the unknown line
+        // does not survive the next save.
+        Path file = dir.resolve(SnapshotFile.FILE_NAME);
+        Files.writeString(file, """
+                swapi-route-stats 2
+                since 2026-10-19T12:00:00Z
+                h 2026-10-19T12:00:00Z /api/films 2
+                d 2026-10-19 /api/films 2
+                d 2026-10-19 /llms.txt 3
+                """);
+        RouteStats stats = new RouteStats(clock);
+        StatsPersistence p = persistence(stats, Optional.of(dir.toString()));
+        p.start();
+
+        assertEquals(Map.of("/api/films", 2L), stats.day(LocalDate.parse("2026-10-19")));
+        assertTrue(infos.getLast().contains("restored"), infos::toString);
+        assertEquals(1, warnings.size(), warnings::toString);
+
+        stats.record("/mcp");
+        p.save();
+        String saved = Files.readString(file);
+        assertFalse(saved.contains("/llms.txt"), saved);
+        assertTrue(saved.contains("d 2026-10-19 /api/films 2"), saved);
+        assertTrue(saved.contains("d 2026-10-19 /mcp 1"), saved);
+    }
+
+    @Test
     void unchangedCountersAreNotRewritten() throws IOException {
         RouteStats stats = new RouteStats(clock);
         StatsPersistence p = persistence(stats, Optional.of(dir.toString()));

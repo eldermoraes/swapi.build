@@ -16,6 +16,25 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.8.2] - 2026-10-26
+
+### Changed
+
+- The deploy job probes `www.swapi.build` as a 308 redirect to the apex
+  (`scripts/verify-deploy.sh redirect www.swapi.build swapi.build`): `GET /`, a
+  path with a query, `/sitemap.xml` and `POST /mcp` must each answer 308 with
+  `Location` exactly `https://swapi.build` + the same path and query.
+  `scripts/verify-deploy-redirect.test.sh` covers the mode in CI (#30).
+
+### Fixed
+
+- A usage counters snapshot with a line this version does not know (a route or
+  a record type a later version added) no longer discards the whole file. The
+  line is skipped with one warning, which gives the count and the first line
+  number but not the content, and every known counter and time is restored, so
+  a rollback keeps the counts. A malformed known line, an unknown header or an
+  oversized file is still ignored as corrupt, as before.
+
 ## [2.8.1] - 2026-10-20
 
 ### Added
@@ -630,3 +649,5 @@ snapshot version is not a release. -->
 [2.8.0]: https://github.com/eldermoraes/swapi.build/compare/v2.7.0...v2.8.0
 
 [2.8.1]: https://github.com/eldermoraes/swapi.build/compare/v2.8.0...v2.8.1
+
+[2.8.2]: https://github.com/eldermoraes/swapi.build/compare/v2.8.1...v2.8.2
