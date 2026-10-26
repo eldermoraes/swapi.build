@@ -53,6 +53,12 @@ jobs:
       - name: Vercel git deployments stay off
         run: scripts/vercel-git-off.test.sh
 
+      # The deploy probes www.swapi.build with `verify-deploy.sh redirect`; a
+      # fake host on 127.0.0.1 proves a correct 308 passes and a wrong status,
+      # host or dropped query fails. Runs without the network.
+      - name: Redirect probe tests
+        run: scripts/verify-deploy-redirect.test.sh
+
       # Maven never runs Vitest: Quinoa's `vite build` bundles the frontend, it
       # does not test it. Without this step the frontend suite — including the
       # "no raw colour" guard in tokens.test.ts — passes locally and gates

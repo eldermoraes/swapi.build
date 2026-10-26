@@ -90,7 +90,9 @@ deploy** (`native-binary.yml`). Pushing the tag alone deploys nothing.
 
 3. After approval, the job connects to the host as `deploy`, runs
    `swapi-update <tag> <sha256>` through the gate and then
-   `scripts/verify-deploy.sh origin` on `swapi.build` and `www.swapi.build`.
+   `scripts/verify-deploy.sh origin swapi.build` and
+   `scripts/verify-deploy.sh redirect www.swapi.build swapi.build` (`www`
+   answers a 308 to the apex; `docs/DEPLOY.md`, "The www redirect").
    Every probe line must read PASS.
 
 If the deploy job fails after the binary is attached (SSH, a probe), fix the

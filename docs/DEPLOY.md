@@ -34,7 +34,8 @@ Publishing a GitHub Release (`docs/RELEASE.md`, step 7) runs
    2.5), which downloads the binary from the Release, checks the hash against
    both sources, switches `/opt/swapi/current`, restarts swapi and fails if it
    does not answer. Then `scripts/verify-deploy.sh origin swapi.build` and
-   `scripts/verify-deploy.sh origin www.swapi.build`.
+   `scripts/verify-deploy.sh redirect www.swapi.build swapi.build` (`www`
+   answers a 308 to the apex, see [The www redirect](#the-www-redirect)).
 
 Pushing a tag or commits never deploys. The deploy is a job in the same
 workflow (`needs: build`) rather than a separate `workflow_run`, so the hash
@@ -64,8 +65,10 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
 
 ## What the probes check
 
-`scripts/verify-deploy.sh origin <host>`, run by the `deploy` job on both names
-and by hand after any change on the host. Every line must read `PASS`.
+`scripts/verify-deploy.sh origin <host>`, run by the `deploy` job on
+`swapi.build` and by hand after any change on the host. Every line must read
+`PASS`. `www.swapi.build` is not probed as a site: it only redirects (see
+[The www redirect](#the-www-redirect)).
 
 - **REST**: `GET /api/people/1` returns 200 and embeds `https://<host>/api/...`
   URLs. Proves the per-request base-URL discovery through `X-Forwarded-*`.
@@ -105,6 +108,27 @@ and by hand after any change on the host. Every line must read `PASS`.
   RFC 7239 `Forwarded` header is ignored by the app.
 - **Caddy headers**: `Strict-Transport-Security: max-age=63072000` and no
   `Server` header.
+
+### The www redirect
+
+`www.swapi.build` answers every request with a **308** permanent redirect to
+`https://swapi.build{uri}`, path and query preserved (decided 2026-10-26: one
+address per page for search engines and answer engines). 308, not 301, so an
+MCP client that posts to `www` is sent on to the apex still as a `POST` with
+its body.
+
+`scripts/verify-deploy.sh redirect www.swapi.build swapi.build`, run by the
+`deploy` job right after the `origin` probes and by hand after any change to
+the `Caddyfile`, sends `GET /`, `GET /api/people/1?format=json`,
+`GET /sitemap.xml` and `POST /mcp` to `https://www.swapi.build` without
+following redirects. Each must answer `308` with `Location` exactly
+`https://swapi.build` + the same path and query. Every line must read `PASS`.
+`scripts/verify-deploy-redirect.test.sh` (CI) runs the same mode against a
+fake host on `127.0.0.1` and proves that a correct redirect passes and a wrong
+status, a wrong host or a dropped query fails.
+
+The redirect lives on the host, in the `Caddyfile` (section 4): the deploy
+probe fails until the operator has applied it there.
 
 ## Troubleshooting (application)
 
@@ -772,8 +796,13 @@ and the probes went green on both names; `oracle.swapi.build` was then removed
 from the `Caddyfile` and from the DNS. TTL goes back to 300 after 24 hours
 without trouble (DNS, maintainer's go).
 
-Final site address in the `Caddyfile`: `swapi.build, www.swapi.build {`. The
-`www` name is served as-is (200, no redirect).
+Site address in the `Caddyfile` at the cutover: `swapi.build, www.swapi.build {`,
+with the `www` name served as-is (200, no redirect). Since the 2026-10-26
+decision, `www.swapi.build` answers a 308 to `https://swapi.build{uri}`
+instead (see [The www redirect](#the-www-redirect)): `swapi.build` keeps the
+site block and `www.swapi.build` gets a block of its own that only redirects.
+The host edit is the operator's;
+`scripts/verify-deploy.sh redirect www.swapi.build swapi.build` confirms it.
 
 For a future move to another host, the same order holds: TTL down to 60 the day
 before (`swapi.build` sends HSTS for 2 years, so browsers will not let a
