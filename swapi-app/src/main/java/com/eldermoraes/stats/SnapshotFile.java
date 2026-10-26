@@ -39,11 +39,32 @@ import java.util.function.Consumer;
  * Only route templates, bucket starts, counts and times — the same things
  * {@code GET /api/stats} publishes — so the file holds nothing about any client.
  *
- * Reading is strict: a missing header, an unknown line, a route that
- * {@link RouteNormalizer} would not produce, a negative number, time numbers
- * that do not add up, or a file larger than {@link #MAX_BYTES} makes the whole
- * file count as corrupt. It is then ignored with one warning and the next
- * snapshot replaces it; the app never fails to start because of it.
+ * Reading skips what it does not know and is strict about what it does (2.8.2).
+ * Two kinds of line are <em>skipped</em>, with one warning per read that gives
+ * their number and the first line number but never their content:
+ * <ul>
+ *   <li>an unknown record type: a first field other than {@code since}, {@code h},
+ *       {@code d}, {@code th} and {@code td}, including {@code th}/{@code td} in a
+ *       format 1 file;</li>
+ *   <li>a known record with the right number of fields whose route
+ *       {@link RouteNormalizer} would not produce (checked before its numbers).</li>
+ * </ul>
+ * A skipped line never enters the {@link StatsData}, so the closed set of routes
+ * stays closed, and the next snapshot is written without it. This keeps every
+ * known counter when a rollback meets a file written by a version that counts a
+ * route this one does not know.
+ *
+ * Everything else stays fatal: a missing or unknown header, a known line with a
+ * missing field, a negative or invalid number, a bad date, a time that is not an
+ * hour start, time numbers that do not add up, or a file larger than
+ * {@link #MAX_BYTES} makes the whole file count as corrupt. It is then ignored
+ * with one warning and the next snapshot replaces it; the app never fails to
+ * start because of it.
+ *
+ * Format evolution: new data enters as a <em>new line type</em> under format 2,
+ * never as an extra field on {@code h}/{@code d}/{@code th}/{@code td} nor as a
+ * new header. Otherwise an older version reading the file discards it whole and
+ * the protection above does not apply.
  *
  * Writing is atomic: the snapshot goes to a temporary file in the same
  * directory, is flushed to disk, and is renamed over the previous one, so a
@@ -80,7 +101,21 @@ public final class SnapshotFile {
         return file;
     }
 
-    /** The saved counters, or empty when there is no file or it is corrupt (with a warning). */
+    /** What {@link #decode} restored, and how many unknown lines it skipped (first at a 1-based line). */
+    record Decoded(StatsData data, int skipped, int firstSkippedLine) {
+    }
+
+    /** Thrown for a line this version does not know: the line is skipped, not fatal. */
+    private static final class UnknownLine extends RuntimeException {
+        UnknownLine() {
+            super(null, null, false, false);
+        }
+    }
+
+    /**
+     * The saved counters, or empty when there is no file or it is corrupt (with a
+     * warning). Unknown lines are skipped with one warning and the rest is restored.
+     */
     public Optional<StatsData> read() {
         String text;
         try {
@@ -98,7 +133,15 @@ public final class SnapshotFile {
             return Optional.empty();
         }
         try {
-            return Optional.of(decode(text));
+            Decoded decoded = decode(text);
+            if (decoded.skipped() > 0) {
+                // The count and the line number only: a skipped line may carry a
+                // route that is not a template, and that does not go to the log.
+                warn.accept("usage counters snapshot " + file + ": skipped " + decoded.skipped()
+                        + " unknown line(s) (first at line " + decoded.firstSkippedLine()
+                        + "); the rest was restored");
+            }
+            return Optional.of(decoded.data());
         } catch (IllegalArgumentException e) {
             warn.accept("usage counters snapshot " + file + " is corrupt (" + e.getMessage()
                     + "); ignored, starting from zero");
@@ -154,8 +197,11 @@ public final class SnapshotFile {
         out.append('\n');
     }
 
-    /** @throws IllegalArgumentException on anything this class did not write */
-    static StatsData decode(String text) {
+    /**
+     * @throws IllegalArgumentException on a malformed known line or header; unknown
+     *                                  record types and unknown routes are skipped and counted
+     */
+    static Decoded decode(String text) {
         String[] lines = text.split("\n", -1);
         boolean v2;
         if (lines.length > 0 && HEADER.equals(lines[0])) {
@@ -170,6 +216,8 @@ public final class SnapshotFile {
         Map<LocalDate, Map<String, Long>> days = new TreeMap<>();
         Map<Instant, Map<String, TimingData>> hourTimes = new TreeMap<>();
         Map<LocalDate, Map<String, TimingData>> dayTimes = new TreeMap<>();
+        int skipped = 0;
+        int firstSkipped = 0;
         for (int i = 1; i < lines.length; i++) {
             String line = lines[i];
             if (line.isEmpty()) {
@@ -184,37 +232,45 @@ public final class SnapshotFile {
                     }
                     case "h" -> {
                         expect(f, 4, i);
+                        String route = route(f[2]);
                         hours.computeIfAbsent(hourStart(f[1], i), k -> new TreeMap<>())
-                                .put(route(f[2], i), count(f[3], i));
+                                .put(route, count(f[3], i));
                     }
                     case "d" -> {
                         expect(f, 4, i);
+                        String route = route(f[2]);
                         days.computeIfAbsent(LocalDate.parse(f[1]), k -> new TreeMap<>())
-                                .put(route(f[2], i), count(f[3], i));
+                                .put(route, count(f[3], i));
                     }
                     case "th" -> {
                         if (!v2) {
-                            throw new IllegalArgumentException("line " + (i + 1) + ": unknown record");
+                            throw new UnknownLine();               // unknown in format 1
                         }
                         expect(f, 9, i);
+                        String route = route(f[2]);
                         hourTimes.computeIfAbsent(hourStart(f[1], i), k -> new TreeMap<>())
-                                .put(route(f[2], i), timing(f, i));
+                                .put(route, timing(f, i));
                     }
                     case "td" -> {
                         if (!v2) {
-                            throw new IllegalArgumentException("line " + (i + 1) + ": unknown record");
+                            throw new UnknownLine();               // unknown in format 1
                         }
                         expect(f, 9, i);
+                        String route = route(f[2]);
                         dayTimes.computeIfAbsent(LocalDate.parse(f[1]), k -> new TreeMap<>())
-                                .put(route(f[2], i), timing(f, i));
+                                .put(route, timing(f, i));
                     }
-                    default -> throw new IllegalArgumentException("line " + (i + 1) + ": unknown record");
+                    default -> throw new UnknownLine();
+                }
+            } catch (UnknownLine e) {
+                if (skipped++ == 0) {
+                    firstSkipped = i + 1;
                 }
             } catch (DateTimeException e) {
                 throw new IllegalArgumentException("line " + (i + 1) + ": bad date");
             }
         }
-        return new StatsData(since, hours, days, hourTimes, dayTimes);
+        return new Decoded(new StatsData(since, hours, days, hourTimes, dayTimes), skipped, firstSkipped);
     }
 
     private static Instant hourStart(String value, int line) {
@@ -277,10 +333,15 @@ public final class SnapshotFile {
         }
     }
 
-    /** Only what {@link RouteNormalizer} produces can come back in: the closed set stays closed. */
-    private static String route(String route, int line) {
+    /**
+     * Only what {@link RouteNormalizer} produces can come back in: the closed set
+     * stays closed. Anything else (a route a later version counts, an id, any
+     * other string) makes the line unknown, so it is skipped before its numbers
+     * are read.
+     */
+    private static String route(String route) {
         if (!RouteNormalizer.normalize(route).equals(Optional.of(route))) {
-            throw new IllegalArgumentException("line " + (line + 1) + ": unknown route");
+            throw new UnknownLine();
         }
         return route;
     }
