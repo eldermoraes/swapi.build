@@ -54,6 +54,9 @@ class SeoRoutesTest {
                 .extract().body().asString();
 
         Assertions.assertTrue(body.startsWith("# swapi.build"), body);
+        // Episodes I-VI are the prequel and original trilogies, not the "original saga".
+        Assertions.assertTrue(body.contains("the six films of Episodes I-VI"), body);
+        Assertions.assertFalse(body.contains("original"), body);
         Assertions.assertTrue(body.contains("https://preview.example/mcp"), body);
         Assertions.assertTrue(body.contains("https://preview.example/openapi.json"), body);
         Assertions.assertTrue(body.contains(

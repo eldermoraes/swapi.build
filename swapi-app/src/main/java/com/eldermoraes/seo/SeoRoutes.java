@@ -73,9 +73,8 @@ public class SeoRoutes {
             # swapi.build
 
             > Free, read-only Star Wars API (a SWAPI alternative) with a REST JSON interface and a
-            > remote MCP server (Streamable HTTP). Data covers the six original-saga films
-            > (Episodes I-VI): people, films, planets, species, starships and vehicles. No API key,
-            > no sign-up.
+            > remote MCP server (Streamable HTTP). Data covers the six films of Episodes I-VI:
+            > people, films, planets, species, starships and vehicles. No API key, no sign-up.
 
             - Connect: `claude mcp add --transport http swapi-build {base}/mcp`; any other MCP client:
               Streamable HTTP URL `{base}/mcp`, no auth. Tools: sw_search, sw_get, sw_list, sw_random.

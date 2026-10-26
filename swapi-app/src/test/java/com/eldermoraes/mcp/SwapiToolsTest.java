@@ -106,7 +106,9 @@ public class SwapiToolsTest {
         assertNotNull(instructions, "initialize carries no instructions");
         assertTrue(instructions.contains("sw_search"), instructions);
         assertTrue(instructions.contains("sw_get"), instructions);
-        assertTrue(instructions.contains("Episodes I-VI"), instructions);
+        assertTrue(instructions.contains("the six films of Episodes I-VI"), instructions);
+        // Episodes I-VI are the prequel and original trilogies, not the "original saga".
+        assertFalse(instructions.contains("original"), instructions);
         assertTrue(instructions.contains("not an episode number"), instructions);
         assertFalse(instructions.contains("http"), instructions);
     }
