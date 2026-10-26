@@ -194,6 +194,23 @@ class SeoRoutesTest {
                         "<title>SWAPI alternative: free Star Wars API and MCP server | swapi.build</title>"));
     }
 
+    // The singular noun is the modifier: "film records", not "films records".
+    @Test
+    void resourceDescriptionsReadAsEnglish() {
+        given().accept("text/html").when().get("/resource/films").then()
+                .statusCode(200)
+                .body(allOf(
+                        containsString("<meta name=\"description\" content=\"Browse Star Wars film records as JSON "
+                                + "from the free swapi.build REST API and MCP server.\" />"),
+                        not(containsString("films records"))));
+        given().accept("text/html").when().get("/resource/films/3").then()
+                .statusCode(200)
+                .body(allOf(
+                        containsString("<title>Films #3 | swapi.build</title>"),
+                        containsString("<meta name=\"description\" content=\""
+                                + "Star Wars film record #3 from the swapi.build REST API.\" />")));
+    }
+
     @Test
     void resourceDetailHasItsTitleAndDescription() {
         given().accept("text/html").when().get("/resource/people/1").then()

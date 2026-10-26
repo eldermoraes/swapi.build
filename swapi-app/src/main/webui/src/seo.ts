@@ -44,7 +44,7 @@ export const PUBLIC_SEO_ROUTES: SeoMetadata[] = [
     route(
       `/resource/${resource.key}`,
       `Star Wars ${resource.title} API: JSON data${BRAND_SUFFIX}`,
-      `Browse Star Wars ${resource.title.toLowerCase()} records as JSON from the free swapi.build REST API and MCP server.`,
+      `Browse Star Wars ${recordNoun(resource.key)} records as JSON from the free swapi.build REST API and MCP server.`,
     ),
   ),
   route(
@@ -117,6 +117,14 @@ export function applySeoMetadata(rawPath: string, origin: string): SeoMetadata {
   return meta;
 }
 
+/**
+ * The singular noun used as a modifier ("film records", not "films records").
+ * "people" and "species" are already right. Same rule as SeoMetadataRegistry.java.
+ */
+function recordNoun(key: string): string {
+  return key === 'people' || key === 'species' ? key : key.replace(/s$/, '');
+}
+
 function route(path: string, title: string, description: string): SeoMetadata {
   return { path, canonicalPath: path, title, description, robots: 'index,follow' };
 }
@@ -130,7 +138,7 @@ function resourceDetailMetadata(path: string): SeoMetadata | undefined {
     path,
     canonicalPath: `/resource/${meta.key}`,
     title: `${meta.title} #${parts[2]}${BRAND_SUFFIX}`,
-    description: `Star Wars ${meta.title.toLowerCase()} record #${parts[2]} from the swapi.build REST API.`,
+    description: `Star Wars ${recordNoun(meta.key)} record #${parts[2]} from the swapi.build REST API.`,
     robots: 'noindex,follow',
   };
 }

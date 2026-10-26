@@ -32,6 +32,20 @@ describe('SEO metadata', () => {
     expect(getSeoMetadata('/terms').title).toBe('Terms of Use | swapi.build');
   });
 
+  it('uses the singular noun as the modifier in resource descriptions', () => {
+    expect(getSeoMetadata('/resource/films').description).toBe(
+      'Browse Star Wars film records as JSON from the free swapi.build REST API and MCP server.',
+    );
+    expect(getSeoMetadata('/resource/starships').description).toContain(
+      'Star Wars starship records',
+    );
+    expect(getSeoMetadata('/resource/people').description).toContain('Star Wars people records');
+    expect(getSeoMetadata('/resource/species').description).toContain('Star Wars species records');
+    expect(getSeoMetadata('/resource/films/3').description).toBe(
+      'Star Wars film record #3 from the swapi.build REST API.',
+    );
+  });
+
   it('speaks the title without the brand suffix', () => {
     expect(spokenTitle('Usage stats | swapi.build')).toBe('Usage stats');
   });

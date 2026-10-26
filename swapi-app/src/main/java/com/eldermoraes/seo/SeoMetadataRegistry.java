@@ -19,11 +19,11 @@ public class SeoMetadataRegistry {
             route("/docs/webmcp", "Star Wars WebMCP tools in the browser | swapi.build", "Explore Star Wars together with a browser agent using experimental WebMCP tools.", "weekly", "0.8"),
             route("/about", "About: a SWAPI alternative built with Quarkus | swapi.build", "Learn why swapi.build exists, how it is built with Quarkus and GraalVM, and how to contribute.", "monthly", "0.7"),
             route("/resource/people", "Star Wars People API: JSON data | swapi.build", "Browse Star Wars people records as JSON from the free swapi.build REST API and MCP server.", "weekly", "0.7"),
-            route("/resource/films", "Star Wars Films API: JSON data | swapi.build", "Browse Star Wars films records as JSON from the free swapi.build REST API and MCP server.", "weekly", "0.7"),
-            route("/resource/planets", "Star Wars Planets API: JSON data | swapi.build", "Browse Star Wars planets records as JSON from the free swapi.build REST API and MCP server.", "weekly", "0.7"),
+            route("/resource/films", "Star Wars Films API: JSON data | swapi.build", "Browse Star Wars film records as JSON from the free swapi.build REST API and MCP server.", "weekly", "0.7"),
+            route("/resource/planets", "Star Wars Planets API: JSON data | swapi.build", "Browse Star Wars planet records as JSON from the free swapi.build REST API and MCP server.", "weekly", "0.7"),
             route("/resource/species", "Star Wars Species API: JSON data | swapi.build", "Browse Star Wars species records as JSON from the free swapi.build REST API and MCP server.", "weekly", "0.7"),
-            route("/resource/starships", "Star Wars Starships API: JSON data | swapi.build", "Browse Star Wars starships records as JSON from the free swapi.build REST API and MCP server.", "weekly", "0.7"),
-            route("/resource/vehicles", "Star Wars Vehicles API: JSON data | swapi.build", "Browse Star Wars vehicles records as JSON from the free swapi.build REST API and MCP server.", "weekly", "0.7"),
+            route("/resource/starships", "Star Wars Starships API: JSON data | swapi.build", "Browse Star Wars starship records as JSON from the free swapi.build REST API and MCP server.", "weekly", "0.7"),
+            route("/resource/vehicles", "Star Wars Vehicles API: JSON data | swapi.build", "Browse Star Wars vehicle records as JSON from the free swapi.build REST API and MCP server.", "weekly", "0.7"),
             route("/stats", "Usage stats | swapi.build", "Anonymous request counts for the swapi.build REST API, MCP server and site, per route and per group, for the last 24 hours, 7 days or 30 days.", "daily", "0.4"),
             route("/privacy", "Privacy Policy | swapi.build", "Plain-language privacy policy for swapi.build, the free public Star Wars API and MCP server.", "yearly", "0.3"),
             route("/terms", "Terms of Use | swapi.build", "Terms of use for swapi.build, the free public Star Wars API and MCP server.", "yearly", "0.3"));
@@ -69,8 +69,13 @@ public class SeoMetadataRegistry {
                 default -> null;
             };
             if (resourceTitle != null) {
+                // The singular noun is the modifier: "film record", not "films record".
+                String noun = switch (parts[2]) {
+                    case "people", "species" -> parts[2];
+                    default -> parts[2].substring(0, parts[2].length() - 1);
+                };
                 return new SeoMetadata(path, "/resource/" + parts[2], resourceTitle + " #" + parts[3] + " | swapi.build",
-                        "Star Wars " + resourceTitle.toLowerCase() + " record #" + parts[3] + " from the swapi.build REST API.",
+                        "Star Wars " + noun + " record #" + parts[3] + " from the swapi.build REST API.",
                         SeoMetadata.NOINDEX_FOLLOW, false, null, null);
             }
         }
