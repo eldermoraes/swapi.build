@@ -253,8 +253,8 @@ jobs:
       - name: Verify production (swapi.build)
         run: ./scripts/verify-deploy.sh origin swapi.build | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Verify production (www.swapi.build)
-        run: ./scripts/verify-deploy.sh origin www.swapi.build | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Verify www redirect (www.swapi.build → swapi.build)
+        run: ./scripts/verify-deploy.sh redirect www.swapi.build swapi.build | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Manual step reminder
         run: |

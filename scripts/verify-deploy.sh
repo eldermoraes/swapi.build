@@ -7,24 +7,72 @@
 #                                           MCP (stateless, stateful burst, edges), CORS, the
 #                                           X-Forwarded-Host / Forwarded poisoning probes, and the
 #                                           Caddy headers (HSTS, no Server)
+#        verify-deploy.sh redirect <from-host> <to-host>
+#                                          (a name that only redirects, today www.swapi.build ->
+#                                           swapi.build): without following redirects, GET /,
+#                                           GET with a path and query, GET /sitemap.xml and
+#                                           POST /mcp on https://<from-host> must each answer
+#                                           308 with Location exactly https://<to-host> + the
+#                                           same path and query
 #
-# `origin` is the only mode. The `preview` and `prod` modes probed the former
-# Vercel deployments and were removed with them.
+# The `preview` and `prod` modes probed the former Vercel deployments and were
+# removed with them.
 set -u
 
-USAGE="usage: verify-deploy.sh origin <host>"
+USAGE="usage: verify-deploy.sh origin <host> | verify-deploy.sh redirect <from-host> <to-host>"
 MODE="${1:?$USAGE}"
 HOST="${2:?$USAGE}"
 HOST="${HOST#https://}"; HOST="${HOST%%/*}"
 BASE="https://${HOST}"
 
-case "$MODE" in origin) ;; *) echo "invalid mode: $MODE"; echo "$USAGE"; exit 2 ;; esac
+case "$MODE" in origin|redirect) ;; *) echo "invalid mode: $MODE"; echo "$USAGE"; exit 2 ;; esac
 
 CURL=(curl -s --max-time 90)
 
 FAILURES=0
 pass() { printf 'PASS  %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n      expected: %s\n      got:      %s\n' "$1" "$2" "$3"; FAILURES=$((FAILURES+1)); }
+
+# --- redirect mode ------------------------------------------------------------
+if [ "$MODE" = "redirect" ]; then
+  TO="${3:?$USAGE}"
+  TO="${TO#https://}"; TO="${TO%%/*}"
+  # VERIFY_DEPLOY_TEST_SCHEME exists only for scripts/verify-deploy-redirect.test.sh,
+  # whose fake host speaks plain http on 127.0.0.1. CI and the operator never set
+  # it: the probes reach <from-host> over https. The expected Location is always https.
+  SCHEME="${VERIFY_DEPLOY_TEST_SCHEME:-https}"
+  FROM_BASE="${SCHEME}://${HOST}"
+
+  # redirect_probe <label> <path+query> [curl args...]: no -L, so the 308 itself is read.
+  redirect_probe() {
+    local label="$1" target="$2"; shift 2
+    local want="https://${TO}${target}"
+    local got
+    got=$("${CURL[@]}" -o /dev/null -w '%{http_code} %header{location}' "$@" "${FROM_BASE}${target}")
+    if [ "$got" = "308 $want" ]; then
+      pass "$label $target -> 308 $want"
+    else
+      fail "$label $target" "308 $want" "${got:-no answer}"
+    fi
+  }
+
+  redirect_probe GET "/"
+  redirect_probe GET "/api/people/1?format=json"
+  redirect_probe GET "/sitemap.xml"
+  # 308 (not 301) keeps the method and body: an MCP client posting to www must
+  # be sent on to the apex still as a POST.
+  redirect_probe POST "/mcp" -X POST \
+    -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+  echo
+  if [ "$FAILURES" -eq 0 ]; then
+    echo "verify-deploy [$MODE] $HOST -> $TO: all probes green"
+    exit 0
+  fi
+  echo "verify-deploy [$MODE] $HOST -> $TO: $FAILURES probe(s) failed"
+  exit 1
+fi
 
 # --- REST -------------------------------------------------------------------
 body=$("${CURL[@]}" "$BASE/api/people/1")
