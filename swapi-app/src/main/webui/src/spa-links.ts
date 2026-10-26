@@ -11,6 +11,7 @@ const SERVER_PATHS = [
   /^\/openapi\.json(?:[?#]|$)/,
   /^\/robots\.txt(?:[?#]|$)/,
   /^\/sitemap\.xml(?:[?#]|$)/,
+  /^\/llms\.txt(?:[?#]|$)/,
 ];
 
 export function isServerPath(href: string): boolean {

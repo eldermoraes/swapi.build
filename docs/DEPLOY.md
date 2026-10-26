@@ -85,13 +85,21 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   (XML), `og-image.png` (PNG) bypass the SPA fallback; `robots.txt` points at the
   sitemap on the host; the sitemap lists `/docs` and `/docs/webmcp`; the home
   page carries `canonical`, `og:url` and the Twitter Card with absolute URLs on
-  the host; `/docs/webmcp` has its own title.
+  the host; `/docs/webmcp` has its own title. `llms.txt` (2.9.0+) answers
+  `200 text/plain` even to `Accept: text/html`, with `# swapi.build` and
+  `https://<host>/mcp` in the body. `favicon.svg` (`image/svg+xml`) and
+  `icon-512.png` (`image/png`) are served as files: they are the two icons
+  `server.json` gives the MCP Registry. The IndexNow key file (the one
+  `public/*.txt` of the checked-out tag) answers `text/plain` with the key as
+  its body.
 - **Cold start**: the time of one request, informational only.
 - **MCP stateless**: a `tools/call` of `sw_get` with the 2026-07-28 headers and
   `_meta` returns `isError: false` and URLs on the host. `server/discover` and
   `tools/list` return flat `result.ttlMs: 0` and `result.cacheScope: "public"`,
   with no nested `result.cacheControl` (required by the 2026-07-28 protocol;
-  CR1 omitted them).
+  CR1 omitted them). From 2.9.0, parsed as JSON: the `initialize` result
+  carries `instructions` (with `sw_search` and the id trap) and the
+  `sw_search` description in `tools/list` points to `sw_get`.
 - **MCP stateful burst**: twelve concurrent `tools/list` calls on one session
   must all return 200. Before `auto-init` this returned 33–58% `404` on Vercel's
   multiple instances. The script skips the burst and fails if `initialize`
@@ -104,7 +112,7 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   responses (`/api/*` and the SPA HTML) must carry `Vary: Origin`, and a
   request without `Origin` gets no `Access-Control-Allow-Origin`.
 - **Poisoning**: a spoofed `X-Forwarded-Host: evil.example` never reaches the
-  REST body, the sitemap or the SPA HTML (Caddy overwrites the header), and an
+  REST body, the sitemap, `llms.txt` or the SPA HTML (Caddy overwrites the header), and an
   RFC 7239 `Forwarded` header is ignored by the app.
 - **Caddy headers**: `Strict-Transport-Security: max-age=63072000` and no
   `Server` header.
@@ -120,7 +128,7 @@ its body.
 `scripts/verify-deploy.sh redirect www.swapi.build swapi.build`, run by the
 `deploy` job right after the `origin` probes and by hand after any change to
 the `Caddyfile`, sends `GET /`, `GET /api/people/1?format=json`,
-`GET /sitemap.xml` and `POST /mcp` to `https://www.swapi.build` without
+`GET /sitemap.xml`, `GET /llms.txt` and `POST /mcp` to `https://www.swapi.build` without
 following redirects. Each must answer `308` with `Location` exactly
 `https://swapi.build` + the same path and query. Every line must read `PASS`.
 `scripts/verify-deploy-redirect.test.sh` (CI) runs the same mode against a
@@ -140,7 +148,7 @@ applied there and verified with the probe on 2026-10-26 (18:25 BRT).
 
 ## WebMCP verification (2.5.0+)
 
-Confirm `/docs/webmcp` returns HTML with title `WebMCP in the browser - SWAPI`
+Confirm `/docs/webmcp` returns HTML with title `Star Wars WebMCP tools in the browser | swapi.build`
 and appears in the sitemap. The automated probes check both. Browser tool
 execution must also be verified with WebMCP enabled: discover `sw_list`,
 `sw_get`, `sw_search`, `sw_random`; list PEOPLE, search Luke, open FILMS ID 1,
@@ -842,6 +850,12 @@ The usage counters survive a rollback: from 2.8.2, a rollback loses only the
 counts of routes the target version does not know (their snapshot lines are
 skipped and the next snapshot drops them). Rolling back to 2.8.1 or older still
 discards the whole snapshot if it holds such a line.
+
+A host rollback does not undo the MCP Registry. The published `server.json`
+stays `isLatest` until the next publish. From 2.9.0 it points the registry at
+`https://swapi.build/icon-512.png`; a rollback to 2.8.2 or older removes that
+file (the path answers the SPA shell again), so the PNG icon stays broken in
+the registry until the next release is published there.
 
 There is no DNS rollback to another provider: nothing of this project runs on
 Vercel any more.

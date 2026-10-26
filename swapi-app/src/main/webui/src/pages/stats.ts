@@ -85,7 +85,7 @@ export const GROUPS: { id: GroupId; label: string; hint: string }[] = [
   { id: 'rest', label: 'REST API', hint: '/api and /openapi.json' },
   { id: 'mcp', label: 'MCP', hint: '/mcp' },
   { id: 'pages', label: 'Pages and docs', hint: 'this site' },
-  { id: 'seo', label: 'SEO', hint: 'robots.txt and sitemap.xml' },
+  { id: 'seo', label: 'SEO', hint: 'robots.txt, sitemap.xml and llms.txt' },
   { id: 'other', label: 'Other', hint: 'unknown paths' },
 ];
 

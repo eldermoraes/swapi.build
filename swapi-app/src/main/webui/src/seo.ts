@@ -8,56 +8,66 @@ export interface SeoMetadata {
   robots: 'index,follow' | 'noindex,follow';
 }
 
+// Mirrored by hand in SeoMetadataRegistry.java until the single metadata file of
+// slice D; seo-parity.test.ts compares the two. Intent words first, the brand
+// "swapi.build" last; never "drop-in".
+const BRAND_SUFFIX = ' | swapi.build';
+const HOME_TITLE = `SWAPI alternative: free Star Wars API and MCP server${BRAND_SUFFIX}`;
 const HOME_DESCRIPTION =
-  'Free Star Wars REST API and MCP server with data about people, films, planets, species, starships and vehicles.';
+  'Free SWAPI alternative: Star Wars REST JSON API and remote MCP server with people, films, planets, species, starships and vehicles (Episodes I–VI). No API key.';
 const OG_IMAGE_PATH = '/og-image.png';
-const OG_IMAGE_ALT = 'SWAPI — Star Wars API and MCP server in a Holonet terminal style';
+const OG_IMAGE_ALT = 'swapi.build — Star Wars API and MCP server in a Holonet terminal style';
 
 export const PUBLIC_SEO_ROUTES: SeoMetadata[] = [
-  route('/', 'SWAPI - The Star Wars API', HOME_DESCRIPTION),
+  route('/', HOME_TITLE, HOME_DESCRIPTION),
   route(
     '/docs',
-    'Documentation - SWAPI',
-    'OpenAPI documentation for the SWAPI REST API, including live examples and response schemas.',
+    `SWAPI docs: Star Wars REST API endpoints and OpenAPI${BRAND_SUFFIX}`,
+    'Star Wars API reference for swapi.build: REST endpoints, JSON response schemas and live examples, generated from the OpenAPI contract.',
   ),
   route(
     '/docs/mcp',
-    'MCP Server - SWAPI',
-    'Connect AI agents to the Star Wars API through the Streamable HTTP MCP server.',
+    `Star Wars MCP server: remote, no API key${BRAND_SUFFIX}`,
+    'Add the Star Wars MCP server to Claude, OpenAI Codex, GitHub Copilot or IBM Bob in one step. Remote Streamable HTTP at /mcp, read-only, no API key.',
   ),
   route(
     '/docs/webmcp',
-    'WebMCP in the browser - SWAPI',
+    `Star Wars WebMCP tools in the browser${BRAND_SUFFIX}`,
     'Explore Star Wars together with a browser agent using experimental WebMCP tools.',
   ),
   route(
     '/about',
-    'About - SWAPI',
-    'Learn why SWAPI exists, how it is built with Quarkus and GraalVM, and how to contribute.',
+    `About: a SWAPI alternative built with Quarkus${BRAND_SUFFIX}`,
+    'Learn why swapi.build exists, how it is built with Quarkus and GraalVM, and how to contribute.',
   ),
   ...RESOURCES.map((resource) =>
     route(
       `/resource/${resource.key}`,
-      `${resource.title} - SWAPI`,
-      `Browse Star Wars ${resource.title.toLowerCase()} records through the SWAPI REST API.`,
+      `Star Wars ${resource.title} API: JSON data${BRAND_SUFFIX}`,
+      `Browse Star Wars ${resource.title.toLowerCase()} records as JSON from the free swapi.build REST API and MCP server.`,
     ),
   ),
   route(
     '/stats',
-    'Usage stats - SWAPI',
-    'Anonymous request counts for the SWAPI REST API, MCP server and site, per route and per group, for the last 24 hours, 7 days or 30 days.',
+    `Usage stats${BRAND_SUFFIX}`,
+    'Anonymous request counts for the swapi.build REST API, MCP server and site, per route and per group, for the last 24 hours, 7 days or 30 days.',
   ),
   route(
     '/privacy',
-    'Privacy Policy - SWAPI',
-    'Plain-language privacy policy for the public Star Wars API and MCP server.',
+    `Privacy Policy${BRAND_SUFFIX}`,
+    'Plain-language privacy policy for swapi.build, the free public Star Wars API and MCP server.',
   ),
   route(
     '/terms',
-    'Terms of Use - SWAPI',
-    'Terms of use for the free public Star Wars API and MCP server.',
+    `Terms of Use${BRAND_SUFFIX}`,
+    'Terms of use for swapi.build, the free public Star Wars API and MCP server.',
   ),
 ];
+
+/** The title as a screen reader announces it on navigation: without the brand suffix. */
+export function spokenTitle(title: string): string {
+  return title.endsWith(BRAND_SUFFIX) ? title.slice(0, -BRAND_SUFFIX.length) : title;
+}
 
 export function getSeoMetadata(rawPath: string): SeoMetadata {
   const path = normalizePath(rawPath);
@@ -70,7 +80,7 @@ export function getSeoMetadata(rawPath: string): SeoMetadata {
   return {
     path,
     canonicalPath: '/',
-    title: 'SWAPI - The Star Wars API',
+    title: HOME_TITLE,
     description: HOME_DESCRIPTION,
     robots: 'noindex,follow',
   };
@@ -87,7 +97,7 @@ export function applySeoMetadata(rawPath: string, origin: string): SeoMetadata {
   setCanonical(canonical);
 
   setMetaProperty('og:type', 'website');
-  setMetaProperty('og:site_name', 'SWAPI');
+  setMetaProperty('og:site_name', 'swapi.build');
   setMetaProperty('og:locale', 'en_US');
   setMetaProperty('og:title', meta.title);
   setMetaProperty('og:description', meta.description);
@@ -119,8 +129,8 @@ function resourceDetailMetadata(path: string): SeoMetadata | undefined {
   return {
     path,
     canonicalPath: `/resource/${meta.key}`,
-    title: `${meta.title} #${parts[2]} - SWAPI`,
-    description: `Star Wars ${meta.title.toLowerCase()} record #${parts[2]} from the SWAPI REST API.`,
+    title: `${meta.title} #${parts[2]}${BRAND_SUFFIX}`,
+    description: `Star Wars ${meta.title.toLowerCase()} record #${parts[2]} from the swapi.build REST API.`,
     robots: 'noindex,follow',
   };
 }

@@ -32,6 +32,7 @@ class RouteGroupTest {
             "/resource/planets/{id}, pages",
             "/robots.txt, seo",
             "/sitemap.xml, seo",
+            "/llms.txt, seo",
             "other, other",
     })
     void everyTemplateHasItsGroup(String route, String group) {

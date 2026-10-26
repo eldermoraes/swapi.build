@@ -119,7 +119,10 @@ The server is listed as `build.swapi/star-wars`, published from the repo-root
 
 1. Bump `version` in `server.json` together with the pom
    (`ServerJsonVersionTest` fails the suite if they drift).
-2. After the production deploy is verified, publish:
+2. Only after the `deploy` job read `PASS` on **every** probe line, including
+   `favicon.svg` and `icon-512.png` (the two `icons` of `server.json`, 2.9.0+),
+   publish. Publishing earlier points the registry at a path that may still
+   answer the SPA shell (`text/html`):
 
    ```bash
    # login proves control of swapi.build via the apex DNS TXT record

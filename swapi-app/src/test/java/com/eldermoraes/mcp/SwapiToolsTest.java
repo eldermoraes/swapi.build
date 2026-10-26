@@ -98,6 +98,65 @@ public class SwapiToolsTest {
                 .thenAssertResults();
     }
 
+    // The instructions cover only what the tool descriptions cannot: scope, the
+    // order between tools and the id trap. No URL: the domain is per request.
+    @Test
+    public void initializeAdvertisesInstructions() {
+        String instructions = client().initResult().instructions();
+        assertNotNull(instructions, "initialize carries no instructions");
+        assertTrue(instructions.contains("sw_search"), instructions);
+        assertTrue(instructions.contains("sw_get"), instructions);
+        assertTrue(instructions.contains("Episodes I-VI"), instructions);
+        assertTrue(instructions.contains("not an episode number"), instructions);
+        assertFalse(instructions.contains("http"), instructions);
+    }
+
+    @Test
+    public void toolDescriptionsNameASiblingTool() {
+        java.util.List<String> names = java.util.List.of("sw_list", "sw_get", "sw_random", "sw_search");
+        client().when()
+                .toolsList(page -> {
+                    for (String name : names) {
+                        String description = page.findByName(name).description();
+                        assertTrue(names.stream().filter(other -> !other.equals(name)).anyMatch(description::contains),
+                                name + " must name a sibling tool: " + description);
+                    }
+                    assertTrue(page.findByName("sw_search").description().contains("[]"));
+                    assertTrue(page.findByName("sw_get").description().contains("tool error"));
+                    assertTrue(page.findByName("sw_list").description().contains("sw_search"));
+                })
+                .thenAssertResults();
+    }
+
+    // Guard: the sw_search description promises [] for no match.
+    @Test
+    public void searchWithoutMatchReturnsAnEmptyArray() {
+        client().when()
+                .toolsCall("sw_search")
+                .withArguments(java.util.Map.of("resource", "PEOPLE", "query", "zzzz"))
+                .withAssert(r -> {
+                    assertFalse(r.isError());
+                    assertEquals("[]", r.content().get(0).asText().text());
+                })
+                .send()
+                .thenAssertResults();
+    }
+
+    // Guard: the resource argument description promises a tool error for any other value.
+    @Test
+    public void invalidResourceIsRejected() {
+        client().when()
+                .toolsCall("sw_list")
+                .withArguments(java.util.Map.of("resource", "DROIDS"))
+                .withAssert(r -> {
+                    assertTrue(r.isError());
+                    assertTrue(r.content().get(0).asText().text().contains("Invalid argument [resource]"),
+                            r.content().get(0).asText().text());
+                })
+                .send()
+                .thenAssertResults();
+    }
+
     @Test
     public void unknownFilmIdIsToolError() {
         client().when()

@@ -151,28 +151,42 @@ class SnapshotFileTest {
 
     @Test
     void aSnapshotWithAnUnknownRouteKeepsEveryKnownCounter() throws IOException {
-        // Regression: a route a later version counts (here /llms.txt) used to make
+        // Regression: a route a later version counts (here /not-a-route-yet.txt) used to make
         // the whole file corrupt, so a rollback lost every counter.
         Files.writeString(dir.resolve(SnapshotFile.FILE_NAME), """
                 swapi-route-stats 2
                 since 2026-10-19T12:30:00Z
                 h 2026-10-19T12:00:00Z /api/people/{id} 7
-                h 2026-10-19T12:00:00Z /llms.txt 12
+                h 2026-10-19T12:00:00Z /not-a-route-yet.txt 12
                 h 2026-10-19T12:00:00Z /mcp 5
                 d 2026-10-19 /api/people/{id} 7
-                d 2026-10-19 /llms.txt 12
+                d 2026-10-19 /not-a-route-yet.txt 12
                 d 2026-10-19 /mcp 5
                 d 2026-10-19 other 1
-                th 2026-10-19T12:00:00Z /llms.txt 1 900 810000.0 900 900 17:1
+                th 2026-10-19T12:00:00Z /not-a-route-yet.txt 1 900 810000.0 900 900 17:1
                 th 2026-10-19T12:00:00Z /mcp 3 3900 5490000.0 900 1800 17:1,19:1,21:1
-                td 2026-10-19 /llms.txt 1 900 810000.0 900 900 17:1
+                td 2026-10-19 /not-a-route-yet.txt 1 900 810000.0 900 900 17:1
                 td 2026-10-19 /mcp 3 3900 5490000.0 900 1800 17:1,19:1,21:1
                 """, StandardCharsets.UTF_8);
 
         assertEquals(Optional.of(sample()), file().read());
         assertEquals(1, warnings.size(), warnings::toString);
         assertTrue(warnings.getFirst().contains("skipped 4"), warnings.getFirst());
-        assertFalse(warnings.getFirst().contains("/llms.txt"), warnings.getFirst());
+        assertFalse(warnings.getFirst().contains("/not-a-route-yet.txt"), warnings.getFirst());
+    }
+
+    @Test
+    void aSnapshotLineForLlmsTxtIsRestored() throws IOException {
+        // /llms.txt is a counted route since 2.9.0: its line is restored, not skipped.
+        Files.writeString(dir.resolve(SnapshotFile.FILE_NAME), """
+                swapi-route-stats 2
+                since 2026-10-19T12:30:00Z
+                d 2026-10-19 /llms.txt 3
+                """, StandardCharsets.UTF_8);
+
+        StatsData data = file().read().orElseThrow();
+        assertEquals(Map.of(LocalDate.parse("2026-10-19"), Map.of("/llms.txt", 3L)), data.days());
+        assertTrue(warnings.isEmpty(), warnings::toString);
     }
 
     @Test
@@ -244,7 +258,7 @@ class SnapshotFileTest {
         Files.writeString(dir.resolve(SnapshotFile.FILE_NAME), """
                 swapi-route-stats 2
                 since 2026-10-19T12:30:00Z
-                d 2026-10-19 /llms.txt 3
+                d 2026-10-19 /not-a-route-yet.txt 3
                 x something new
                 """, StandardCharsets.UTF_8);
 

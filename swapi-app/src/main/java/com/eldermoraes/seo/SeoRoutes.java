@@ -21,7 +21,7 @@ public class SeoRoutes {
 
     private static final String CACHE_CONTROL = "public, max-age=300, s-maxage=86400";
     private static final String OG_IMAGE = "/og-image.png";
-    private static final String OG_IMAGE_ALT = "SWAPI — Star Wars API and MCP server in a Holonet terminal style";
+    private static final String OG_IMAGE_ALT = "swapi.build — Star Wars API and MCP server in a Holonet terminal style";
     private static final Pattern EXISTING_SEO_TAG = Pattern.compile(
             "(?is)\\s*<title>.*?</title>|" +
             "\\s*<meta\\s+name=\\\"(?:description|robots|twitter:[^\\\"]+)\\\"[^>]*>|" +
@@ -44,6 +44,7 @@ public class SeoRoutes {
         switch (path) {
             case "/robots.txt" -> robots(rc);
             case "/sitemap.xml" -> sitemap(rc);
+            case "/llms.txt" -> llms(rc);
             case OG_IMAGE -> ogImage(rc);
             default -> {
                 if (isDocumentRequest(rc, path)) {
@@ -60,6 +61,57 @@ public class SeoRoutes {
                 + "Allow: /\n"
                 + "Sitemap: " + urls.absoluteUrl(rc, "/sitemap.xml") + "\n";
         text(rc, "text/plain; charset=utf-8", body);
+    }
+
+    /**
+     * llmstxt.org file for agents. It carries the essentials itself (how to
+     * connect, the list format, the id trap) because /docs and /docs/mcp render
+     * only with JavaScript. Only {base} is replaced, with the root of this
+     * request; {resource}, {id} and {text} are literal URL parameters.
+     */
+    private static final String LLMS_TXT = """
+            # swapi.build
+
+            > Free, read-only Star Wars API (a SWAPI alternative) with a REST JSON interface and a
+            > remote MCP server (Streamable HTTP). Data covers the six original-saga films
+            > (Episodes I-VI): people, films, planets, species, starships and vehicles. No API key,
+            > no sign-up.
+
+            - Connect: `claude mcp add --transport http swapi-build {base}/mcp`; any other MCP client:
+              Streamable HTTP URL `{base}/mcp`, no auth. Tools: sw_search, sw_get, sw_list, sw_random.
+            - REST: `{base}/api/{resource}`, `{base}/api/{resource}/{id}`, `{base}/api/{resource}/random`
+              and `{base}/api/{resource}?search={text}`; resources: people, films, planets, species,
+              starships, vehicles.
+            - Lists and searches return a plain JSON array of entities (no count/next/results
+              pagination, unlike swapi.dev).
+            - Ids are record ids, not episode numbers: `{base}/api/films/1` is A New Hope (Episode IV).
+            - Successful GETs return 200 with JSON; an unknown id returns 404.
+            - Relations (homeworld, films, characters...) are absolute URLs on the same API.
+
+            ## Docs
+
+            - [OpenAPI contract]({base}/openapi.json): machine-readable, always matches the deployed version
+            - [REST documentation]({base}/docs): endpoints with live examples (needs JavaScript)
+            - [MCP server guide]({base}/docs/mcp): setup for Claude Code, Claude Desktop, OpenAI Codex, GitHub Copilot and IBM Bob (needs JavaScript)
+            - [WebMCP guide]({base}/docs/webmcp): experimental browser tools
+
+            ## Examples
+
+            - [Luke Skywalker]({base}/api/people/1)
+            - [A New Hope]({base}/api/films/1)
+            - [Search people by name]({base}/api/people?search=sky)
+
+            ## Optional
+
+            - [About]({base}/about)
+            - [Usage stats]({base}/stats), also as JSON at {base}/api/stats
+            - [Source code](https://github.com/eldermoraes/swapi.build) (Apache 2.0)
+            """;
+
+    private void llms(RoutingContext rc) {
+        String root = urls.absoluteUrl(rc, "/");
+        String base = root.endsWith("/") ? root.substring(0, root.length() - 1) : root;
+        text(rc, "text/plain; charset=utf-8", LLMS_TXT.replace("{base}", base));
     }
 
     private void sitemap(RoutingContext rc) {
@@ -132,7 +184,7 @@ public class SeoRoutes {
                 + "    <meta name=\"robots\" content=\"" + html(route.robots()) + "\" />\n"
                 + "    <link rel=\"canonical\" href=\"" + html(canonical) + "\" />\n"
                 + "    <meta property=\"og:type\" content=\"website\" />\n"
-                + "    <meta property=\"og:site_name\" content=\"SWAPI\" />\n"
+                + "    <meta property=\"og:site_name\" content=\"swapi.build\" />\n"
                 + "    <meta property=\"og:locale\" content=\"en_US\" />\n"
                 + "    <meta property=\"og:title\" content=\"" + title + "\" />\n"
                 + "    <meta property=\"og:description\" content=\"" + description + "\" />\n"
@@ -159,8 +211,8 @@ public class SeoRoutes {
         return "{"
                 + "\"@context\":\"https://schema.org\","
                 + "\"@graph\":["
-                + "{\"@type\":\"WebSite\",\"name\":\"SWAPI\",\"url\":\"" + json(home) + "\",\"description\":\"" + json(route.description()) + "\",\"image\":\"" + json(image) + "\"},"
-                + "{\"@type\":\"SoftwareApplication\",\"name\":\"SWAPI\",\"applicationCategory\":\"DeveloperApplication\",\"operatingSystem\":\"Any\",\"url\":\"" + json(canonical) + "\",\"description\":\"" + json(route.description()) + "\",\"image\":\"" + json(image) + "\",\"license\":\"" + license + "\",\"sameAs\":[\"" + repo + "\",\"" + json(docs) + "\",\"" + json(mcp) + "\"]}"
+                + "{\"@type\":\"WebSite\",\"name\":\"swapi.build\",\"url\":\"" + json(home) + "\",\"description\":\"" + json(route.description()) + "\",\"image\":\"" + json(image) + "\"},"
+                + "{\"@type\":\"SoftwareApplication\",\"name\":\"swapi.build\",\"applicationCategory\":\"DeveloperApplication\",\"operatingSystem\":\"Any\",\"url\":\"" + json(canonical) + "\",\"description\":\"" + json(route.description()) + "\",\"image\":\"" + json(image) + "\",\"license\":\"" + license + "\",\"sameAs\":[\"" + repo + "\",\"" + json(docs) + "\",\"" + json(mcp) + "\"]}"
                 + "]}";
     }
 

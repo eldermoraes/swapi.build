@@ -16,6 +16,39 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-10-26
+
+### Added
+
+- `/llms.txt` (llmstxt.org format), served by the app as `text/plain` with the
+  SEO cache policy and URLs built from the request host. It carries the
+  essentials itself, because `/docs` and `/docs/mcp` render only with
+  JavaScript: the MCP connection line, the REST URL patterns, that lists and
+  searches return a plain JSON array, and that ids are record ids, not episode
+  numbers. It is counted as a route in the `seo` group of `/stats` and is no
+  longer answered with the SPA shell.
+- MCP `instructions` in the `initialize` and `server/discover` results: the
+  scope (Episodes I-VI only), the `sw_search` → `sw_get` workflow and the id
+  trap. No URL in them, so the domain is still discovered per request.
+- `icon-512.png`, a 512×512 PNG of the favicon, and `icons` in `server.json`
+  (the PNG first, the SVG favicon second) for the MCP Registry listing.
+- An IndexNow key file in `public/`. The key is public by design: a search
+  engine fetches it to check that whoever announces URLs controls the host.
+
+### Changed
+
+- MCP tool descriptions say when to use each tool against its siblings, what
+  an empty result and an error look like, and what each argument accepts
+  (`sw_search` is the starting point; an unknown id or resource is a tool
+  error).
+- Page titles and descriptions lead with what the page is and end with the
+  brand (`... | swapi.build`); the home page and `/docs` carry the "SWAPI
+  alternative" / "SWAPI" search term. The server and the client now agree on
+  every route, including privacy and terms, which had drifted.
+- The brand in `og:site_name`, the JSON-LD `name` and the Open Graph image alt
+  is `swapi.build`.
+- `server.json` has a new `title` and `description` (with "No API key").
+
 ## [2.8.2] - 2026-10-26
 
 ### Changed
@@ -614,7 +647,7 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.6.0...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.9.0...HEAD
 [2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
@@ -651,3 +684,5 @@ snapshot version is not a release. -->
 [2.8.1]: https://github.com/eldermoraes/swapi.build/compare/v2.8.0...v2.8.1
 
 [2.8.2]: https://github.com/eldermoraes/swapi.build/compare/v2.8.1...v2.8.2
+
+[2.9.0]: https://github.com/eldermoraes/swapi.build/compare/v2.8.2...v2.9.0

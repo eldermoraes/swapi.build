@@ -20,7 +20,7 @@ class SeoRoutesTest {
     void webMcpGuideHasItsOwnMetadata() {
         given().accept("text/html").when().get("/docs/webmcp").then()
                 .statusCode(200).contentType(containsString("text/html"))
-                .body(containsString("<title>WebMCP in the browser - SWAPI</title>"));
+                .body(containsString("<title>Star Wars WebMCP tools in the browser | swapi.build</title>"));
     }
 
     @Test
@@ -39,6 +39,53 @@ class SeoRoutesTest {
                         containsString("Allow: /"),
                         containsString("Sitemap: https://preview.example/sitemap.xml"),
                         not(containsString("<!doctype html>"))));
+    }
+
+    @Test
+    void llmsTxtUsesTheForwardedBaseUrl() {
+        String body = given()
+                .header("X-Forwarded-Proto", "https")
+                .header("X-Forwarded-Host", "preview.example")
+        .when()
+                .get("/llms.txt")
+        .then()
+                .statusCode(200)
+                .contentType(containsString("text/plain"))
+                .extract().body().asString();
+
+        Assertions.assertTrue(body.startsWith("# swapi.build"), body);
+        Assertions.assertTrue(body.contains("https://preview.example/mcp"), body);
+        Assertions.assertTrue(body.contains("https://preview.example/openapi.json"), body);
+        Assertions.assertTrue(body.contains(
+                "claude mcp add --transport http swapi-build https://preview.example/mcp"), body);
+        Assertions.assertFalse(body.contains("https://swapi.build"), body);
+        Assertions.assertFalse(body.contains("<resource>"), body);
+    }
+
+    // Regression of diagnosis 3 in the SEO/AEO study: /llms.txt fell into the SPA
+    // shell (200 text/html, index,follow).
+    @Test
+    void llmsTxtIsTextEvenWithAnHtmlAccept() {
+        given()
+                .accept("text/html")
+        .when()
+                .get("/llms.txt")
+        .then()
+                .statusCode(200)
+                .contentType(containsString("text/plain"))
+                .body(allOf(
+                        not(containsString("<html")),
+                        not(containsString("index,follow"))));
+    }
+
+    @Test
+    void llmsTxtHasTheSeoCachePolicy() {
+        given()
+        .when()
+                .get("/llms.txt")
+        .then()
+                .statusCode(200)
+                .header("Cache-Control", "public, max-age=300, s-maxage=86400");
     }
 
     @Test
@@ -80,7 +127,7 @@ class SeoRoutesTest {
                 .statusCode(200)
                 .contentType(containsString("text/html"))
                 .body(allOf(
-                        containsString("<title>SWAPI - The Star Wars API</title>"),
+                        containsString("<title>SWAPI alternative: free Star Wars API and MCP server | swapi.build</title>"),
                         containsString("<meta name=\"description\""),
                         containsString("<link rel=\"canonical\" href=\"https://preview.example/\""),
                         containsString("<meta property=\"og:url\" content=\"https://preview.example/\""),
@@ -103,7 +150,7 @@ class SeoRoutesTest {
                 .statusCode(200)
                 .contentType(containsString("text/html"))
                 .body(allOf(
-                        containsString("<title>Documentation - SWAPI</title>"),
+                        containsString("<title>SWAPI docs: Star Wars REST API endpoints and OpenAPI | swapi.build</title>"),
                         containsString("<link rel=\"canonical\" href=\"https://preview.example/docs\""),
                         containsString("<meta property=\"og:url\" content=\"https://preview.example/docs\""),
                         containsString("OpenAPI"),
@@ -127,6 +174,36 @@ class SeoRoutesTest {
                         not(containsString("https://preview.example/not-a-real-page"))));
     }
 
+    @Test
+    void ogSiteNameIsTheBrand() {
+        given().accept("text/html").when().get("/").then()
+                .statusCode(200)
+                .body(allOf(
+                        containsString("<meta property=\"og:site_name\" content=\"swapi.build\" />"),
+                        containsString("\"@type\":\"WebSite\",\"name\":\"swapi.build\""),
+                        containsString("\"@type\":\"SoftwareApplication\",\"name\":\"swapi.build\"")));
+    }
+
+    // The fallback and the detail titles are built by concatenation, so the
+    // parity test on the frontend (seo-parity.test.ts) pins the same literals.
+    @Test
+    void unknownDocumentRouteHasTheHomeTitle() {
+        given().accept("text/html").when().get("/nao-existe").then()
+                .statusCode(200)
+                .body(containsString(
+                        "<title>SWAPI alternative: free Star Wars API and MCP server | swapi.build</title>"));
+    }
+
+    @Test
+    void resourceDetailHasItsTitleAndDescription() {
+        given().accept("text/html").when().get("/resource/people/1").then()
+                .statusCode(200)
+                .body(allOf(
+                        containsString("<title>People #1 | swapi.build</title>"),
+                        containsString("<meta name=\"description\" content=\""
+                                + "Star Wars people record #1 from the swapi.build REST API.\" />")));
+    }
+
     // The SPA HTML is stored at the edge by path alone (quarkus.http.filter.spa),
     // and Accept is not part of the cache key. If a known route still answered the
     // raw shell to a non-HTML Accept, the first such request after a deploy would
@@ -144,7 +221,7 @@ class SeoRoutesTest {
                 .statusCode(200)
                 .contentType(containsString("text/html"))
                 .body(allOf(
-                        containsString("<title>Documentation - SWAPI</title>"),
+                        containsString("<title>SWAPI docs: Star Wars REST API endpoints and OpenAPI | swapi.build</title>"),
                         containsString("<link rel=\"canonical\" href=\"https://preview.example/docs\"")));
     }
 
@@ -160,7 +237,7 @@ class SeoRoutesTest {
                 .statusCode(200)
                 .contentType(containsString("text/html"))
                 .body(allOf(
-                        containsString("<title>People #1 - SWAPI</title>"),
+                        containsString("<title>People #1 | swapi.build</title>"),
                         containsString("<link rel=\"canonical\" href=\"https://preview.example/resource/people\"")));
     }
 
@@ -202,7 +279,7 @@ class SeoRoutesTest {
         Assertions.assertFalse(body.contains("<script>alert(1)</script>"),
                 "the id must never reach the cached HTML as a live tag");
         Assertions.assertTrue(
-                body.contains("<title>People #%3Cscript%3Ealert(1)%3C%2Fscript%3E - SWAPI</title>"),
+                body.contains("<title>People #%3Cscript%3Ealert(1)%3C%2Fscript%3E | swapi.build</title>"),
                 "the id must be reflected percent-encoded (inert), but the title was: "
                         + body.substring(body.indexOf("<title>"), body.indexOf("</title>") + 8));
     }
