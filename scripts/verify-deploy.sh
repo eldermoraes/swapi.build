@@ -4,6 +4,7 @@
 #
 # usage: verify-deploy.sh origin <host>    (the self-hosted origin behind Caddy, docs/DEPLOY.md
 #                                           "Self-hosted origin on Oracle Cloud"): REST, OpenAPI, SEO,
+#                                           the site pages and assets, the not-found variants,
 #                                           MCP (stateless, stateful burst, edges), CORS, the
 #                                           X-Forwarded-Host / Forwarded poisoning probes, and the
 #                                           Caddy headers (HSTS, no Server)
@@ -11,7 +12,8 @@
 #                                          (a name that only redirects, today www.swapi.build ->
 #                                           swapi.build): without following redirects, GET /,
 #                                           GET with a path and query, GET /sitemap.xml,
-#                                           GET /llms.txt and POST /mcp on https://<from-host>
+#                                           GET /llms.txt, GET /index.html, GET /not-a-real-page
+#                                           and POST /mcp on https://<from-host>
 #                                           must each answer 308 with Location exactly
 #                                           https://<to-host> + the same path and query
 #
@@ -60,6 +62,10 @@ if [ "$MODE" = "redirect" ]; then
   redirect_probe GET "/api/people/1?format=json"
   redirect_probe GET "/sitemap.xml"
   redirect_probe GET "/llms.txt"
+  # Caddy must not swallow these on the www name either; the app's own 301 and
+  # 404 are proved in origin mode.
+  redirect_probe GET "/index.html"
+  redirect_probe GET "/not-a-real-page"
   # 308 (not 301) keeps the method and body: an MCP client posting to www must
   # be sent on to the apex still as a POST.
   redirect_probe POST "/mcp" -X POST \
@@ -222,6 +228,100 @@ echo "$home" | grep -q 'rel="canonical"' && echo "$home" | grep -q 'property="og
 echo "$home" | grep -q "content=\"$BASE/\"" && pass "home SEO uses absolute URLs on the host" \
   || fail "home SEO URLs" "content=\"$BASE/\"" "missing"
 
+# --- Site still works (2.9.1+) -------------------------------------------------
+# Quinoa's SPA routing is off since 2.9.1: every page the site has must still be
+# served by the app, and the bundle must still load. Any FAIL here after a
+# deploy = immediate rollback (docs/DEPLOY.md, "5. Rollback"), before the MCP
+# Registry publish.
+# Assets by GET: a HEAD carries no Content-Type.
+js=0; css=0
+for asset in $(echo "$home" | grep -o '/assets/[^"]*' | sort -u); do
+  case "$asset" in *.js) want=text/javascript; js=$((js+1));; *.css) want=text/css; css=$((css+1));; *) want=unknown;; esac
+  got=$("${CURL[@]}" -o /dev/null -w '%{http_code} %{content_type} | %header{cache-control}' "$BASE$asset")
+  case "$got" in "200 $want"*immutable*) pass "asset $asset -> $got";;
+    *) fail "asset $asset" "200 $want with immutable" "$got";; esac
+done
+[ "$js" -ge 1 ] && [ "$css" -ge 1 ] && pass "home references $js JS and $css CSS asset(s)" \
+  || fail "home assets" ">= 1 JS and >= 1 CSS under /assets/" "$js JS, $css CSS"
+
+# Every sitemap <loc>: 200 text/html whose canonical is the loc itself.
+locs=$(echo "$sitemap" | sed -n 's|.*<loc>\([^<]*\)</loc>.*|\1|p')
+[ -n "$locs" ] || fail "sitemap.xml <loc>" "at least one <loc>" "none"
+for loc in $locs; do
+  page=$("${CURL[@]}" -H 'Accept: text/html' -w '\n%{http_code} %{content_type}' "$loc")
+  meta="${page##*$'\n'}"
+  if [[ "$meta" == "200 text/html"* ]] && echo "$page" | grep -qF "<link rel=\"canonical\" href=\"$loc\" />"; then
+    pass "sitemap $loc -> 200 text/html, canonical = loc"
+  else
+    fail "sitemap $loc" "200 text/html with canonical $loc" "$meta $(echo "$page" | grep -o '<link rel="canonical"[^>]*>' | head -1)"
+  fi
+done
+
+# The highest id of each type in the dataset: the edges of KnownEntities.
+for p in /resource/people/83 /resource/films/6 /resource/planets/1 /resource/species/1 \
+         /resource/starships/2 /resource/vehicles/4 /docs/; do
+  code=$("${CURL[@]}" -o /dev/null -w '%{http_code}' -H 'Accept: text/html' "$BASE$p")
+  [ "$code" = "200" ] && pass "$p -> 200" || fail "$p" "200" "$code"
+done
+code=$("${CURL[@]}" -o /dev/null -I -w '%{http_code}' "$BASE/")
+[ "$code" = "200" ] && pass "HEAD / -> 200" || fail "HEAD /" "200" "$code"
+
+got=$("${CURL[@]}" -o /dev/null -w '%{http_code} %header{location}' "$BASE/index.html")
+[ "$got" = "301 /" ] && pass "/index.html -> 301 Location /" || fail "/index.html" "301 /" "$got"
+got=$("${CURL[@]}" -o /dev/null -w '%{http_code} %header{location}' "$BASE/index.html?probe=$$")
+[ "$got" = "301 /?probe=$$" ] && pass "/index.html?probe=$$ -> 301 Location /?probe=$$" \
+  || fail "/index.html?probe=$$" "301 /?probe=$$" "$got"
+
+cc=$("${CURL[@]}" -o /dev/null -w '%header{cache-control}' -H 'Accept: text/html' "$BASE/")
+[ "$cc" = "public, max-age=0, must-revalidate, s-maxage=300" ] && pass "/ Cache-Control: $cc" \
+  || fail "/ Cache-Control" "public, max-age=0, must-revalidate, s-maxage=300" "${cc:-missing}"
+
+# --- Not found and variants (2.9.1+) --------------------------------------------
+# Before 2.9.1 every unknown path answered 200 with the home (a soft 404), a
+# dotted path came back index,follow, a missing asset got the HTML shell, and
+# each of those was counted twice in /stats (Quinoa's reroute). The app's own
+# not-found document carries the swapi:status marker; the framework 404 (dotted
+# paths, assets, /.well-known/) is Vert.x's bare page, without the shell marks.
+SHELL_MARKS='id="app"|id="main-content"|swapi:status|<title>'
+# not_found_doc <path>: 404 text/html, noindex, the marker, no canonical, no-cache.
+not_found_doc() {
+  local p="$1" page meta
+  page=$("${CURL[@]}" -H 'Accept: text/html' -w '\n%{http_code} %{content_type} | %header{cache-control}' "$BASE$p")
+  meta="${page##*$'\n'}"
+  if [[ "$meta" == "404 text/html"*"| no-cache" ]] && echo "$page" | grep -qF 'content="noindex"' \
+     && echo "$page" | grep -qF 'name="swapi:status" content="404"' && ! echo "$page" | grep -qF 'rel="canonical"'; then
+    pass "$p -> 404 not-found document, noindex, no canonical, no-cache"
+  else
+    fail "$p" "404 text/html, noindex, swapi:status, no canonical, Cache-Control no-cache" \
+      "$meta (200 text/html = the soft 404 is back)"
+  fi
+}
+# framework_404 <path> [want-cache-control]: 404 without any shell mark.
+framework_404() {
+  local p="$1" want_cc="${2:-}" page meta marks
+  page=$("${CURL[@]}" -H 'Accept: text/html' -w '\n%{http_code} | %header{cache-control}' "$BASE$p")
+  meta="${page##*$'\n'}"
+  marks=$(echo "${page%$'\n'*}" | grep -cE "$SHELL_MARKS")
+  if [[ "$meta" == "404 |"* ]] && [ "$marks" = "0" ] && { [ -z "$want_cc" ] || [ "$meta" = "404 | $want_cc" ]; }; then
+    pass "$p -> framework 404 without the shell${want_cc:+, Cache-Control $want_cc}"
+  else
+    fail "$p" "404 without the shell marks${want_cc:+, Cache-Control $want_cc}" \
+      "$meta, $marks shell mark(s) (200 or marks = the SPA reroute is back)"
+  fi
+}
+not_found_doc /not-a-real-page
+not_found_doc /resource/people/9999
+framework_404 /foo.json
+framework_404 /assets/does-not-exist.js no-cache
+framework_404 /.well-known/oauth-protected-resource
+# Control: an entity that exists keeps its page and its canonical.
+page=$("${CURL[@]}" -H 'Accept: text/html' -w '\n%{http_code}' "$BASE/resource/people/1")
+if [ "${page##*$'\n'}" = "200" ] && echo "$page" | grep -qF "<link rel=\"canonical\" href=\"$BASE/resource/people\" />"; then
+  pass "/resource/people/1 -> 200, canonical $BASE/resource/people"
+else
+  fail "/resource/people/1" "200 with canonical $BASE/resource/people" "${page##*$'\n'}"
+fi
+
 # --- Cold start (informational, never fails) ---------------------------------
 t=$("${CURL[@]}" -o /dev/null -w '%{time_total}' "$BASE/api/people/1")
 echo "INFO  first measured request: ${t}s (floor; the instance may already be warm)"
@@ -344,6 +444,10 @@ acao=$("${CURL[@]}" -o /dev/null -w '%header{access-control-allow-origin}' "$BAS
 vary_html=$("${CURL[@]}" -I -H 'Accept: text/html' -H 'Origin: https://evil.example' "$BASE/" | tr -d '\r' | grep -i '^vary')
 echo "$vary_html" | grep -qi 'origin' && pass "SPA HTML / Vary contains Origin ($vary_html)" \
   || fail "SPA HTML / Vary: Origin" "Vary header containing Origin" "${vary_html:-missing}"
+# The SEO files vary by Origin too (2.9.1+).
+vary_seo=$("${CURL[@]}" -o /dev/null -D - -H 'Origin: https://evil.example' "$BASE/robots.txt" | tr -d '\r' | grep -i '^vary')
+echo "$vary_seo" | grep -qi 'origin' && pass "robots.txt Vary contains Origin ($vary_seo)" \
+  || fail "robots.txt Vary: Origin" "Vary header containing Origin" "${vary_seo:-missing}"
 
 # --- Poisoning via X-Forwarded-Host ---------------------------------------------
 # The app trusts X-Forwarded-* (application.properties); Caddy's reverse_proxy
@@ -370,6 +474,11 @@ home_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/?poison=$$
 home_clean=$("${CURL[@]}" "$BASE/?poison=$$" | grep -c evil.example)
 [ "$home_poison" = "0" ] && [ "$home_clean" = "0" ] && pass "poisoning SPA HTML X-Forwarded-Host: 0 occurrences" \
   || fail "poisoning SPA HTML X-Forwarded-Host" "0 and 0" "$home_poison and $home_clean (see runbook)"
+# The not-found document (2.9.1+) is built from the same shell.
+nf_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/not-a-real-page?poison=$$" | grep -c evil.example)
+nf_clean=$("${CURL[@]}" "$BASE/not-a-real-page?poison=$$" | grep -c evil.example)
+[ "$nf_poison" = "0" ] && [ "$nf_clean" = "0" ] && pass "poisoning 404 document X-Forwarded-Host: 0 occurrences" \
+  || fail "poisoning 404 document X-Forwarded-Host" "0 and 0" "$nf_poison and $nf_clean (see runbook)"
 
 # --- What Caddy itself must add or remove -----------------------------------------
 # RFC 7239 Forwarded is not honoured by the app (allow-forwarded is off); prove it
