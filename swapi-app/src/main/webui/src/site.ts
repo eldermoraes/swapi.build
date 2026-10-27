@@ -9,12 +9,18 @@ import siteJson from '../../resources/seo/site.json';
 export interface SitePage {
   path: string;
   page: string;
+  /** The short name (BreadcrumbList); absent only on the home (2.11.0). */
+  label?: string;
+  /** The server draws the <main> of this page (2.11.0); absent means false. */
+  ssr?: boolean;
   title: string;
   description: string;
 }
 
 export interface SiteResource {
   type: string;
+  /** The short name of the type ("Films"), shown by the home and the explorer (2.11.0). */
+  label: string;
   list: { title: string; description: string };
   detail: {
     indexable: boolean;

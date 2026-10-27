@@ -24,8 +24,9 @@ import java.util.regex.Pattern;
 
 /**
  * The one source of page metadata (2.10.0): {@code seo/site.json}, read here by
- * the server and by webui/src/site.ts in the build. Titles, descriptions and
- * which record addresses are indexable live there and nowhere else.
+ * the server and by webui/src/site.ts in the build. Titles, descriptions, which
+ * record addresses are indexable, the short labels of pages and types and which
+ * pages the server draws ({@code ssr}, 2.11.0) live there and nowhere else.
  *
  * Read with JSON-P (no reflection, so nothing to register for the native image)
  * and validated on load: a missing or invalid file fails startup with the file
@@ -46,7 +47,13 @@ public final class SeoSiteFile {
     public record Text(String title, String description) {
     }
 
-    public record Page(String path, String page, String title, String description, String changefreq, String priority) {
+    /**
+     * A fixed page. {@code label} is its short name (BreadcrumbList), null only on
+     * the home, which is never a crumb after Home. {@code ssr} (2.11.0): the server
+     * draws its {@code <main>} (ServerRendering); absent means false.
+     */
+    public record Page(String path, String page, String label, boolean ssr, String title, String description,
+                       String changefreq, String priority) {
     }
 
     public record Listing(String title, String description, String changefreq, String priority) {
@@ -56,7 +63,8 @@ public final class SeoSiteFile {
                          String fallbackTitle, String fallbackDescription, String changefreq, String priority) {
     }
 
-    public record ResourceType(String type, Listing list, Detail detail) {
+    /** A type of record; {@code label} is its short name ("Films"), shown by the home and the explorer. */
+    public record ResourceType(String type, String label, Listing list, Detail detail) {
     }
 
     private final String brandSuffix;
@@ -156,14 +164,20 @@ public final class SeoSiteFile {
         for (int i = 0; i < pageArray.size(); i++) {
             String at = "pages[" + i + "]";
             JsonObject p = pageArray.getJsonObject(i);
-            keys(p, source, at, Set.of("path", "page", "title", "description", "changefreq", "priority"));
+            keys(p, source, at, Set.of("path", "page", "label", "ssr", "title", "description", "changefreq", "priority"));
             String path = string(p, "path", source, at);
             if (!path.startsWith("/") || (path.length() > 1 && path.endsWith("/")) || !paths.add(path)) {
                 throw invalid(source, at + ".path", "\"" + path + "\" must start with / , have no trailing slash and be unique");
             }
-            pages.add(new Page(path, string(p, "page", source, at), title(p, brand, source, at),
-                    string(p, "description", source, at), string(p, "changefreq", source, at),
-                    string(p, "priority", source, at)));
+            String label = null;
+            if (!path.equals("/")) {
+                label = string(p, "label", source, at);
+            } else if (p.containsKey("label")) {
+                throw invalid(source, at + ".label", "the home has no label");
+            }
+            pages.add(new Page(path, string(p, "page", source, at), label, optionalBoolean(p, "ssr", source, at),
+                    title(p, brand, source, at), string(p, "description", source, at),
+                    string(p, "changefreq", source, at), string(p, "priority", source, at)));
         }
 
         List<ResourceType> resources = new ArrayList<>();
@@ -172,11 +186,12 @@ public final class SeoSiteFile {
         for (int i = 0; i < resourceArray.size(); i++) {
             String at = "resources[" + i + "]";
             JsonObject r = resourceArray.getJsonObject(i);
-            keys(r, source, at, Set.of("type", "list", "detail"));
+            keys(r, source, at, Set.of("type", "label", "list", "detail"));
             String type = string(r, "type", source, at);
             if (!KnownEntities.TYPES.contains(type) || !types.add(type)) {
                 throw invalid(source, at + ".type", "\"" + type + "\" is not one of " + KnownEntities.TYPES + " or is repeated");
             }
+            String typeLabel = string(r, "label", source, at);
             JsonObject l = object(r, "list", source, at);
             String lat = at + ".list";
             keys(l, source, lat, Set.of("title", "description", "changefreq", "priority"));
@@ -208,7 +223,7 @@ public final class SeoSiteFile {
             if (!title.endsWith(brand) || !fallbackTitle.endsWith(brand)) {
                 throw invalid(source, dat + ".title", "titles must end with \"" + brand + "\"");
             }
-            resources.add(new ResourceType(type, list, new Detail(indexable == JsonValue.TRUE, List.copyOf(fields),
+            resources.add(new ResourceType(type, typeLabel, list, new Detail(indexable == JsonValue.TRUE, List.copyOf(fields),
                     title, description, fallbackTitle, fallbackDescription,
                     string(d, "changefreq", source, dat), string(d, "priority", source, dat))));
         }
@@ -250,6 +265,17 @@ public final class SeoSiteFile {
             throw invalid(source, at.isEmpty() ? key : at + "." + key, "missing or not a non-empty string");
         }
         return s.getString();
+    }
+
+    private static boolean optionalBoolean(JsonObject o, String key, String source, String at) {
+        JsonValue value = o.get(key);
+        if (value == null) {
+            return false;
+        }
+        if (value != JsonValue.TRUE && value != JsonValue.FALSE) {
+            throw invalid(source, at + "." + key, "must be true or false");
+        }
+        return value == JsonValue.TRUE;
     }
 
     private static JsonObject object(JsonObject o, String key, String source, String at) {

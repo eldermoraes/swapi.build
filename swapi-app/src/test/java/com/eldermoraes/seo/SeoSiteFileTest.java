@@ -104,6 +104,42 @@ class SeoSiteFileTest {
         assertEquals(Set.of("films"), indexable);
     }
 
+    // Slice E1 (2.11.0): the server draws the <main> of exactly these four pages.
+    @Test
+    void ssrMarksExactlyTheFourFixedPages() {
+        Set<String> ssr = site.pages().stream()
+                .filter(SeoSiteFile.Page::ssr)
+                .map(SeoSiteFile.Page::page)
+                .collect(Collectors.toSet());
+        assertEquals(Set.of("home", "docs", "mcp", "about"), ssr);
+    }
+
+    // The short name of a page or a type, for the BreadcrumbList and the home rows.
+    // The home has none: it is never a crumb after Home.
+    @Test
+    void everyPageButTheHomeAndEveryTypeHasALabel() {
+        for (SeoSiteFile.Page page : site.pages()) {
+            if (page.path().equals("/")) {
+                assertEquals(null, page.label(), page.path());
+            } else {
+                assertTrue(page.label() != null && !page.label().isBlank(), page.path());
+            }
+        }
+        for (SeoSiteFile.ResourceType resource : site.resources()) {
+            assertTrue(resource.label() != null && !resource.label().isBlank(), resource.type());
+        }
+        assertEquals("MCP server", site.pages().stream().filter(p -> p.page().equals("mcp")).findFirst().orElseThrow().label());
+        assertEquals("Films", site.resource("films").orElseThrow().label());
+    }
+
+    @Test
+    void aNonBooleanSsrFails() {
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> SeoSiteFile.load("seo/invalid-ssr.json"));
+        assertTrue(error.getMessage().contains("pages[2].ssr"), error.getMessage());
+        assertTrue(error.getMessage().contains("must be true or false"), error.getMessage());
+    }
+
     @Test
     void aPlaceholderOutsideTheFieldsFailsWithItsName() {
         IllegalStateException error = assertThrows(IllegalStateException.class,
