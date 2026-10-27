@@ -1,22 +1,23 @@
 package com.eldermoraes.mcp;
 
+import io.quarkiverse.mcp.server.ResourceManager;
+import io.quarkiverse.mcp.server.ResourceResponse;
+import io.quarkiverse.mcp.server.TextResourceContents;
+import io.quarkus.arc.ClientProxy;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.vertx.core.json.JsonObject;
+import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Handler;
-import java.util.logging.Level;
-import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -45,6 +46,9 @@ class McpListenLimitTest {
 
     @TestHTTPResource("/api/stats")
     URI stats;
+
+    @Inject
+    ResourceManager resources;
 
     private static String statelessMeta() {
         return """
@@ -199,62 +203,100 @@ class McpListenLimitTest {
                 unsubscribe.body());
     }
 
+    // The state itself, not a log line: ResourceManagerImpl keeps the
+    // subscribers in uriToSubscribers (a map per URI, never cleaned when the
+    // session dies). The extension only records a subscriber for a resource it
+    // knows, and 2.12.1 registers none, so the test registers one for the
+    // duration: without the filter, 100 subscribes would leave 100 ids there.
     @Test
     void sessionSubscribeKeepsNoState() throws Exception {
-        // The extension's handler logs "Subscribe to resource" at DEBUG right
-        // before it records the subscriber; with the filter in front it never runs.
-        // The pair: "List resources" from the same logger proves the capture works.
-        Logger handlerLogger = Logger.getLogger("io.quarkiverse.mcp.server.runtime.ResourceMessageHandler");
-        Level previous = handlerLogger.getLevel();
-        boolean parents = handlerLogger.getUseParentHandlers();
-        List<String> seen = new ArrayList<>();
-        Handler capture = new Handler() {
-            @Override
-            public void publish(LogRecord record) {
-                synchronized (seen) {
-                    String message = record.getMessage();
-                    if (record.getParameters() != null && record.getParameters().length > 0) {
-                        message = String.format(message, record.getParameters());
-                    }
-                    seen.add(message);
-                }
-            }
-
-            @Override
-            public void flush() {
-            }
-
-            @Override
-            public void close() {
-            }
-        };
-        capture.setLevel(Level.ALL);
-        handlerLogger.setLevel(Level.FINE);
-        handlerLogger.setUseParentHandlers(false);
-        handlerLogger.addHandler(capture);
+        String uri = "swapi://test/keeps-no-state";
+        resources.newResource("keeps-no-state")
+                .setUri(uri)
+                .setDescription("registered by McpListenLimitTest")
+                .setHandler(args -> new ResourceResponse(TextResourceContents.create(uri, "x")))
+                .register();
         try {
+            Map<?, ?> subscribers = subscribers();
             String session = openSession();
             for (int i = 0; i < 100; i++) {
-                HttpResponse<String> r = sendWithDeadline(sessionPost(session, """
-                        {"jsonrpc":"2.0","id":%d,"method":"resources/subscribe","params":{"uri":"swapi://people/%d"}}
-                        """.formatted(100 + i, i)).build(), DEADLINE_MS);
+                String method = i % 10 == 9 ? "resources/unsubscribe" : "resources/subscribe";
+                String message = """
+                        {"jsonrpc":"2.0","id":%d,"method":"%s","params":{"uri":"%s"}}
+                        """.formatted(100 + i, method, uri);
+                // Half with the session, half without: with auto-init the
+                // extension gives a request without Mcp-Session-Id a session too.
+                HttpRequest request = i % 2 == 0
+                        ? sessionPost(session, message).build()
+                        : post(message).header("MCP-Protocol-Version", SESSION_ERA).build();
+                HttpResponse<String> r = sendWithDeadline(request, DEADLINE_MS);
                 assertEquals(200, r.statusCode(), r.body());
+                JsonObject body = new JsonObject(r.body());
+                assertEquals(new JsonObject(), body.getJsonObject("result"), r.body());
+                assertEquals(100 + i, body.getInteger("id"));
             }
-            HttpResponse<String> list = sendWithDeadline(sessionPost(session, """
-                    {"jsonrpc":"2.0","id":999,"method":"resources/list"}
-                    """).build(), DEADLINE_MS);
-            assertTrue(list.body().contains("\"resources\":[]"), list.body());
+            assertTrue(subscribers.isEmpty(), "the extension recorded subscribers for "
+                    + subscribers.keySet() + ": " + subscribers.values().stream()
+                            .mapToInt(ids -> ((java.util.List<?>) ids).size()).sum() + " ids");
         } finally {
-            handlerLogger.removeHandler(capture);
-            handlerLogger.setUseParentHandlers(parents);
-            handlerLogger.setLevel(previous);
+            resources.removeResource(uri);
         }
-        synchronized (seen) {
-            assertTrue(seen.stream().anyMatch(m -> m.contains("List resources")),
-                    "the log capture must see the extension's DEBUG lines: " + seen);
-            assertFalse(seen.stream().anyMatch(m -> m.contains("Subscribe to resource")),
-                    "the extension handled a subscribe: " + seen);
-        }
+    }
+
+    private Map<?, ?> subscribers() throws Exception {
+        Object manager = ClientProxy.unwrap(resources);
+        Field field = manager.getClass().getDeclaredField("uriToSubscribers");
+        field.setAccessible(true);
+        Object value = field.get(manager);
+        assertNotNull(value, "ResourceManagerImpl.uriToSubscribers");
+        return (Map<?, ?>) value;
+    }
+
+    // The filter only answers a subscribe the extension would have handled.
+    // With an unsupported protocol version or without the required Accept,
+    // the extension answers 400 itself, as before 2.12.1, before it creates
+    // any session, and opens nothing.
+    @Test
+    void subscribeWithoutTheRequiredAcceptIsLeftToTheExtension() throws Exception {
+        String session = openSession();
+        HttpResponse<String> r = sendWithDeadline(HttpRequest.newBuilder(mcp)
+                .timeout(Duration.ofSeconds(10))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .header("Mcp-Session-Id", session)
+                .header("MCP-Protocol-Version", SESSION_ERA)
+                .POST(HttpRequest.BodyPublishers.ofString("""
+                        {"jsonrpc":"2.0","id":12,"method":"resources/subscribe","params":{"uri":"swapi://people/1"}}
+                        """)).build(), DEADLINE_MS);
+        assertEquals(400, r.statusCode(), r.body());
+        assertFalse(r.headers().firstValue("Content-Type").orElse("").startsWith("text/event-stream"));
+    }
+
+    @Test
+    void subscribeWithAnUnsupportedProtocolVersionIsLeftToTheExtension() throws Exception {
+        String session = openSession();
+        HttpResponse<String> r = sendWithDeadline(post("""
+                {"jsonrpc":"2.0","id":13,"method":"resources/subscribe","params":{"uri":"swapi://people/1"}}
+                """).header("Mcp-Session-Id", session).header("MCP-Protocol-Version", "1999-01-01").build(),
+                DEADLINE_MS);
+        assertEquals(400, r.statusCode(), r.body());
+        assertFalse(r.headers().firstValue("Content-Type").orElse("").startsWith("text/event-stream"));
+    }
+
+    // Only the Mcp-Method header says listen: no method in the body.
+    @Test
+    void listenByTheHeaderOnlyIsAnsweredAtOnce() throws Exception {
+        HttpResponse<String> r = sendWithDeadline(post("""
+                {"jsonrpc":"2.0","id":45,"params":{"notifications":{}}}
+                """).header("Mcp-Method", "subscriptions/listen").build(), DEADLINE_MS);
+        assertListenRefused(r, "45");
+    }
+
+    @Test
+    void listenHeaderWithABodyThatIsNotJsonIsAnsweredAtOnce() throws Exception {
+        HttpResponse<String> r = sendWithDeadline(post("not json {")
+                .header("Mcp-Method", "subscriptions/listen").build(), DEADLINE_MS);
+        assertListenRefused(r, "null");
     }
 
     @Test
@@ -274,8 +316,9 @@ class McpListenLimitTest {
         assertEquals(200, inSession.statusCode(), inSession.body());
         assertTrue(inSession.body().contains("Tatooine"), inSession.body());
 
-        // A body of several hundred KB, read in chunks, reaches the extension whole.
-        String pad = "x".repeat(512 * 1024);
+        // A body of 200 KB (under the 256K limit), read in chunks, reaches the
+        // extension whole.
+        String pad = "x".repeat(200 * 1024);
         HttpResponse<String> big = sendWithDeadline(post("""
                 {"jsonrpc":"2.0","id":10,"method":"tools/call",
                  "params":{"name":"sw_get","arguments":{"resource":"FILMS","id":1},"pad":"%s"}}
@@ -284,11 +327,14 @@ class McpListenLimitTest {
         assertTrue(big.body().contains("A New Hope"), big.body().substring(0, Math.min(300, big.body().length())));
     }
 
-    // Guard: the body limit stays the Quarkus default (10240K, no
-    // quarkus.http.limits.max-body-size in application.properties).
+    // 2.12.1: quarkus.http.limits.max-body-size=256K (the default was 10240K).
+    // The filter decodes every POST to /mcp on the event loop before the
+    // extension decodes it again; the largest real MCP request here is an
+    // initialize of a few KB. A body exactly at the limit still reaches the
+    // extension; one byte more is 413, before anything decodes it.
     @Test
-    void bodyLimitIsTheSameAsBefore() throws Exception {
-        long limit = 10240L * 1024;
+    void bodyLimitFitsMcp() throws Exception {
+        long limit = 256L * 1024;
         String prefix = "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tools/list\",\"params\":{\"pad\":\"";
         String suffix = "\"}}";
         int padUnder = (int) (limit - prefix.length() - suffix.length());

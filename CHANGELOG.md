@@ -25,13 +25,19 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
   hundreds open. The server sends no notifications (the data never changes),
   so the listen is now answered at once with `-32601`, in every protocol
   version, with or without a session. A batch that contains a listen answers
-  `400` with `-32600`.
-- `resources/subscribe` and `resources/unsubscribe` with a session (protocol
-  versions up to 2025-11-25) no longer keep state: the extension recorded one
-  subscriber per request in a list that was never cleaned. They are answered
-  without recording anything (`-32002` for a URI that is not a resource, which
-  is every URI in this version). Stateless clients get the extension's
-  `-32601`, as before.
+  `400` with `-32600`. The JSON-RPC `method` in the body wins over the
+  `Mcp-Method` header; the header counts only when the body has no method or
+  is not JSON. Either way a listen is answered at once, so neither path opens
+  a stream.
+- `resources/subscribe` and `resources/unsubscribe` in the session era
+  (protocol versions up to 2025-11-25, with or without `Mcp-Session-Id`, since
+  auto-init gives a request without one a session too) no longer keep state:
+  the extension recorded one subscriber per request in a list that was never
+  cleaned. They are answered without recording anything (`-32002` for a URI
+  that is not a resource, which is every URI in this version). With an
+  unsupported `MCP-Protocol-Version` or an `Accept` without both
+  `application/json` and `text/event-stream`, the extension's `400` stands, as
+  before. Stateless clients get the extension's `-32601`, as before.
 
 ### Changed
 
@@ -47,8 +53,15 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
   grow on either version (2.12.0: 175.5 → 173.2 MB; 2.12.1: 170.9 → 169.3 MB),
   so the leak was not reproduced here as memory.
 - `/stats`: the `/mcp` latency no longer carries listens of minutes, and the
-  MCP group's hint says it counts every JSON-RPC call, the lists a client reads
-  when it connects included.
+  MCP group's hint says what it counts: every HTTP request to `/mcp`, one per
+  POST (a batch counts once, the lists a client reads when it connects
+  included), plus the `GET` (405) and `DELETE` (204) of the transport.
+- Request body limit `quarkus.http.limits.max-body-size` 10240K (the Quarkus
+  default) → 256K. The only bodies this server reads are MCP requests (the
+  REST API is GET only), and the largest real one is an `initialize` of a few
+  KB. `McpTransportFilter` decodes each POST to `/mcp` before the extension
+  decodes it again, both on the event loop; at 10 MB one request cost two
+  decodes of 10 MB. A body over 256K answers `413`.
 
 ### Security
 

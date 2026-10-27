@@ -118,11 +118,14 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   `McpTransportFilter` (2.12.1+) reads the POST body before the extension and
   answers `subscriptions/listen` itself, at once, with `-32601` (the extension
   would keep an SSE stream open with no limit), and `resources/subscribe` /
-  `unsubscribe` with a session without recording anything (the extension keeps
-  one subscriber per request in a list never cleaned). Stateless subscribe goes
-  on to the extension, which refuses it with `-32601`. `McpListenLimitTest`
-  guards it; never let a POST to `/mcp` open a stream that waits for
-  notifications.
+  `unsubscribe` of the session era, with or without `Mcp-Session-Id` (auto-init
+  gives one), without recording anything (the extension keeps one subscriber
+  per request in a list never cleaned). Stateless subscribe, and a subscribe
+  with an unsupported protocol version or `Accept`, go on to the extension
+  (`-32601` / `400`, nothing kept). The body `method` wins over the
+  `Mcp-Method` header. `quarkus.http.limits.max-body-size=256K` bounds the
+  double decode on the event loop. `McpListenLimitTest` guards it; never let a
+  POST to `/mcp` open a stream that waits for notifications.
 - **Public base URL is discovered per request** (REST via `UriInfo`, MCP via
   `HttpServerRequest`, honoring `X-Forwarded-*`). `swapi.public-base-url` is an
   optional override only — never reintroduce a hardcoded domain default. When

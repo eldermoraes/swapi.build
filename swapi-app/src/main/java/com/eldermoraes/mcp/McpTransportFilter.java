@@ -19,6 +19,7 @@ import io.vertx.ext.web.handler.BodyHandler;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.ConfigProvider;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -43,9 +44,18 @@ import java.util.Optional;
  * - resources/subscribe and resources/unsubscribe with a session (up to
  *   2025-11-25): the extension appends one subscriber per request to a list
  *   per URI that is never cleaned when the session dies, and auto-init gives
- *   every request a new session. Answered without keeping anything. The
- *   stateless era goes on to the extension, which already refuses them with
- *   -32601 without keeping anything.
+ *   every request a new session. Answered without keeping anything, with or
+ *   without Mcp-Session-Id, but only when the extension would have handled
+ *   them (supported protocol version, Accept); otherwise its 400 stands. The stateless era
+ *   goes on to the extension, which already refuses them with -32601 without
+ *   keeping anything.
+ *
+ * The method in the body wins over the Mcp-Method header; the header alone
+ * counts only when the body has no method (or is not JSON). Either way a
+ * listen is answered here, so neither path opens a stream.
+ *
+ * The body is decoded here and again by the extension, on the event loop;
+ * quarkus.http.limits.max-body-size=256K keeps that bounded.
  *
  * To see the JSON-RPC method this filter reads the body -- the listen in a
  * session comes without the Mcp-Method header -- with a body handler built
@@ -161,7 +171,7 @@ public class McpTransportFilter {
                 end(rc, 200, error(id, METHOD_NOT_FOUND, LISTEN_NOT_OFFERED));
                 return;
             }
-            if ((SUBSCRIBE.equals(method) || UNSUBSCRIBE.equals(method)) && !isStateless(rc, request)) {
+            if ((SUBSCRIBE.equals(method) || UNSUBSCRIBE.equals(method)) && isSessionRequest(rc, request)) {
                 end(rc, 200, subscribeAnswer(id, request));
                 return;
             }
@@ -186,6 +196,36 @@ public class McpTransportFilter {
             return error(id, RESOURCE_NOT_FOUND, "Resource not found: " + uri);
         }
         return new JsonObject().put("jsonrpc", "2.0").put("id", id).put("result", new JsonObject());
+    }
+
+    // Only the subscribe the extension itself would handle in the session era:
+    // a supported (or absent) MCP-Protocol-Version and the Accept the
+    // transport requires. With a bad version or Accept the extension answers
+    // 400 before it creates any session, and in the stateless era -32601;
+    // neither keeps anything nor opens a stream, so those go on to it.
+    // Without Mcp-Session-Id the extension does NOT answer 400: auto-init
+    // creates a session for the request and would record the subscriber like
+    // any other, so that case is answered here too.
+    private static boolean isSessionRequest(RoutingContext rc, JsonObject request) {
+        if (isStateless(rc, request)) {
+            return false;
+        }
+        String version = rc.request().getHeader(PROTOCOL_HEADER);
+        if (version != null && !McpProtocolVersion.SUPPORTED_VERSIONS.contains(version)) {
+            return false;
+        }
+        List<String> accepts = rc.request().headers().getAll("Accept");
+        return accepts(accepts, "application/json") && accepts(accepts, "text/event-stream");
+    }
+
+    // The extension's check, as it is (StreamableHttpMcpMessageHandler.accepts).
+    private static boolean accepts(List<String> accepts, String type) {
+        for (String header : accepts) {
+            if (header.contains(type)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // The extension's rule (StreamableHttpMcpMessageHandler.isStatelessRequest):
