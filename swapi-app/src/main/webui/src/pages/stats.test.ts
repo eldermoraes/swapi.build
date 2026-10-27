@@ -32,6 +32,17 @@ describe('the pages group hint', () => {
   });
 });
 
+// 2.12.1: the group counts every JSON-RPC call on /mcp, the lists a client
+// reads when it connects included; a subscriptions/listen is answered at once
+// and no longer sits in the latency as a call of minutes.
+describe('the MCP group hint', () => {
+  it('says every JSON-RPC call counts, the connection lists included', () => {
+    expect(GROUPS.find((g) => g.id === 'mcp')!.hint).toBe(
+      '/mcp: every JSON-RPC call, including the lists a client reads when it connects',
+    );
+  });
+});
+
 function view(period: '24h' | '7d' | '30d'): StatsView {
   const hourly = period === '24h';
   const n = hourly ? 24 : period === '7d' ? 7 : 30;
