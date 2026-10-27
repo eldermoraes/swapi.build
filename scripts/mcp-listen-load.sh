@@ -55,11 +55,7 @@ listens)
   open_now() { local n=0 p; for p in "${pids[@]}"; do kill -0 "$p" 2>/dev/null && n=$((n + 1)); done; echo "$n"; }
   t=0
   for mark in 30 "$HOLD"; do
-    while [ "$t" -lt "$mark" ]; do
-      # Ends early when every curl is done (2.12.1).
-      [ "$(open_now)" = "0" ] && break
-      sleep 1; t=$((t + 1))
-    done
+    while [ "$t" -lt "$mark" ]; do sleep 1; t=$((t + 1)); done
     echo "rss_kb t=${mark}s: $(rss_kb)  still open: $(open_now)"
   done
   for p in "${pids[@]}"; do kill "$p" 2>/dev/null; done

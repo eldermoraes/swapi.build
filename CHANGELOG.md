@@ -16,6 +16,51 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.12.1] - 2026-10-27
+
+### Fixed
+
+- `subscriptions/listen` on `/mcp` stayed open with no limit: the extension
+  answered it with an event stream that never ended, and anyone could hold
+  hundreds open. The server sends no notifications (the data never changes),
+  so the listen is now answered at once with `-32601`, in every protocol
+  version, with or without a session. A batch that contains a listen answers
+  `400` with `-32600`.
+- `resources/subscribe` and `resources/unsubscribe` with a session (protocol
+  versions up to 2025-11-25) no longer keep state: the extension recorded one
+  subscriber per request in a list that was never cleaned. They are answered
+  without recording anything (`-32002` for a URI that is not a resource, which
+  is every URI in this version). Stateless clients get the extension's
+  `-32601`, as before.
+
+### Changed
+
+- MCP extension `quarkus-mcp-server` 2.0.0 → 2.0.3. On the wire:
+  `server/discover` carries `serverInfo` in
+  `_meta["io.modelcontextprotocol/serverInfo"]` instead of at the top of the
+  result, as the 2026-07-28 schema says; a stateless request without
+  `clientInfo` is accepted; `completion/complete` and `logging/setLevel`
+  without `params` are an error.
+- The request context of a tool call is destroyed again (extension PR #1060):
+  on 2.0.0, 20 tool calls started 40 request contexts and destroyed 20
+  (`McpRequestContextTest`). Over 10 000 tool calls the native RSS did not
+  grow on either version (2.12.0: 175.5 → 173.2 MB; 2.12.1: 170.9 → 169.3 MB),
+  so the leak was not reproduced here as memory.
+- `/stats`: the `/mcp` latency no longer carries listens of minutes, and the
+  MCP group's hint says it counts every JSON-RPC call, the lists a client reads
+  when it connects included.
+
+### Security
+
+- 500 concurrent listens, measured on the native binary in a container
+  (VmRSS): on 2.12.0 all 500 streams stayed open until the client gave up
+  (65 s), and the RSS went from 141.7 to 175.7 MB; on 2.12.1 all 500 were
+  answered within 2 s with `-32601`, and the RSS went from 142.2 to 170.9 MB
+  (the first burst of connections, about the same on both). A second burst
+  left both flat (2.12.0: 175.8 MB, again with 500 streams held; 2.12.1:
+  169.3 MB). The fix is that no connection is held open: the memory of the
+  first burst is the connection pool, not the streams.
+
 ## [2.12.0] - 2026-10-27
 
 ### Added
@@ -785,7 +830,7 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.12.0...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.12.1...HEAD
 [2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
@@ -832,3 +877,5 @@ snapshot version is not a release. -->
 [2.11.0]: https://github.com/eldermoraes/swapi.build/compare/v2.10.0...v2.11.0
 
 [2.12.0]: https://github.com/eldermoraes/swapi.build/compare/v2.11.0...v2.12.0
+
+[2.12.1]: https://github.com/eldermoraes/swapi.build/compare/v2.12.0...v2.12.1
