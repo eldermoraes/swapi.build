@@ -15,7 +15,9 @@ The www host: a redirect to https://<destination> (default swapi.build):
 The apex host (2.11.0+), the end of the www follow:
 
   apex         200 text/html, a <main id="main-content" data-ssr-page="mcp">
-               with the claude mcp add line on its own host and enough text
+               with the claude mcp add line on its own host and enough text;
+               on /resource/films/1 (2.12.0+) the <main> of the record, with
+               George Lucas
   empty-main   200 text/html, the <main> empty on one line followed by a
                footer of more than 200 characters (the case that fooled a sed
                range)
@@ -49,6 +51,12 @@ class Host(http.server.BaseHTTPRequestHandler):
         if BEHAVIOUR == "apex":
             host = self.headers.get("Host", "")
             prose = "Use the Star Wars API from your AI agent. " * 5
+            if self.path.split("?", 1)[0] == "/resource/films/1":
+                self._page('<main id="main-content" tabindex="-1" data-ssr-page="resource-detail"'
+                           ' data-ssr-type="films" data-ssr-id="1">\n'
+                           "<h1>A New Hope</h1>\n<table><tr><th>Director</th><td>George Lucas</td></tr></table>\n"
+                           "<p>" + prose + "</p>\n</main>")
+                return
             self._page('<main id="main-content" tabindex="-1" data-ssr-page="mcp">\n'
                        "<h1>MCP Server</h1>\n<p>" + prose + "</p>\n"
                        "<pre>claude mcp add --transport http swapi-build https://" + host + "/mcp</pre>\n"

@@ -12,8 +12,12 @@
 #                                           X-Robots-Tag noindex on /api only, the server-rendered
 #                                           content (2.11.0+: the <main> of /, /docs, /docs/mcp
 #                                           and /about with its marker and text, the lean
-#                                           JSON-LD), the trailing-slash 301, and the Caddy
-#                                           headers (HSTS, no Server)
+#                                           JSON-LD), the record content (2.12.0+: films/1
+#                                           and people/1 with marker, name, links and the
+#                                           samples on the host; people still noindex; the
+#                                           poisoning pairs of both and Forwarded on films/1),
+#                                           the trailing-slash 301, and the Caddy headers
+#                                           (HSTS, no Server)
 #        verify-deploy.sh redirect <from-host> <to-host>
 #                                          (a name that only redirects, today www.swapi.build ->
 #                                           swapi.build): without following redirects, GET /,
@@ -22,8 +26,9 @@
 #                                           GET /resource/films/1 and POST /mcp on
 #                                           https://<from-host> must each answer 308 with
 #                                           Location exactly https://<to-host> + the same path
-#                                           and query; and (2.11.0+) /docs/mcp followed once to
-#                                           <to-host> must give its text without JavaScript
+#                                           and query; and (2.11.0+) /docs/mcp, and (2.12.0+)
+#                                           /resource/films/1, followed once to <to-host> must
+#                                           give their text without JavaScript
 #
 # The `preview` and `prod` modes probed the former Vercel deployments and were
 # removed with them.
@@ -112,6 +117,8 @@ if [ "$MODE" = "redirect" ]; then
     fi
   }
   follow_probe "/docs/mcp" "claude mcp add --transport http swapi-build https://${TO}/mcp"
+  # 2.12.0+: a record too, the page an agent is most often handed.
+  follow_probe "/resource/films/1" "George Lucas"
 
   echo
   if [ "$FAILURES" -eq 0 ]; then
@@ -492,6 +499,53 @@ done
 jsonld /docs/mcp | grep -qF '"@type":"BreadcrumbList"' && pass "/docs/mcp JSON-LD: BreadcrumbList" \
   || fail "/docs/mcp JSON-LD" '"@type":"BreadcrumbList"' "missing"
 
+# --- Record content (2.12.0+) ------------------------------------------------------
+# Every record address of the six types is drawn by the one template of detail:
+# marker resource-detail (with type and id), the name, the attributes, the
+# related records as links, the samples on the request host and the JSON.
+# Indexing does not change (slice D): people stay noindex,follow with the list
+# canonical, now with content. Any FAIL after a deploy = rollback to 2.11.0.
+# record_probe <path> <type> <id> <need>...: each <need> is searched in the
+# markup of the <main> (main_html: the href of a link lives in a tag).
+record_probe() {
+  local p="$1" type="$2" id="$3" doc meta open html text missing="" need
+  shift 3
+  doc=$("${CURL[@]}" -H 'Accept: text/html' -w '\n%{http_code} %{content_type}' "$BASE$p")
+  meta="${doc##*$'\n'}"
+  doc="${doc%$'\n'*}"
+  open=$(printf '%s\n' "$doc" | main_open_tag)
+  html=$(printf '%s\n' "$doc" | main_html)
+  text=$(printf '%s\n' "$doc" | main_text)
+  for need in "$@"; do
+    [[ "$html" == *"$need"* ]] || missing="$missing \"$need\""
+  done
+  if [[ "$meta" == "200 text/html"* ]] \
+     && [[ "$open" == *"data-ssr-page=\"resource-detail\" data-ssr-type=\"$type\" data-ssr-id=\"$id\""* ]] \
+     && [ -z "$missing" ] && [ "${#text}" -ge 200 ]; then
+    pass "$p drawn on the server: resource-detail $type/$id, ${#text} characters, $# phrases"
+  else
+    fail "$p record content" "200 text/html, resource-detail $type/$id, >= 200 characters, all phrases" \
+      "$meta, ${open:-no <main>}, ${#text} characters, missing:${missing:- none}"
+  fi
+}
+record_probe /resource/films/1 films 1 'A New Hope' 'George Lucas' 'href="/resource/people/1"' \
+  "curl $BASE/api/films/1"
+record_probe /resource/people/1 people 1 'Luke Skywalker' 'href="/resource/planets/1"'
+# The batch rule of slice D holds with content: people/1 stays out of the index.
+page=$("${CURL[@]}" -H 'Accept: text/html' "$BASE/resource/people/1")
+if printf '%s' "$page" | grep -qF 'name="robots" content="noindex,follow"' \
+   && printf '%s' "$page" | grep -qF "<link rel=\"canonical\" href=\"$BASE/resource/people\" />"; then
+  pass "/resource/people/1 with content stays noindex,follow, canonical $BASE/resource/people"
+else
+  fail "/resource/people/1 robots with content" "noindex,follow, canonical $BASE/resource/people" "other"
+fi
+# A record that does not exist draws nothing.
+n=$("${CURL[@]}" -H 'Accept: text/html' "$BASE/resource/people/9999" | grep -c 'data-ssr-')
+[ "$n" = "0" ] && pass "/resource/people/9999 has no data-ssr- marker" \
+  || fail "/resource/people/9999 marker" "no data-ssr-" "$n line(s)"
+jsonld /resource/films/1 | grep -qF '"@type":"BreadcrumbList"' && pass "/resource/films/1 JSON-LD: BreadcrumbList" \
+  || fail "/resource/films/1 JSON-LD" '"@type":"BreadcrumbList"' "missing"
+
 # --- Cold start (informational, never fails) ---------------------------------
 t=$("${CURL[@]}" -o /dev/null -w '%{time_total}' "$BASE/api/people/1")
 echo "INFO  first measured request: ${t}s (floor; the instance may already be warm)"
@@ -654,6 +708,14 @@ mcp_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/docs/mcp?po
 mcp_clean=$("${CURL[@]}" "$BASE/docs/mcp?poison=$$" | grep -c evil.example)
 [ "$mcp_poison" = "0" ] && [ "$mcp_clean" = "0" ] && pass "poisoning /docs/mcp X-Forwarded-Host: 0 occurrences" \
   || fail "poisoning /docs/mcp X-Forwarded-Host" "0 and 0" "$mcp_poison and $mcp_clean (see runbook)"
+# 2.12.0+: the <main> of a record carries the request host (the URLs of the
+# record, the samples), on an indexable type and on a noindex one.
+for p in /resource/films/1 /resource/people/1; do
+  r_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE$p?poison=$$" | grep -c evil.example)
+  r_clean=$("${CURL[@]}" "$BASE$p?poison=$$" | grep -c evil.example)
+  [ "$r_poison" = "0" ] && [ "$r_clean" = "0" ] && pass "poisoning $p X-Forwarded-Host: 0 occurrences" \
+    || fail "poisoning $p X-Forwarded-Host" "0 and 0" "$r_poison and $r_clean (see runbook)"
+done
 
 # --- What Caddy itself must add or remove -----------------------------------------
 # RFC 7239 Forwarded is not honoured by the app (allow-forwarded is off); prove it
@@ -661,6 +723,10 @@ mcp_clean=$("${CURL[@]}" "$BASE/docs/mcp?poison=$$" | grep -c evil.example)
 f=$("${CURL[@]}" -H 'Forwarded: host=evil.example;proto=https' "$BASE/api/people/3" | grep -c evil.example)
 [ "$f" = "0" ] && pass "poisoning Forwarded (RFC 7239): 0 occurrences" \
   || fail "poisoning Forwarded (RFC 7239)" "0" "$f"
+# 2.12.0+: the same on a record page, whose <main> carries the host.
+f=$("${CURL[@]}" -H 'Forwarded: host=evil.example;proto=https' "$BASE/resource/films/1" | grep -c evil.example)
+[ "$f" = "0" ] && pass "poisoning Forwarded (RFC 7239) on /resource/films/1: 0 occurrences" \
+  || fail "poisoning Forwarded (RFC 7239) on /resource/films/1" "0" "$f"
 headers=$("${CURL[@]}" -o /dev/null -D - "$BASE/api/people/1" | tr -d '\r')
 hsts=$(echo "$headers" | awk -F': ' 'tolower($1)=="strict-transport-security"{print $2}')
 [ "$hsts" = "max-age=63072000" ] && pass "HSTS max-age=63072000" \

@@ -10,8 +10,9 @@
 #
 # Waits up to 20 s for GET /api/people/1, then checks /api/people/1 (Luke
 # Skywalker), /openapi.json (paths not empty, the version of the pom) and the
-# four server-rendered pages (marker, phrase, >= 200 characters of <main>, the
-# same main_text the deploy probes use). Content only: without Caddy in front,
+# four server-rendered pages and, since 2.12.0, /resource/films/1 and
+# /resource/people/1 (marker, phrase, >= 200 characters of <main>, the same
+# main_text the deploy probes use). Content only: without Caddy in front,
 # the poisoning checks belong to verify-deploy.sh. Also run against the jar and
 # the local native build in the release rehearsal (docs/RELEASE.md).
 set -u
@@ -70,6 +71,10 @@ page_probe / home 'The Star Wars API'
 page_probe /docs docs '/api/people/{id}'
 page_probe /docs/mcp mcp "claude mcp add --transport http swapi-build $BASE/mcp"
 page_probe /about about 'Why build another one?'
+# 2.12.0+: the record addresses, drawn by the one template of detail, whose
+# views (RecordViews, the entity getters) are new to the native image.
+page_probe /resource/films/1 resource-detail 'George Lucas'
+page_probe /resource/people/1 resource-detail 'Luke Skywalker'
 
 echo
 if [ "$FAILURES" -eq 0 ]; then
