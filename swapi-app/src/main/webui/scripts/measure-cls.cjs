@@ -35,7 +35,9 @@ if (!local && rounds > 1) {
 
 const PATHS = ['/', '/docs', '/docs/mcp', '/about', '/resource/films/1', '/resource/people/1'];
 // The addresses the server draws in this version (seo/site.json, "ssr": true).
-const SERVER_RENDERED = new Set(['/', '/docs', '/docs/mcp', '/about']);
+// The record addresses are drawn on the server from 2.12.0: against an older
+// jar (the "before" of slice E2) their zero-swap check fails, as expected.
+const SERVER_RENDERED = new Set(['/', '/docs', '/docs/mcp', '/about', '/resource/films/1', '/resource/people/1']);
 const PROFILES = [
   { name: 'phone', viewport: { width: 360, height: 640 }, deviceScaleFactor: 2, isMobile: true },
   { name: 'desktop', viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, isMobile: false },
