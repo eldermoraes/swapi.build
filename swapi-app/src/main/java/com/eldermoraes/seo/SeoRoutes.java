@@ -1,5 +1,6 @@
 package com.eldermoraes.seo;
 
+import com.eldermoraes.seo.ssr.ServerRendering;
 import io.quarkus.vertx.web.RouteFilter;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpHeaders;
@@ -32,6 +33,7 @@ public class SeoRoutes {
     @Inject SeoMetadataRegistry metadata;
     @Inject PublicSiteUrlResolver urls;
     @Inject WebAnalytics analytics;
+    @Inject ServerRendering rendering;
 
     /**
      * The router of the site (2.9.1; Quinoa's SPA routing is off, QuinoaConfigTest).
@@ -251,6 +253,14 @@ public class SeoRoutes {
         }
         SeoMetadata route = metadata.forPath(path);
         String html = inject(shell.get(), seoBlock(rc, route));
+        // The <main> of a page marked ssr (2.11.0). After the head cleanup, so its
+        // regex never reaches the content, and a literal replace: the content has
+        // $ and \ (code samples) that a regex replacement would read. A failed
+        // render leaves the empty <main> (ServerRendering logs it).
+        Optional<String> main = pageName(path).flatMap(page -> rendering.main(page, urls.siteRoot(rc)));
+        if (main.isPresent()) {
+            html = html.replace(ServerRendering.EMPTY_MAIN, main.get());
+        }
         rc.response()
                 .putHeader(HttpHeaders.CONTENT_TYPE, "text/html; charset=utf-8")
                 .end(html);
@@ -343,6 +353,14 @@ public class SeoRoutes {
                 + "{\"@type\":\"WebSite\",\"name\":\"swapi.build\",\"url\":\"" + json(home) + "\",\"description\":\"" + json(route.description()) + "\",\"image\":\"" + json(image) + "\"},"
                 + "{\"@type\":\"SoftwareApplication\",\"name\":\"swapi.build\",\"applicationCategory\":\"DeveloperApplication\",\"operatingSystem\":\"Any\",\"url\":\"" + json(appUrl) + "\",\"description\":\"" + json(appDescription) + "\",\"image\":\"" + json(image) + "\",\"license\":\"" + license + "\",\"sameAs\":[\"" + repo + "\",\"" + json(docs) + "\",\"" + json(mcp) + "\"]}"
                 + "]}";
+    }
+
+    /** The page name of a fixed page of seo/site.json; empty for lists and record addresses. */
+    private Optional<String> pageName(String path) {
+        return metadata.site().pages().stream()
+                .filter(page -> page.path().equals(path))
+                .map(SeoSiteFile.Page::page)
+                .findFirst();
     }
 
     private static boolean isRecordAddress(String path) {

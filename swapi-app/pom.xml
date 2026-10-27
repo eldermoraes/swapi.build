@@ -58,6 +58,11 @@
             <artifactId>quarkus-reactive-routes</artifactId>
         </dependency>
         <dependency>
+            <!-- The <main> of the pages marked ssr in seo/site.json (2.11.0, ServerRendering). -->
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-qute</artifactId>
+        </dependency>
+        <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-scheduler</artifactId>
         </dependency>
