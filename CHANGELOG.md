@@ -52,6 +52,12 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
   (`McpRequestContextTest`). Over 10 000 tool calls the native RSS did not
   grow on either version (2.12.0: 175.5 → 173.2 MB; 2.12.1: 170.9 → 169.3 MB),
   so the leak was not reproduced here as memory.
+- Known, still on 2.0.3 and 2.0.4: when the event loop destroys a tool call's
+  request context before the worker thread leaves the consumer, SmallRye
+  Context Propagation restores a dead state and ArC starts a new, empty
+  request context in its place that nobody destroys (CI hit it in 4 of 44
+  contexts). It holds no beans and lives in the call's duplicated Vert.x
+  context, so it goes with it; `McpRequestContextTest` asserts it stays empty.
 - `/stats`: the `/mcp` latency no longer carries listens of minutes, and the
   MCP group's hint says what it counts: every HTTP request to `/mcp`, one per
   POST (a batch counts once, the lists a client reads when it connects
