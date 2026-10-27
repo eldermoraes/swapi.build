@@ -5,6 +5,7 @@ import { registerWebMcp } from './webmcp';
 import { renderWebMcp, updateWebMcpStatus } from './pages/webmcp';
 import { bindDocumentation } from './pages/documentation';
 import { bindMcp } from './pages/mcp';
+import { bindRecord } from './pages/resource';
 import { adoptServerMain, loadServerMain, renderUnavailable, showLoadFailure } from './server-main';
 import { renderPrivacy } from './pages/privacy';
 import { renderTerms } from './pages/terms';
@@ -201,6 +202,53 @@ async function showServerPage(
   announce(spokenTitle(title));
 }
 
+/**
+ * A record address (2.12.0, slice E2): the server drew it. The first load adopts
+ * it (no request: before 2.12.0 it asked /api) and binds the copy buttons and
+ * the JSON colours; without its marker, a static block, never a request. A
+ * later navigation is the explorer's sw_get: one request, the document, and the
+ * head written once from the record (its commit); no "Loading resource…".
+ */
+async function showRecord(
+  path: string,
+  route: Route,
+  first: boolean,
+  generation: number,
+  source: NavigationSource,
+) {
+  if (first) {
+    if (adoptServerMain(container, route)) {
+      bindRecord(container);
+      announce(spokenTitle(document.title));
+    } else {
+      renderUnavailable(container, path, 'Resource unavailable');
+    }
+    return;
+  }
+
+  const result = await explorer.execute(
+    'sw_get',
+    { resource: route.type!.toUpperCase(), id: Number(route.id) },
+    { human: true },
+  );
+  if (generation !== navigationGeneration || result.ok) return;
+  if (result.error.code === 'NOT_FOUND') {
+    // An id that does not exist, reached by a client-side navigation: the
+    // not-found page and head, like the server's 404.
+    renderNotFound(container, path);
+    const notFoundTitle = writeHead(path, { notFound: true });
+    container.focus({ preventScroll: true });
+    announce(spokenTitle(notFoundTitle));
+    return;
+  }
+  if (result.error.code === 'SUPERSEDED' || result.error.code === 'CANCELLED') return;
+  // The document did not come (5xx, network): the content and the head stay
+  // those of the page that was there, with the explorer's alert. After a link
+  // the address goes back to the URL it left; Back and Forward are left alone.
+  if (source.via === 'link') history.replaceState(null, '', source.from);
+  updateActiveNav(getRoute(headPath).page);
+}
+
 async function navigate(source: NavigationSource) {
   cancelPending();
   explorer.interrupt();
@@ -240,32 +288,22 @@ async function navigate(source: NavigationSource) {
     case 'stats':
       await renderStats(container, () => generation === navigationGeneration);
       break;
-    case 'resource-list':
-    case 'resource-detail': {
+    case 'resource-detail':
+      await showRecord(path, route, first, generation, source);
+      return;
+    case 'resource-list': {
       container.replaceChildren();
       const heading = document.createElement('h1');
       heading.className = 'sw-page-title';
       heading.textContent = 'Loading resource…';
       container.appendChild(heading);
       const result = await explorer.execute(
-        route.page === 'resource-list' ? 'sw_list' : 'sw_get',
-        {
-          resource: route.type!.toUpperCase(),
-          ...(route.page === 'resource-detail' ? { id: Number(route.id) } : {}),
-        },
+        'sw_list',
+        { resource: route.type!.toUpperCase() },
         { human: true },
       );
-      // An id that does not exist, reached by a client-side navigation: the
-      // not-found page and head, like the server's 404.
-      if (generation === navigationGeneration && !result.ok && result.error.code === 'NOT_FOUND') {
-        renderNotFound(container, path);
-        const notFoundTitle = writeHead(path, { notFound: true });
-        container.focus({ preventScroll: true });
-        announce(spokenTitle(notFoundTitle));
-        return;
-      }
       if (generation === navigationGeneration && !result.ok) {
-        // The record did not arrive (network, 5xx): the fallback head of its type,
+        // The list did not arrive (network, 5xx): the fallback head of its type,
         // so the head no longer describes the page before.
         writeHead(path);
         heading.textContent = 'Resource unavailable';
@@ -292,6 +330,9 @@ async function navigate(source: NavigationSource) {
   announce(spokenTitle(title));
 }
 
+/** The href of the link navigation still running, if any (see the click handler). */
+let linkInFlight: string | null = null;
+
 // Intercept clicks on internal links to use History API instead of full page reload
 document.addEventListener(
   'click',
@@ -314,11 +355,19 @@ document.addEventListener(
       return;
 
     e.preventDefault();
+    // A second click on the link whose navigation is still running (2.12.0
+    // review): ignored. Taken as a new navigation, its `from` would be the
+    // address the first click pushed, and a failure would put that address
+    // back over the content that stayed: the URL and the page would disagree.
+    if (linkInFlight === href) return;
     const from = window.location.pathname + window.location.search + window.location.hash;
     if (href !== window.location.pathname + window.location.search) {
       history.pushState(null, '', href);
     }
-    void navigate({ via: 'link', from });
+    linkInFlight = href;
+    void navigate({ via: 'link', from }).finally(() => {
+      if (linkInFlight === href) linkInFlight = null;
+    });
   },
   { signal: pageLifecycle.signal },
 );

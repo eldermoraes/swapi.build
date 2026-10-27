@@ -22,4 +22,7 @@ public final class SsrTemplates {
     public static native TemplateInstance mcp(McpView view);
 
     public static native TemplateInstance about();
+
+    /** The template of detail (2.12.0): every record of the six types. */
+    public static native TemplateInstance record(RecordView view);
 }

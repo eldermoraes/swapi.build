@@ -27,6 +27,20 @@ main_text() {
     | sed -e 's/^ //' -e 's/ $//'
 }
 
+# main_html (2.12.0): reads a document on stdin; prints the markup between the
+# end of the opening tag of <main id="main-content"> and the first </main>, on
+# one line (the links of a record live in tags main_text drops). Without that
+# opening tag it prints nothing.
+main_html() {
+  local doc
+  doc=$(tr '\n\r' '  ')
+  case "$doc" in
+    *'<main id="main-content"'*) ;;
+    *) return 0 ;;
+  esac
+  printf '%s' "$doc" | sed -e 's/.*<main id="main-content"[^>]*>//' -e 's/<\/main>.*//'
+}
+
 # main_open_tag: reads a document on stdin; prints the opening tag of
 # <main id="main-content"> (where the data-ssr-page marker lives), or nothing.
 main_open_tag() {

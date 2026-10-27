@@ -87,11 +87,15 @@ echo "$OUT" | grep -q '^PASS.*?format=json' && pass "a path with a query is prob
 # 2.11.0: an agent that gets www and follows the 308 without JavaScript reads text.
 echo "$OUT" | grep -q '^PASS.*follow /docs/mcp' && pass "the www follow of /docs/mcp passes" \
   || { fail "the www follow of /docs/mcp should pass"; echo "$OUT"; }
+# 2.12.0: a record too.
+echo "$OUT" | grep -q '^PASS.*follow /resource/films/1' && pass "the www follow of /resource/films/1 passes" \
+  || { fail "the www follow of /resource/films/1 should pass"; echo "$OUT"; }
 
 probe ok empty-main
 if [ "$CODE" = "1" ] && echo "$OUT" | grep -q '^FAIL.*follow /docs/mcp' \
-   && [ "$(echo "$OUT" | grep -c '^FAIL')" = "1" ]; then
-  pass "an empty <main> at the end of the follow fails (only the follow)"
+   && echo "$OUT" | grep -q '^FAIL.*follow /resource/films/1' \
+   && [ "$(echo "$OUT" | grep -c '^FAIL')" = "2" ]; then
+  pass "an empty <main> at the end of the follow fails (only the two follows)"
 else
   fail "an empty <main> at the end of the follow should fail (exit $CODE)"; echo "$OUT"
 fi

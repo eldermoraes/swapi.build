@@ -109,6 +109,66 @@
   margin: 0;
 }
 
+/* Record page (2.12.0, templates/ssr/record.html). Everything wide scrolls in
+   its own container or wraps: the table in .sw-table-wrap, the samples and the
+   JSON in .sw-code, the related lists wrap, the crawl keeps its breaks. */
+.record-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.record-subtitle {
+  font-family: var(--sw-font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sw-text-dim);
+  margin: 0.5rem 0 0;
+}
+
+.record-table td {
+  overflow-wrap: anywhere;
+}
+
+.record-crawl {
+  white-space: pre-line;
+  color: var(--sw-text-sub);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.record-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.record-links li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.record-links a {
+  color: var(--sw-cyan);
+}
+
+.record-links a:hover {
+  color: var(--sw-gold);
+}
+
+.record-links span {
+  color: var(--sw-text-dim);
+}
+
+.detail-view > * {
+  min-width: 0;
+}
+
 /* JSON result panel (random pick, detail view) */
 .result-header {
   display: flex;

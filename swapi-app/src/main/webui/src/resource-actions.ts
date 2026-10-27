@@ -1,6 +1,7 @@
 import { ApiError, fetchResources, searchResource, fetchResourceById, fetchRandom } from './api';
 import { getResourceMeta, RESOURCES } from './constants';
-import { renderResourceList, renderResourceDetail } from './pages/resource';
+import { renderResourceList, renderResourceDetail, bindRecord, recordText } from './pages/resource';
+import { fetchServerMain, forgetServerMain, showLoadFailure, swapServerMain } from './server-main';
 
 export const RESOURCE_NAMES = RESOURCES.map((resource) => resource.key.toUpperCase());
 export type ResourceTool = 'sw_list' | 'sw_search' | 'sw_get' | 'sw_random';
@@ -138,59 +139,56 @@ export class ResourceExplorer {
     this.container.setAttribute('aria-busy', 'true');
     this.container.querySelector('[data-resource-error]')?.remove();
     try {
-      let data: Entity | Entity[];
-      let id: number | undefined;
-      let status: number;
       if (tool === 'sw_get' || tool === 'sw_random') {
-        const response =
+        // sw_random asks the API which record (one request to /api); then both
+        // take the document of the record, which the server drew (2.12.0).
+        const wanted =
           tool === 'sw_get'
-            ? await fetchResourceById(type, String(args.id), controller.signal)
-            : await fetchRandom(type, controller.signal);
-        data = validateEntity(response.data, type);
-        id = entityId(data, type);
-        if (tool === 'sw_get' && id !== args.id) throw new SyntaxError('Unexpected resource ID');
-        status = response.status;
-      } else {
-        const response =
-          tool === 'sw_search'
-            ? await searchResource(type, args.query!, controller.signal)
-            : await fetchResources(type, controller.signal);
-        if (!Array.isArray(response.data)) throw new SyntaxError('Invalid resource list');
-        data = response.data.map((entity) => validateEntity(entity, type));
-        status = response.status;
+            ? args.id!
+            : entityId(
+                validateEntity((await fetchRandom(type, controller.signal)).data, type),
+                type,
+              );
+        return await this.openRecord(args.resource, type, wanted, controller, generation);
       }
+      const response =
+        tool === 'sw_search'
+          ? await searchResource(type, args.query!, controller.signal)
+          : await fetchResources(type, controller.signal);
+      if (!Array.isArray(response.data)) throw new SyntaxError('Invalid resource list');
+      const data = response.data.map((entity) => validateEntity(entity, type));
       controller.signal.throwIfAborted();
       if (generation !== this.generation)
         return failure('SUPERSEDED', 'The user changed the page.');
-      const path = `/resource/${type}${id === undefined ? '' : `/${id}`}`;
-      this.commit(path, Array.isArray(data) ? undefined : data);
-      if (Array.isArray(data)) {
-        renderResourceList(
-          this.container,
-          type,
-          data,
-          tool === 'sw_search' ? args.query! : '',
-          (action, query) => {
-            void this.execute(
-              action,
-              { resource: args.resource, ...(action === 'sw_search' ? { query } : {}) },
-              { human: true },
-            );
-          },
-        );
-      } else {
-        renderResourceDetail(this.container, type, id!, data, status);
-      }
-      return {
-        ok: true,
-        resource: args.resource,
-        path,
+      const path = `/resource/${type}`;
+      this.commit(path);
+      renderResourceList(
+        this.container,
+        type,
         data,
-        ...(Array.isArray(data) ? { count: data.length } : { id }),
-      };
+        tool === 'sw_search' ? args.query! : '',
+        (action, query) => {
+          void this.execute(
+            action,
+            { resource: args.resource, ...(action === 'sw_search' ? { query } : {}) },
+            { human: true },
+          );
+        },
+      );
+      return { ok: true, resource: args.resource, path, data, count: data.length };
     } catch (error) {
       if (controller.signal.aborted)
         return failure(String(controller.signal.reason), 'Action cancelled or superseded.');
+      if (error instanceof RecordDocumentError && generation === this.generation) {
+        // The document of a record did not come (5xx, network, timeout): the page
+        // that was there stays, with an alert and a full load of the record.
+        showLoadFailure(this.container, error.path);
+        this.container.querySelector('.sw-load-failure')!.setAttribute('data-resource-error', '');
+        return failure(
+          error.code ?? (error.type === 'network' ? 'NETWORK_ERROR' : 'HTTP_ERROR'),
+          error.message,
+        );
+      }
       const code =
         error instanceof SyntaxError
           ? 'INVALID_RESPONSE'
@@ -221,5 +219,94 @@ export class ResourceExplorer {
         this.container.removeAttribute('aria-busy');
       }
     }
+  }
+
+  /**
+   * A record (2.12.0, slice E2): one request, the document the server drew. The
+   * record comes from its <pre>, checked like an answer of the API, before any
+   * effect; then the commit (head, history) and the swap, so `execute` resolves
+   * with the record on the page. Errors are thrown to the catch of `execute`.
+   */
+  private async openRecord(
+    resource: string,
+    type: string,
+    id: number,
+    controller: AbortController,
+    generation: number,
+  ): Promise<ActionResult> {
+    const path = `/resource/${type}/${id}`;
+    const fetched = await fetchServerMain(
+      path,
+      { page: 'resource-detail', type, id: String(id) },
+      { signal: controller.signal, isCurrent: () => generation === this.generation },
+    );
+    controller.signal.throwIfAborted();
+    if (generation !== this.generation) return failure('SUPERSEDED', 'The user changed the page.');
+    switch (fetched.result) {
+      case 'ok': {
+        let data: Entity;
+        try {
+          const text = recordText(fetched.main!);
+          if (text === null) throw new SyntaxError('Invalid resource record');
+          data = validateEntity(JSON.parse(text), type);
+          if (entityId(data, type) !== id) throw new SyntaxError('Unexpected resource ID');
+        } catch (error) {
+          // The marker matched, so fetchServerMain kept this <main>; its record
+          // did not hold. Drop it, so a new try asks again, and offer the full load.
+          forgetServerMain(path);
+          if (!(error instanceof SyntaxError)) throw error;
+          throw new RecordDocumentError(
+            'The page returned an invalid record.',
+            200,
+            'http',
+            path,
+            'INVALID_RESPONSE',
+          );
+        }
+        this.commit(path, data);
+        swapServerMain(this.container, fetched.main!);
+        bindRecord(this.container);
+        return { ok: true, resource, path, data, id };
+      }
+      case 'not-found':
+        throw new ApiError('HTTP 404: Not Found', 404, 'http');
+      case 'error':
+        throw fetched.status
+          ? new RecordDocumentError(`HTTP ${fetched.status}`, fetched.status, 'http', path)
+          : new RecordDocumentError('Network error — check your connection', 0, 'network', path);
+      case 'unavailable': {
+        // The document came without its marker on the address this tab loaded:
+        // no reload (that would loop), the minimal detail from the API instead.
+        const response = await fetchResourceById(type, String(id), controller.signal);
+        const data = validateEntity(response.data, type);
+        if (entityId(data, type) !== id) throw new SyntaxError('Unexpected resource ID');
+        controller.signal.throwIfAborted();
+        if (generation !== this.generation)
+          return failure('SUPERSEDED', 'The user changed the page.');
+        this.commit(path, data);
+        renderResourceDetail(this.container, type, id, data, response.status);
+        return { ok: true, resource, path, data, id };
+      }
+      case 'reload':
+        return failure('SUPERSEDED', 'A full page load of the record is on its way.');
+      default:
+        return failure('SUPERSEDED', 'The user changed the page.');
+    }
+  }
+}
+
+/**
+ * A record document that did not come (5xx, network) or whose record did not
+ * hold (INVALID_RESPONSE): the alert offers its full load.
+ */
+class RecordDocumentError extends ApiError {
+  constructor(
+    message: string,
+    status: number,
+    type: 'network' | 'http',
+    readonly path: string,
+    readonly code?: 'INVALID_RESPONSE',
+  ) {
+    super(message, status, type);
   }
 }

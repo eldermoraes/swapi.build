@@ -98,16 +98,20 @@ class ServerRenderedPagesTest {
         assertTrue(main.contains("Paul Hallett"), main);
     }
 
-    // The host goes into the <main> only on /docs/mcp, always as escaped text.
+    // The host goes into the <main> only on /docs/mcp (and, since 2.12.0, on the
+    // record addresses, ServerRenderedRecordTest). Changes on purpose in 2.12.0
+    // (review): until then a host such as "a&b.example" went in escaped; now it
+    // is not a host (PublicSiteUrlResolver), so it never goes in, escaped or not,
+    // and the request's own host is used (HostileForwardedHostTest).
     @Test
-    void theHostIsEscaped() {
+    void aHostWithAnAmpersandNeverReachesTheMain() {
         String body = given().accept("text/html")
                 .header("X-Forwarded-Proto", "https")
                 .header("X-Forwarded-Host", "a&b.example")
                 .when().get("/docs/mcp").then().statusCode(200).extract().asString();
         String main = first(MAIN, body);
-        assertTrue(main.contains("https://a&amp;b.example/mcp"), main);
-        assertFalse(main.contains("a&b.example/mcp"), main);
+        assertTrue(main.contains("https://localhost"), main);
+        assertFalse(main.contains("b.example"), main);
     }
 
     @Test
@@ -125,8 +129,9 @@ class ServerRenderedPagesTest {
     }
 
     // Guard: the pages still drawn by the client leave with the empty <main>.
+    // /resource/films/1 left this list on purpose in 2.12.0 (ServerRenderedRecordTest).
     @ParameterizedTest
-    @ValueSource(strings = {"/docs/webmcp", "/stats", "/privacy", "/terms", "/resource/films", "/resource/films/1"})
+    @ValueSource(strings = {"/docs/webmcp", "/stats", "/privacy", "/terms", "/resource/films"})
     void theOtherPagesStayClientRendered(String path) {
         String body = given().accept("text/html").when().get(path).then().statusCode(200).extract().asString();
         assertTrue(body.contains(ServerRendering.EMPTY_MAIN), path);

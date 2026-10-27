@@ -16,6 +16,51 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.12.0] - 2026-10-27
+
+### Added
+
+- Every record address of the six types comes with its content in the HTML,
+  drawn on the server by one template of detail: a table of attributes, named
+  links to the related records, `curl`, JavaScript, Python and MCP samples on
+  the request host, and the JSON of the record, the same text as
+  `JSON.stringify` of the API answer with 2 spaces. A record added to the data
+  gets its page with no code change.
+- JSON-LD: a `BreadcrumbList` on every record address (Home, the list of its
+  type, the record).
+
+### Changed
+
+- Indexing does not change: only the films are indexable, the other types stay
+  `noindex,follow` with the canonical of their list, now with content.
+- The first load of a record address no longer calls `/api/<type>/{id}`.
+- A navigation inside the site to a record (and the WebMCP `sw_get`) makes one
+  request, the document of the record, and counts in the `pages` group of
+  `/stats` instead of `rest`; `sw_random` counts one of each (the draw on
+  `/api`, then the document).
+- The window in which the WebMCP explorer answers `BUSY` during a navigation to
+  a record is a little longer: the document is larger than the JSON.
+- "Loading resource…" is shown only for the listings. A record whose document
+  does not come (5xx, network) keeps the page that was there, with an alert
+  that offers the full load. So does a record document whose record does not
+  hold (`INVALID_RESPONSE`), which is also dropped from the client's cache.
+- Only a host name or address with an optional port (or a bracketed IPv6
+  address) is taken from `X-Forwarded-Host` for the site URLs (`/docs/mcp`,
+  `llms.txt`, the head and the record samples); anything else falls back to the
+  request's host, then `localhost`. Defence in depth: Caddy already overwrites
+  the header in production. Only `http` and `https` are taken from
+  `X-Forwarded-Proto`.
+- The name of a related record comes from a lookup built at startup, not from
+  three linear scans per link.
+
+### Fixed
+
+- The JSON colouring of the detail view dropped the line break after the last
+  string of an array or object.
+- A second click on a record link while its navigation was running, followed
+  by a failure, put the record's URL back over the page that stayed. The second
+  click is now ignored.
+
 ## [2.11.0] - 2026-10-27
 
 ### Added
@@ -740,7 +785,7 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.11.0...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.12.0...HEAD
 [2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
@@ -785,3 +830,5 @@ snapshot version is not a release. -->
 [2.10.0]: https://github.com/eldermoraes/swapi.build/compare/v2.9.1...v2.10.0
 
 [2.11.0]: https://github.com/eldermoraes/swapi.build/compare/v2.10.0...v2.11.0
+
+[2.12.0]: https://github.com/eldermoraes/swapi.build/compare/v2.11.0...v2.12.0

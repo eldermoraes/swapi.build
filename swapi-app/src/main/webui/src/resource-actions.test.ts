@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import recordMain from '../../../test/resources/ssr/record-films-1.html?raw';
 import { ResourceExplorer } from './resource-actions';
+import { resetServerMain } from './server-main';
+import { escapeHtml } from './utils';
 
 let container: HTMLElement;
 let explorer: ResourceExplorer;
@@ -9,10 +12,29 @@ const luke = {
   birth_year: '19BBY',
 };
 const leia = { name: 'Leia Organa', url: 'https://swapi.build/api/people/5', birth_year: '19BBY' };
+
+/**
+ * The document of a record address as the server sends it since 2.12.0: the
+ * <main> with the marker and the JSON of the record in its <pre>.
+ */
+function recordDocument(type: string, id: number, entity: Record<string, unknown>): Response {
+  const name = String(entity[type === 'films' ? 'title' : 'name']);
+  const main = `<main id="main-content" tabindex="-1" data-ssr-page="resource-detail" data-ssr-type="${type}" data-ssr-id="${id}">
+    <div class="detail-view"><h1 class="detail-title">${escapeHtml(name)}</h1>
+    <div class="sw-code result-panel"><pre class="result-body">${escapeHtml(JSON.stringify(entity, null, 2))}</pre></div></div></main>`;
+  return html(`<!doctype html><html><head><title>t</title></head><body>${main}</body></html>`);
+}
+
+function html(body: string, status = 200): Response {
+  return new Response(body, { status, headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
+}
+
 beforeEach(() => {
   document.body.innerHTML = '<main tabindex="-1"></main>';
   container = document.querySelector('main')!;
   explorer = new ResourceExplorer(container, (path) => history.replaceState(null, '', path));
+  // The tab loaded "/"; no full load in a test; no record kept from a case before.
+  resetServerMain({ documentPath: '/', assign: () => {} });
 });
 afterEach(() => {
   explorer.dispose();
@@ -40,34 +62,130 @@ it('lists complete records and clears an earlier search on the same route', asyn
   expect(location.pathname).toBe('/resource/people');
 });
 
-it('opens the exact randomly selected record without a second request', async () => {
-  const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(leia)));
+// Changes on purpose in 2.12.0 (slice E2): the draw of /api/<type>/random says
+// which record, then the document of that record (verify-webmcp.cjs counts one
+// request to /api). Before, the JSON of the draw was drawn by the client.
+it('opens the exact randomly selected record: one request to /api, one to its document', async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify(leia)))
+    .mockResolvedValueOnce(recordDocument('people', 5, leia));
   vi.stubGlobal('fetch', fetch);
   const result = await explorer.execute('sw_random', { resource: 'PEOPLE' });
   expect(result).toMatchObject({ ok: true, id: 5, data: leia, path: '/resource/people/5' });
   expect(container.querySelector('h1')!.textContent).toBe('Leia Organa');
-  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch.mock.calls.map((call) => String(call[0]))).toEqual([
+    '/api/people/random',
+    '/resource/people/5',
+  ]);
 });
 
-it('gets film record 1 rather than treating it as episode 1', async () => {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          title: 'A New Hope',
-          episode_id: 4,
-          url: 'https://swapi.build/api/films/1',
-        }),
-      ),
-    ),
-  );
-  expect(await explorer.execute('sw_get', { resource: 'FILMS', id: 1 })).toMatchObject({
+// 2.12.0, slice E2: a record is one request, the HTML document; the record
+// comes from its <pre>, with the validator of the API answers.
+it('gets film record 1 from its document alone, rather than treating it as episode 1', async () => {
+  const fetch = vi.fn().mockResolvedValue(html(`<!doctype html><body>${recordMain}</body>`));
+  vi.stubGlobal('fetch', fetch);
+  const result = await explorer.execute('sw_get', { resource: 'FILMS', id: 1 });
+  expect(result).toMatchObject({ ok: true, id: 1, path: '/resource/films/1' });
+  expect(result.ok && (result.data as Record<string, unknown>).title).toBe('A New Hope');
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(String(fetch.mock.calls[0][0])).toBe('/resource/films/1');
+  expect(fetch.mock.calls[0][1]).toMatchObject({ headers: { Accept: 'text/html' } });
+  // execute resolves after the swap: the page is the record (verify-webmcp.cjs reads the h1).
+  expect(container.querySelector('h1')!.textContent).toBe('A New Hope');
+  expect(container.querySelector('th')?.textContent).toBe('Episode');
+  expect(container.hasAttribute('data-ssr-page')).toBe(false);
+  // The JSON is coloured and its text stays the server's.
+  const pre = container.querySelector('pre.result-body')!;
+  expect(pre.querySelector('.json-key')).not.toBeNull();
+  expect(pre.textContent).toBe(JSON.stringify(JSON.parse(pre.textContent!), null, 2));
+});
+
+it('a record whose <pre> is not the record asked for is an invalid response, nothing swapped', async () => {
+  container.textContent = 'Keep this view';
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(recordDocument('people', 1, leia)));
+  expect(await explorer.execute('sw_get', { resource: 'PEOPLE', id: 1 })).toMatchObject({
+    ok: false,
+    error: { code: 'INVALID_RESPONSE' },
+  });
+  expect(container.textContent).toContain('Keep this view');
+});
+
+// 2.12.0 review: fetchServerMain keeps a <main> whose marker matches before the
+// explorer reads its record. An invalid record must not stay in the cache (a
+// second try would get it again without asking), and the alert offers the full
+// load, as for a document that did not come.
+it('an invalid record leaves the cache and the alert offers the full load', async () => {
+  container.textContent = 'Keep this view';
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(recordDocument('people', 1, leia))
+    .mockResolvedValueOnce(recordDocument('people', 1, luke));
+  vi.stubGlobal('fetch', fetch);
+  expect(await explorer.execute('sw_get', { resource: 'PEOPLE', id: 1 })).toMatchObject({
+    ok: false,
+    error: { code: 'INVALID_RESPONSE' },
+  });
+  const alerts = container.querySelectorAll('[role="alert"]');
+  expect(alerts).toHaveLength(1);
+  expect(alerts[0].querySelector('a')?.getAttribute('href')).toBe('/resource/people/1');
+  expect(alerts[0].querySelector('a')?.getAttribute('target')).toBe('_self');
+  expect(container.textContent).toContain('Keep this view');
+
+  expect(await explorer.execute('sw_get', { resource: 'PEOPLE', id: 1 })).toMatchObject({
     ok: true,
     id: 1,
   });
-  expect(container.querySelector('h1')!.textContent).toBe('A New Hope');
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(container.querySelector('h1')!.textContent).toBe('Luke Skywalker');
 });
+
+it('a newer action during the fetch of the document: the old answer is aborted and dropped', async () => {
+  let finish!: (response: Response) => void;
+  const signals: AbortSignal[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((_url: string, init?: RequestInit) => {
+      signals.push(init!.signal!);
+      return new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+    }),
+  );
+  const commits: string[] = [];
+  const local = new ResourceExplorer(container, (path) => commits.push(path));
+  const pending = local.execute('sw_get', { resource: 'PEOPLE', id: 1 });
+  await vi.waitFor(() => expect(finish).toBeDefined());
+  local.interrupt();
+  expect(signals[0].aborted).toBe(true);
+  finish(recordDocument('people', 1, luke));
+  expect(await pending).toMatchObject({ ok: false, error: { code: 'SUPERSEDED' } });
+  expect(commits).toEqual([]);
+  expect(container.querySelector('h1')).toBeNull();
+  local.dispose();
+});
+
+it.each([
+  [503, 'HTTP_ERROR'],
+  [0, 'NETWORK_ERROR'],
+])(
+  'a document that fails (%s): the code of today, an alert with a full load, the content intact',
+  async (status, code) => {
+    container.innerHTML = '<h1>The list</h1>';
+    const fetch = vi.fn();
+    if (status === 0) fetch.mockRejectedValue(new TypeError('offline'));
+    else fetch.mockResolvedValue(html('down', Number(status)));
+    vi.stubGlobal('fetch', fetch);
+    expect(await explorer.execute('sw_get', { resource: 'PEOPLE', id: 1 })).toMatchObject({
+      ok: false,
+      error: { code },
+    });
+    expect(container.querySelector('h1')!.textContent).toBe('The list');
+    const alert = container.querySelector('[role="alert"]')!;
+    expect(alert.querySelector('a')?.getAttribute('href')).toBe('/resource/people/1');
+    expect(container.hasAttribute('aria-busy')).toBe(false);
+  },
+);
 
 it('rejects invalid tool arguments before requesting or changing the page', async () => {
   const fetch = vi.fn();
@@ -155,11 +273,12 @@ it.each(['', ' ', '<script>'])('preserves search text %j safely', async (query) 
   expect(String(fetch.mock.calls[0][0])).toBe(`/api/people?search=${encodeURIComponent(query)}`);
 });
 
+// Since 2.12.0 the request of sw_get is the document of the record (HTML).
 it.each([
   [404, 'NOT_FOUND'],
   [503, 'HTTP_ERROR'],
 ])('reports HTTP %s as %s', async (status, code) => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: Number(status) })));
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(html('', Number(status))));
   expect(await explorer.execute('sw_get', { resource: 'PEOPLE', id: 99 })).toMatchObject({
     ok: false,
     error: { code },
@@ -237,8 +356,9 @@ it('commits the path with the record for a detail and without it for a list', as
     'fetch',
     vi
       .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify(luke)))
+      .mockResolvedValueOnce(recordDocument('people', 1, luke))
       .mockResolvedValueOnce(new Response(JSON.stringify(leia)))
+      .mockResolvedValueOnce(recordDocument('people', 5, leia))
       .mockResolvedValueOnce(new Response(JSON.stringify([luke, leia])))
       .mockResolvedValueOnce(new Response(JSON.stringify([luke]))),
   );

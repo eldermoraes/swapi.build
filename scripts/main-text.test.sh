@@ -45,6 +45,19 @@ got=$(printf '%s\n' "$doc" | main_open_tag)
   && pass "main_open_tag: the opening tag with the marker" \
   || fail "main_open_tag: got $got"
 
+# 5. main_html (2.12.0): the markup of the <main>, for the links of a record
+#    (href lives in the tags main_text drops); the footer never counts.
+doc="<main id=\"main-content\" data-ssr-page=\"resource-detail\">
+<ul><li><a href=\"/resource/people/1\">Luke</a></li></ul>
+</main><footer><a href=\"/resource/planets/1\">x</a></footer>"
+got=$(printf '%s\n' "$doc" | main_html)
+[[ "$got" == *'href="/resource/people/1"'* ]] && [[ "$got" != *'/resource/planets/1'* ]] \
+  && pass "main_html: the links of the <main>, not of the footer" \
+  || fail "main_html: got $got"
+got=$(printf '<html><body>%s</body></html>\n' "$FOOTER" | main_html)
+[ -z "$got" ] && pass "main_html without <main>: empty" \
+  || fail "main_html without <main>: expected empty, got ${#got} characters"
+
 echo
 if [ "$FAILURES" -eq 0 ]; then
   echo "main-text.test: all checks green"

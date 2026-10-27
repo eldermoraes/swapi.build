@@ -5,6 +5,7 @@ import jakarta.json.JsonArrayBuilder;
 import jakarta.json.JsonObject;
 import jakarta.json.JsonObjectBuilder;
 
+import java.util.Optional;
 import java.util.function.UnaryOperator;
 
 /**
@@ -17,8 +18,9 @@ import java.util.function.UnaryOperator;
  * Graph: WebSite (+alternateName, the home description on every document, the
  * author), Person (the author), SoftwareApplication (the site, also on a record
  * address), a Dataset on the home only (no license: the data is not Apache 2.0)
- * and a BreadcrumbList on every page but the home and on the lists. The record
- * crumbs are slice E2. The 404 has no JSON-LD (SeoRoutes.notFoundBlock).
+ * and a BreadcrumbList on every page but the home, on the lists and, since
+ * 2.12.0 (slice E2), on every record address (Home, the list, the record). The
+ * 404 has no JSON-LD (SeoRoutes.notFoundBlock).
  */
 public final class JsonLd {
 
@@ -35,9 +37,11 @@ public final class JsonLd {
      * @param url             absolute URL of a site path on the host of this request
      * @param route           the document's metadata
      * @param homeDescription the description of the home (WebSite and, on record addresses, the app)
+     * @param recordName      the name (title of a film) of the record on a record address (2.12.0),
+     *                        the last of its crumbs; empty elsewhere
      */
     static String document(SeoSiteFile site, UnaryOperator<String> url, SeoMetadata route, String canonical,
-                           String image, String homeDescription) {
+                           String image, String homeDescription, Optional<String> recordName) {
         String home = url.apply("/");
         String author = home + "#author";
         String path = route.path();
@@ -80,7 +84,13 @@ public final class JsonLd {
         } else if (listing) {
             site.resource(parts[2]).ifPresent(type -> graph.add(breadcrumbs(url,
                     new String[]{"Home", "/"}, new String[]{type.label(), path})));
-        } else if (!record) {
+        } else if (record) {
+            // Slice E2 (2.12.0): Home, the list of the type, the record, on every
+            // record address (the noindex of a type does not stop the markup).
+            site.resource(parts[2]).ifPresent(type -> recordName.ifPresent(name -> graph.add(breadcrumbs(url,
+                    new String[]{"Home", "/"}, new String[]{type.label(), "/resource/" + parts[2]},
+                    new String[]{name, path}))));
+        } else {
             site.pages().stream().filter(page -> page.path().equals(path)).findFirst().ifPresent(page -> {
                 if (path.startsWith("/docs/")) {
                     String docs = site.pages().stream().filter(p -> p.path().equals("/docs"))

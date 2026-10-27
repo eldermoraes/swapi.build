@@ -20,6 +20,10 @@ import java.util.stream.Collectors;
  *
  * The marker is {@code data-ssr-page} with the page name, from the closed set
  * of seo/site.json: nothing of the raw path, the query or a header goes in it.
+ * Since 2.12.0 (slice E2) every record address of the six types is drawn too, by
+ * the one template of detail, with {@code data-ssr-page="resource-detail"},
+ * {@code data-ssr-type} (one of the six types) and {@code data-ssr-id} (the id in
+ * the canonical form KnownEntities.exists accepts).
  *
  * Startup: a page marked ssr without a renderer stops the app with its name.
  * Request: an exception in a render never takes the site down; it is logged as
@@ -87,6 +91,25 @@ public class ServerRendering {
                     + html + "</main>");
         } catch (RuntimeException e) {
             LOG.errorf(e, "Server render of page %s failed: serving the shell without content", page);
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * The whole {@code <main>} of a record address with the marker (2.12.0), or
+     * empty: the record does not exist, or the render failed (logged with the
+     * type and the id, both from closed sets once the record exists).
+     *
+     * @param apiBase  the API base of this request, for the URLs of the record
+     * @param siteRoot the site root of this request, for the MCP endpoint
+     */
+    public Optional<String> record(String type, String id, String apiBase, String siteRoot) {
+        try {
+            return pages.record(type, id, apiBase, siteRoot).map(html -> "<main id=\"main-content\" tabindex=\"-1\""
+                    + " data-ssr-page=\"resource-detail\" data-ssr-type=\"" + type + "\" data-ssr-id=\"" + id + "\">"
+                    + html + "</main>");
+        } catch (RuntimeException e) {
+            LOG.errorf(e, "Server render of record %s/%s failed: serving the shell without content", type, id);
             return Optional.empty();
         }
     }

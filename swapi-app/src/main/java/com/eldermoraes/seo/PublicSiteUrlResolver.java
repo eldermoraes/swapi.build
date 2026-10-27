@@ -6,6 +6,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.net.URI;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * The public URLs of the site, built per request (X-Forwarded-Proto and
@@ -46,10 +47,31 @@ public class PublicSiteUrlResolver {
         return withoutTrailingSlashes(root);
     }
 
+    /**
+     * A host name or IPv4 address with an optional port, or a bracketed IPv6
+     * address with an optional port. Nothing else (2.12.0, defence in depth):
+     * Caddy overwrites X-Forwarded-Host in production, but the host also goes
+     * into samples a reader copies and runs (curl, fetch, claude mcp add), so a
+     * value with a space, a quote, a ";" or a "|" never gets there.
+     */
+    private static final Pattern HOST = Pattern.compile("[A-Za-z0-9.-]+(:\\d{1,5})?|\\[[0-9A-Fa-f:.]+\\](:\\d{1,5})?");
+    private static final Pattern PROTO = Pattern.compile("https?");
+
+    /** When neither the header nor the request carries a valid host. */
+    static final String DEFAULT_HOST = "localhost";
+
     private static String requestRoot(RoutingContext rc) {
-        String proto = firstHeader(rc, "X-Forwarded-Proto").orElse(rc.request().scheme());
-        String host = firstHeader(rc, "X-Forwarded-Host").orElse(rc.request().host());
+        String proto = firstHeader(rc, "X-Forwarded-Proto").filter(p -> PROTO.matcher(p).matches())
+                .orElseGet(() -> PROTO.matcher(String.valueOf(rc.request().scheme())).matches()
+                        ? rc.request().scheme() : "http");
+        String host = firstHeader(rc, "X-Forwarded-Host").filter(PublicSiteUrlResolver::validHost)
+                .or(() -> Optional.ofNullable(rc.request().host()).filter(PublicSiteUrlResolver::validHost))
+                .orElse(DEFAULT_HOST);
         return proto + "://" + host;
+    }
+
+    static boolean validHost(String host) {
+        return HOST.matcher(host).matches();
     }
 
     private static Optional<String> firstHeader(RoutingContext rc, String name) {

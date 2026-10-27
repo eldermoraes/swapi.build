@@ -1,4 +1,5 @@
-import { highlightJson } from '../json-highlight';
+import { highlightJson, highlightJsonText } from '../json-highlight';
+import { bindCopyButtons } from '../ui/components';
 import { escapeHtml } from '../utils';
 import { getResourceMeta } from '../constants';
 import type { Entity, ResourceTool } from '../resource-actions';
@@ -50,6 +51,28 @@ export function renderResourceList(
   container.querySelector('#random-btn')!.addEventListener('click', () => action('sw_random'));
 }
 
+/**
+ * Binds a record page the server drew (2.12.0, templates/ssr/record.html): the
+ * copy buttons of the samples, and the colours of the JSON. The JSON is
+ * coloured from the text of the <pre>, never re-serialised: the text the
+ * server emitted is already JSON.stringify(record, null, 2) and stays so.
+ */
+export function bindRecord(container: HTMLElement): void {
+  bindCopyButtons(container);
+  const pre = container.querySelector<HTMLElement>('pre.result-body');
+  if (pre && !pre.querySelector('span')) pre.innerHTML = highlightJsonText(pre.textContent ?? '');
+}
+
+/** The JSON of the record the server drew, read and checked by the caller. */
+export function recordText(main: Element): string | null {
+  return main.querySelector('pre.result-body')?.textContent ?? null;
+}
+
+/**
+ * The minimal detail drawn by the client from the API (until 2.11.0 the only
+ * one). Since 2.12.0 only the degraded path: a record document that came
+ * without its marker on the address this tab loaded (no reload loop).
+ */
 export function renderResourceDetail(
   container: HTMLElement,
   type: string,
