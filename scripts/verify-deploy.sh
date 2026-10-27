@@ -681,6 +681,44 @@ fi
 resp=$(mcp_stateless resources/subscribe '"uri":"swapi://people/1"')
 printf '%s' "$resp" | grep -qF '"code":-32601' && pass "MCP stateless resources/subscribe -> -32601" \
   || fail "MCP stateless resources/subscribe" '"code":-32601' "$(printf '%s' "$resp" | head -c 160)"
+# The branch only the filter has: a session of the 2025-11-25 era, where the
+# listen comes with the method only in the body (no Mcp-Method) and a
+# subscribe would leave a subscriber in the extension.
+SESSION_ERA_SID=$("${CURL[@]}" -D - -o /dev/null -X POST "$BASE/mcp" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"verify-deploy","version":"1.0"}}}' \
+  | tr -d '\r' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
+mcp_session() {
+  curl -s --max-time "${2:-90}" -X POST "$BASE/mcp" \
+    -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+    -H "Mcp-Session-Id: $SESSION_ERA_SID" -H 'MCP-Protocol-Version: 2025-11-25' -d "$1"
+}
+if [ -z "$SESSION_ERA_SID" ]; then
+  fail "MCP session listen and subscribe" "session id issued on initialize 2025-11-25" \
+    "none (guard: probes NOT executed)"
+else
+  resp=$(mcp_session '{"jsonrpc":"2.0","id":42,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true}}}' 5); rc=$?
+  if [ "$rc" = "0" ] && printf '%s' "$resp" | grep -qF '"code":-32601' \
+     && printf '%s' "$resp" | grep -qF '"id":42'; then
+    pass "MCP session listen, method only in the body: -32601 at once"
+  else
+    fail "MCP session listen (no Mcp-Method)" "curl ends within 5 s, -32601 with id 42" \
+      "curl exit $rc, $(printf '%s' "$resp" | head -c 160)"
+  fi
+  resp=$(mcp_session '{"jsonrpc":"2.0","id":43,"method":"resources/subscribe","params":{"uri":"swapi://people/1"}}' 5); rc=$?
+  if [ "$rc" = "0" ] && printf '%s' "$resp" | grep -qF '"code":-32002' \
+     && printf '%s' "$resp" | grep -qF 'swapi://people/1'; then
+    pass "MCP session resources/subscribe -> -32002, nothing recorded"
+  else
+    fail "MCP session resources/subscribe" "-32002 citing swapi://people/1 within 5 s" \
+      "curl exit $rc, $(printf '%s' "$resp" | head -c 160)"
+  fi
+fi
+# 2.12.1: the body limit is 256K (it was the Quarkus default, 10240K).
+code=$(head -c 300000 /dev/zero | tr '\0' 'y' | curl -s --max-time 20 -o /dev/null -w '%{http_code}' \
+  -X POST "$BASE/mcp" -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' --data-binary @-)
+[ "$code" = "413" ] && pass "MCP body over 256K -> 413" || fail "MCP body over 256K" "413" "$code"
 # The state of 2.12.1 (no resources yet); 2.13.0 turns these two around.
 resp=$(mcp_stateless resources/list '')
 if printf '%s' "$resp" | grep -qF '"resources":[]' && printf '%s' "$resp" | grep -qF '"jsonrpc":"2.0"'; then

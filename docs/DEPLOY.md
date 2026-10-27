@@ -196,7 +196,11 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
 - **MCP listen, subscribe and extension 2.0.3 (2.12.1+)**: a stateless
   `subscriptions/listen` under `curl --max-time 5` ends on its own with
   `-32601` citing `subscriptions/listen` (up to 2.12.0 it stayed open with no
-  limit); a stateless `resources/subscribe` answers `-32601`; `resources/list`
+  limit); a session listen with the method only in the body (no `Mcp-Method`)
+  ends the same way (the body `method` wins over the header; neither opens a
+  stream); a `resources/subscribe` with `Mcp-Session-Id` answers `-32002`
+  without recording a subscriber; a stateless `resources/subscribe` answers
+  `-32601`; a body over 256K is `413`; `resources/list`
   is `"resources":[]` and `resources/read swapi://films` is `-32602` citing the
   URI (the state before 2.13.0, which turns these two around);
   `server/discover` carries `io.modelcontextprotocol/serverInfo` with

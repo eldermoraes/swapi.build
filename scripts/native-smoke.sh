@@ -15,7 +15,9 @@
 # main_text the deploy probes use). Since 2.12.1, MCP too (mcp_probe): tools/list
 # with the four tools, sw_get PEOPLE 1, subscriptions/listen answered within 5 s
 # with -32601 (McpTransportFilter reads the body: a path new to the native
-# image) and an empty resources/list. Content only: without Caddy in front,
+# image), an empty resources/list and, in a 2025-11-25 session, the listen
+# with the method only in the body and a resources/subscribe (-32002), each
+# within 5 s. Content only: without Caddy in front,
 # the poisoning checks belong to verify-deploy.sh. Also run against the jar and
 # the local native build in the release rehearsal (docs/RELEASE.md).
 set -u
@@ -107,6 +109,37 @@ mcp_probe "MCP sw_get PEOPLE 1: Luke Skywalker" tools/call \
 mcp_probe "MCP subscriptions/listen answered within 5 s: -32601" subscriptions/listen \
   '"notifications":{"toolsListChanged":true}' '' 5 listen_refused 'curl ends, -32601 citing subscriptions/listen'
 mcp_probe "MCP resources/list: empty" resources/list '' '' 20 no_resources '"resources":[]'
+
+# The branch only the filter has: a 2025-11-25 session, the listen with the
+# method only in the body (no Mcp-Method) and a subscribe that the extension
+# would record. Each curl has a time limit, so a stream left open is a FAIL.
+sid=$("${CURL[@]}" -D - -o /dev/null -X POST "$BASE/mcp" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"native-smoke","version":"1.0"}}}' \
+  | tr -d '\r' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
+session_probe() {
+  local label="$1" body="$2" check="$3" expected="$4" resp rc
+  resp=$(curl -s --max-time 5 -X POST "$BASE/mcp" \
+    -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+    -H "Mcp-Session-Id: $sid" -H 'MCP-Protocol-Version: 2025-11-25' -d "$body")
+  rc=$?
+  if [ "$rc" = "0" ] && printf '%s' "$resp" | "$check"; then
+    pass "$label"
+  else
+    fail "$label" "$expected" "curl exit $rc, $(printf '%s' "$resp" | head -c 160)"
+  fi
+}
+not_found() { local b; b=$(cat); printf '%s' "$b" | grep -qF '"code":-32002' && printf '%s' "$b" | grep -qF 'swapi://people/1'; }
+if [ -z "$sid" ]; then
+  fail "MCP session probes" "a session id on initialize 2025-11-25" "none (probes NOT executed)"
+else
+  session_probe "MCP session listen, method only in the body: -32601 within 5 s" \
+    '{"jsonrpc":"2.0","id":42,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true}}}' \
+    listen_refused 'curl ends, -32601 citing subscriptions/listen'
+  session_probe "MCP session resources/subscribe: -32002 within 5 s" \
+    '{"jsonrpc":"2.0","id":43,"method":"resources/subscribe","params":{"uri":"swapi://people/1"}}' \
+    not_found '-32002 citing swapi://people/1'
+fi
 
 echo
 if [ "$FAILURES" -eq 0 ]; then
