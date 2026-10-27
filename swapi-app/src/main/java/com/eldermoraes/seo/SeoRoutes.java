@@ -44,7 +44,9 @@ public class SeoRoutes {
      * <li>the backend (/api, /mcp, /openapi.json): passed on;</li>
      * <li>a page that exists, asked with a trailing slash: 301 to the bare path
      * (2.10.0), relative, with the query string;</li>
-     * <li>a page that exists: 200 with its document;</li>
+     * <li>a page that exists: 200 with its document, which carries the {@code <main>}
+     * drawn on the server when seo/site.json marks the page ssr (2.11.0,
+     * ServerRendering);</li>
      * <li>anything else under /resource/, even with a dot: 404 with the document;</li>
      * <li>a file candidate (a dot in the last segment, or /assets/, /.well-known/,
      * /@, /q/): passed on to the static handler, or to the framework 404, which
@@ -177,10 +179,12 @@ public class SeoRoutes {
     }
 
     /**
-     * llmstxt.org file for agents. It carries the essentials itself (how to
-     * connect, the list format, the id trap) because /docs and /docs/mcp render
-     * only with JavaScript. Only {base} is replaced, with the root of this
-     * request; {resource}, {id} and {text} are literal URL parameters.
+     * llmstxt.org file for agents. Since 2.11.0 /docs and /docs/mcp come with
+     * their content in the HTML (ServerRendering), and the file still carries the
+     * essentials itself (how to connect, the list format, the id trap): an agent
+     * that reads only this file gets them in one short request, without parsing a
+     * page. Only {base} is replaced, with the root of this request; {resource},
+     * {id} and {text} are literal URL parameters.
      */
     private static final String LLMS_TXT = """
             # swapi.build
@@ -203,8 +207,8 @@ public class SeoRoutes {
             ## Docs
 
             - [OpenAPI contract]({base}/openapi.json): machine-readable, always matches the deployed version
-            - [REST documentation]({base}/docs): endpoints with live examples (needs JavaScript)
-            - [MCP server guide]({base}/docs/mcp): setup for Claude Code, Claude Desktop, OpenAI Codex, GitHub Copilot and IBM Bob (needs JavaScript)
+            - [REST documentation]({base}/docs): endpoints with live examples
+            - [MCP server guide]({base}/docs/mcp): setup for Claude Code, Claude Desktop, OpenAI Codex, GitHub Copilot and IBM Bob
             - [WebMCP guide]({base}/docs/webmcp): experimental browser tools
 
             ## Examples
@@ -289,6 +293,8 @@ public class SeoRoutes {
                 .end(body);
     }
 
+    // The head block and the beacon. The <main> of an ssr page goes in after this
+    // (document()), so the head cleanup never reaches the content.
     private String inject(String html, String block) {
         String cleaned = EXISTING_SEO_TAG.matcher(html).replaceAll("");
         String withSeo = cleaned.replaceFirst("(?i)</head>", Matcher.quoteReplacement(block + "\n  </head>"));
@@ -335,24 +341,10 @@ public class SeoRoutes {
                 + "    <meta name=\"swapi:status\" content=\"404\" />";
     }
 
+    // JsonLd (2.11.0): JSON-P and the script escape; the graph per document is described there.
     private String jsonLd(RoutingContext rc, SeoMetadata route, String canonical, String image) {
-        String home = urls.absoluteUrl(rc, "/");
-        String docs = urls.absoluteUrl(rc, "/docs");
-        String mcp = urls.absoluteUrl(rc, "/docs/mcp");
-        String repo = "https://github.com/eldermoraes/swapi.build";
-        String license = "https://www.apache.org/licenses/LICENSE-2.0";
-        // On a record address the SoftwareApplication is still the site, never the
-        // record (2.10.0): "A New Hope, Star Wars Episode 4" as the description of
-        // an application would be misleading markup. Dataset is slice E.
-        boolean record = isRecordAddress(route.path());
-        String appUrl = record ? home : canonical;
-        String appDescription = record ? metadata.home().description() : route.description();
-        return "{"
-                + "\"@context\":\"https://schema.org\","
-                + "\"@graph\":["
-                + "{\"@type\":\"WebSite\",\"name\":\"swapi.build\",\"url\":\"" + json(home) + "\",\"description\":\"" + json(route.description()) + "\",\"image\":\"" + json(image) + "\"},"
-                + "{\"@type\":\"SoftwareApplication\",\"name\":\"swapi.build\",\"applicationCategory\":\"DeveloperApplication\",\"operatingSystem\":\"Any\",\"url\":\"" + json(appUrl) + "\",\"description\":\"" + json(appDescription) + "\",\"image\":\"" + json(image) + "\",\"license\":\"" + license + "\",\"sameAs\":[\"" + repo + "\",\"" + json(docs) + "\",\"" + json(mcp) + "\"]}"
-                + "]}";
+        return JsonLd.document(metadata.site(), path -> urls.absoluteUrl(rc, path), route, canonical, image,
+                metadata.home().description());
     }
 
     /** The page name of a fixed page of seo/site.json; empty for lists and record addresses. */
@@ -361,11 +353,6 @@ public class SeoRoutes {
                 .filter(page -> page.path().equals(path))
                 .map(SeoSiteFile.Page::page)
                 .findFirst();
-    }
-
-    private static boolean isRecordAddress(String path) {
-        String[] parts = path.split("/");
-        return parts.length == 4 && "resource".equals(parts[1]);
     }
 
     private static boolean isBackend(String path) {
@@ -446,13 +433,5 @@ public class SeoRoutes {
 
     private static String xml(String value) {
         return html(value).replace("'", "&apos;");
-    }
-
-    private static String json(String value) {
-        return value.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("</", "<\\/");
     }
 }
