@@ -169,10 +169,12 @@ class CacheHeadersTest {
     // Exact required value, locked down here: in production code it exists exactly
     // once, in the swapi.cache-control.html property. It is NOT the /api value on
     // purpose: the browser must never keep HTML (max-age=0 + must-revalidate), or a
-    // deploy leaves a stale index.html pointing at asset hashes that no longer exist;
-    // only the edge keeps it (s-maxage), and the edge key includes the deployment.
+    // deploy leaves a stale index.html pointing at asset hashes that no longer exist.
+    // A shared cache may keep it for 5 minutes only (s-maxage=300, 2.9.1): nothing in
+    // front of the origin is invalidated by a deploy, so a long s-maxage would serve
+    // HTML pointing at assets the new binary no longer has.
     private static final String HTML_CACHE_CONTROL =
-            "public, max-age=0, must-revalidate, s-maxage=31536000";
+            "public, max-age=0, must-revalidate, s-maxage=300";
 
     // Every route in getRoute() (main.ts) / PUBLIC_SEO_ROUTES (seo.ts). A new SPA route
     // must be added here AND to quarkus.http.filter.spa.matches, or it only loses cache.
