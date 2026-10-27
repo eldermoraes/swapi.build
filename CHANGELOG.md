@@ -16,6 +16,35 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-10-27
+
+### Added
+
+- The six film addresses (`/resource/films/1` to `/6`) are indexable: each has
+  its own title ("A New Hope — Star Wars film JSON | swapi.build"), a
+  description with the episode, the director and the release date,
+  `index,follow`, its own canonical, and an entry in `sitemap.xml` (20 URLs,
+  without `lastmod`). The other types follow one per release. Every record has
+  a title with its name ("Luke Skywalker — Star Wars character JSON |
+  swapi.build"); the types not yet released stay `noindex,follow` with the
+  canonical of their list. A new record of a released type is indexable with
+  no code change.
+- Every response of `/api` and `/api/*` carries `X-Robots-Tag: noindex`: the
+  page ranks, the JSON does not. Cache, CORS and MCP do not change, and the
+  header never reaches the HTML, `robots.txt`, `sitemap.xml`, `llms.txt` or the
+  assets.
+
+### Changed
+
+- The metadata of every page comes from one file, `seo/site.json`, read by the
+  server and by the site; the app does not start if it is invalid or missing.
+  The site no longer rewrites the head on the first load, and on a navigation
+  to a record it writes the head once, after the record arrives, already with
+  its name.
+- Pages with a trailing slash redirect (301) to the address without it
+  (`/docs/` → `/docs`), query kept. A visit like that counts twice in
+  `/stats` (the 301 and the page it leads to).
+
 ## [2.9.1] - 2026-10-27
 
 ### Fixed
@@ -668,7 +697,7 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.9.1...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.10.0...HEAD
 [2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
@@ -709,3 +738,5 @@ snapshot version is not a release. -->
 [2.9.0]: https://github.com/eldermoraes/swapi.build/compare/v2.8.2...v2.9.0
 
 [2.9.1]: https://github.com/eldermoraes/swapi.build/compare/v2.9.0...v2.9.1
+
+[2.10.0]: https://github.com/eldermoraes/swapi.build/compare/v2.9.1...v2.10.0

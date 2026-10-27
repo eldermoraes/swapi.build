@@ -1,4 +1,5 @@
 import { RESOURCES } from './constants';
+import { site } from './site';
 
 export type Page =
   | 'home'
@@ -22,22 +23,35 @@ export interface Route {
 /** A record id in its only accepted form: no leading zero, at most 9 digits (KnownEntities.java). */
 export const CANONICAL_ID = /^[1-9]\d{0,8}$/;
 
-const PAGES: Record<string, Page> = {
-  '/': 'home',
-  '/docs': 'docs',
-  '/docs/mcp': 'mcp',
-  '/docs/webmcp': 'webmcp',
-  '/about': 'about',
-  '/privacy': 'privacy',
-  '/terms': 'terms',
-  '/stats': 'stats',
-};
+/** The pages a site.json entry may name; the rest of Page is not a fixed path. */
+const FIXED_PAGES: readonly Page[] = [
+  'home',
+  'docs',
+  'mcp',
+  'webmcp',
+  'about',
+  'privacy',
+  'terms',
+  'stats',
+];
+
+function isFixedPage(page: string): page is Page {
+  return (FIXED_PAGES as readonly string[]).includes(page);
+}
+
+/** The fixed pages, from seo/site.json, the same file the server reads (2.10.0). */
+const PAGES: Record<string, Page> = Object.fromEntries(
+  site.pages.map(({ path, page }) => {
+    if (!isFixedPage(page)) throw new Error(`seo/site.json: ${path}: unknown page "${page}"`);
+    return [path, page];
+  }),
+);
 
 /**
  * The page for a location.pathname. Exact, like SeoRoutes on the server, which
- * answers 404 to everything this calls not-found (until the single route file of
- * slice D, the two are kept in step by hand; seo-parity.test.ts checks this side).
- * A trailing slash is accepted, as on the server.
+ * answers 404 to everything this calls not-found; both read the fixed pages from
+ * seo/site.json. A trailing slash is accepted here: since 2.10.0 the server
+ * answers it with a 301 to the bare path, and the client reads both the same way.
  */
 export function getRoute(pathname: string): Route {
   const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;

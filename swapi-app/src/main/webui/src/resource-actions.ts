@@ -88,7 +88,8 @@ export class ResourceExplorer {
 
   constructor(
     private container: HTMLElement,
-    private commit: (path: string) => void,
+    /** Makes `path` the page; `entity` is the record of a detail, undefined for a list. */
+    private commit: (path: string, entity?: Entity) => void,
     private onHumanAction: () => void = () => {},
   ) {
     container.addEventListener('input', this.onInteraction);
@@ -162,7 +163,7 @@ export class ResourceExplorer {
       if (generation !== this.generation)
         return failure('SUPERSEDED', 'The user changed the page.');
       const path = `/resource/${type}${id === undefined ? '' : `/${id}`}`;
-      this.commit(path);
+      this.commit(path, Array.isArray(data) ? undefined : data);
       if (Array.isArray(data)) {
         renderResourceList(
           this.container,

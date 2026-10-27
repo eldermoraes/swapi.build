@@ -88,6 +88,11 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
 - **Successful GETs return HTTP 200; nonexistent ids return 404.** This holds for
   the site pages too: an unknown page or entity answers 404 (`SeoRoutes`), and
   Quinoa's SPA routing stays off.
+- **Page metadata has one source**: `swapi-app/src/main/resources/seo/site.json`,
+  read by `SeoMetadataRegistry` and by `seo.ts`/`routes.ts`; the client never
+  rewrites the head on the first load. Record addresses become indexable one type
+  per release (`indexable` in that file), each gated on Search Console coverage;
+  `/api/*` answers `X-Robots-Tag: noindex`, never the HTML.
 - **Container tooling is `podman`** (`/opt/podman/bin`), not `docker`. The podman
   machine needs 8 GB for local native builds.
 - **MCP serves stateful and stateless clients on the same `/mcp` endpoint.**

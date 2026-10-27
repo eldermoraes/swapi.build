@@ -19,10 +19,11 @@ describe('first load of a page the server answered with 404', () => {
     vi.restoreAllMocks();
   });
 
-  // The server sent "Page not found" with the swapi:status marker. The client must
-  // not rewrite the head with "People #9999" and the canonical of the list before
-  // a fetch fails: the route is resolved first, and the head is applied once.
-  it('applies the not-found metadata once, announces it and does not call the API', async () => {
+  // The server sent "Page not found" with the swapi:status marker. Since 2.10.0
+  // the client never rewrites the head on the first load (the server's head is
+  // the truth): no "People #9999", no canonical of the list, not even the same
+  // not-found head written again. It announces the title the server sent.
+  it('leaves the head alone, announces it and does not call the API', async () => {
     document.head.innerHTML = `
       <title>Page not found | swapi.build</title>
       <meta name="robots" content="noindex" />
@@ -38,10 +39,7 @@ describe('first load of a page the server answered with 404', () => {
     await import('./main');
     await nextFrames();
 
-    expect(seo.apply).toHaveBeenCalledTimes(1);
-    expect(seo.apply).toHaveBeenCalledWith('/resource/people/9999', window.location.origin, {
-      notFound: true,
-    });
+    expect(seo.apply).not.toHaveBeenCalled();
     expect(document.title).toBe('Page not found | swapi.build');
     expect(document.querySelector('meta[name="swapi:status"]')).toBeNull();
     expect(document.querySelector('[aria-live="polite"].sr-only')?.textContent).toBe(

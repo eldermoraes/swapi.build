@@ -176,11 +176,12 @@ class CacheHeadersTest {
     private static final String HTML_CACHE_CONTROL =
             "public, max-age=0, must-revalidate, s-maxage=300";
 
-    // Every route in getRoute() (main.ts) / PUBLIC_SEO_ROUTES (seo.ts). A new SPA route
-    // must be added here AND to quarkus.http.filter.spa.matches, or it only loses cache.
+    // Every page of seo/site.json, a list, a record and an indexable record (2.10.0).
+    // A new page must match quarkus.http.filter.spa.matches (SeoSiteFileTest checks
+    // every page of the file), or it only loses cache.
     private static final List<String> SPA_ROUTES = List.of(
             "/", "/docs", "/docs/mcp", "/docs/webmcp", "/about", "/privacy", "/terms", "/stats",
-            "/resource/planets", "/resource/people/1");
+            "/resource/planets", "/resource/people/1", "/resource/films/1");
 
     @Test
     void spaHtmlRoutesAreCacheableAtTheEdgeButNeverInTheBrowser() {

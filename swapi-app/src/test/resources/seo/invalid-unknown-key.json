@@ -1,0 +1,190 @@
+{
+  "brandSuffix": " | swapi.build",
+  "notFound": {
+    "title": "Page not found | swapi.build",
+    "description": "This page does not exist on swapi.build. Browse the Star Wars API, its docs or the MCP server instead."
+  },
+  "pages": [
+    {
+      "path": "/",
+      "page": "home",
+      "title": "SWAPI alternative: free Star Wars API and MCP server | swapi.build",
+      "description": "Free SWAPI alternative: Star Wars REST JSON API and remote MCP server with people, films, planets, species, starships and vehicles (Episodes I–VI). No API key.",
+      "changefreq": "weekly",
+      "priority": "1.0"
+    },
+    {
+      "path": "/docs",
+      "page": "docs",
+      "title": "SWAPI docs: Star Wars REST API endpoints and OpenAPI | swapi.build",
+      "description": "Star Wars API reference for swapi.build: REST endpoints, JSON response schemas and live examples, generated from the OpenAPI contract.",
+      "changefreq": "weekly",
+      "lastmod": "2026-10-27",
+      "priority": "0.9"
+    },
+    {
+      "path": "/docs/mcp",
+      "page": "mcp",
+      "title": "Star Wars MCP server: remote, no API key | swapi.build",
+      "description": "Add the Star Wars MCP server to Claude, OpenAI Codex, GitHub Copilot or IBM Bob in one step. Remote Streamable HTTP at /mcp, read-only, no API key.",
+      "changefreq": "weekly",
+      "priority": "0.8"
+    },
+    {
+      "path": "/docs/webmcp",
+      "page": "webmcp",
+      "title": "Star Wars WebMCP tools in the browser | swapi.build",
+      "description": "Explore Star Wars together with a browser agent using experimental WebMCP tools.",
+      "changefreq": "weekly",
+      "priority": "0.8"
+    },
+    {
+      "path": "/about",
+      "page": "about",
+      "title": "About: a SWAPI alternative built with Quarkus | swapi.build",
+      "description": "Learn why swapi.build exists, how it is built with Quarkus and GraalVM, and how to contribute.",
+      "changefreq": "monthly",
+      "priority": "0.7"
+    },
+    {
+      "path": "/stats",
+      "page": "stats",
+      "title": "Usage stats | swapi.build",
+      "description": "Anonymous request counts for the swapi.build REST API, MCP server and site, per route and per group, for the last 24 hours, 7 days or 30 days.",
+      "changefreq": "daily",
+      "priority": "0.4"
+    },
+    {
+      "path": "/privacy",
+      "page": "privacy",
+      "title": "Privacy Policy | swapi.build",
+      "description": "Plain-language privacy policy for swapi.build, the free public Star Wars API and MCP server.",
+      "changefreq": "yearly",
+      "priority": "0.3"
+    },
+    {
+      "path": "/terms",
+      "page": "terms",
+      "title": "Terms of Use | swapi.build",
+      "description": "Terms of use for swapi.build, the free public Star Wars API and MCP server.",
+      "changefreq": "yearly",
+      "priority": "0.3"
+    }
+  ],
+  "resources": [
+    {
+      "type": "people",
+      "list": {
+        "title": "Star Wars People API: JSON data | swapi.build",
+        "description": "Browse Star Wars people records as JSON from the free swapi.build REST API and MCP server.",
+        "changefreq": "weekly",
+        "priority": "0.7"
+      },
+      "detail": {
+        "indexable": false,
+        "fields": ["name"],
+        "title": "{name} — Star Wars character JSON | swapi.build",
+        "description": "Star Wars people record #{id} from the swapi.build REST API.",
+        "fallbackTitle": "People #{id} | swapi.build",
+        "fallbackDescription": "Star Wars people record #{id} from the swapi.build REST API.",
+        "changefreq": "yearly",
+        "priority": "0.6"
+      }
+    },
+    {
+      "type": "films",
+      "list": {
+        "title": "Star Wars Films API: JSON data | swapi.build",
+        "description": "Browse Star Wars film records as JSON from the free swapi.build REST API and MCP server.",
+        "changefreq": "weekly",
+        "priority": "0.7"
+      },
+      "detail": {
+        "indexable": true,
+        "fields": ["title", "episode_id", "director", "release_date"],
+        "title": "{title} — Star Wars film JSON | swapi.build",
+        "description": "{title}, Star Wars Episode {episode_id}, directed by {director} and released {release_date}. Its JSON record from the free swapi.build REST API and MCP server.",
+        "fallbackTitle": "Films #{id} | swapi.build",
+        "fallbackDescription": "Star Wars film record #{id} from the swapi.build REST API.",
+        "changefreq": "yearly",
+        "priority": "0.6"
+      }
+    },
+    {
+      "type": "planets",
+      "list": {
+        "title": "Star Wars Planets API: JSON data | swapi.build",
+        "description": "Browse Star Wars planet records as JSON from the free swapi.build REST API and MCP server.",
+        "changefreq": "weekly",
+        "priority": "0.7"
+      },
+      "detail": {
+        "indexable": false,
+        "fields": ["name"],
+        "title": "{name} — Star Wars planet JSON | swapi.build",
+        "description": "Star Wars planet record #{id} from the swapi.build REST API.",
+        "fallbackTitle": "Planets #{id} | swapi.build",
+        "fallbackDescription": "Star Wars planet record #{id} from the swapi.build REST API.",
+        "changefreq": "yearly",
+        "priority": "0.6"
+      }
+    },
+    {
+      "type": "species",
+      "list": {
+        "title": "Star Wars Species API: JSON data | swapi.build",
+        "description": "Browse Star Wars species records as JSON from the free swapi.build REST API and MCP server.",
+        "changefreq": "weekly",
+        "priority": "0.7"
+      },
+      "detail": {
+        "indexable": false,
+        "fields": ["name"],
+        "title": "{name} — Star Wars species JSON | swapi.build",
+        "description": "Star Wars species record #{id} from the swapi.build REST API.",
+        "fallbackTitle": "Species #{id} | swapi.build",
+        "fallbackDescription": "Star Wars species record #{id} from the swapi.build REST API.",
+        "changefreq": "yearly",
+        "priority": "0.6"
+      }
+    },
+    {
+      "type": "starships",
+      "list": {
+        "title": "Star Wars Starships API: JSON data | swapi.build",
+        "description": "Browse Star Wars starship records as JSON from the free swapi.build REST API and MCP server.",
+        "changefreq": "weekly",
+        "priority": "0.7"
+      },
+      "detail": {
+        "indexable": false,
+        "fields": ["name"],
+        "title": "{name} — Star Wars starship JSON | swapi.build",
+        "description": "Star Wars starship record #{id} from the swapi.build REST API.",
+        "fallbackTitle": "Starships #{id} | swapi.build",
+        "fallbackDescription": "Star Wars starship record #{id} from the swapi.build REST API.",
+        "changefreq": "yearly",
+        "priority": "0.6"
+      }
+    },
+    {
+      "type": "vehicles",
+      "list": {
+        "title": "Star Wars Vehicles API: JSON data | swapi.build",
+        "description": "Browse Star Wars vehicle records as JSON from the free swapi.build REST API and MCP server.",
+        "changefreq": "weekly",
+        "priority": "0.7"
+      },
+      "detail": {
+        "indexable": false,
+        "fields": ["name"],
+        "title": "{name} — Star Wars vehicle JSON | swapi.build",
+        "description": "Star Wars vehicle record #{id} from the swapi.build REST API.",
+        "fallbackTitle": "Vehicles #{id} | swapi.build",
+        "fallbackDescription": "Star Wars vehicle record #{id} from the swapi.build REST API.",
+        "changefreq": "yearly",
+        "priority": "0.6"
+      }
+    }
+  ]
+}

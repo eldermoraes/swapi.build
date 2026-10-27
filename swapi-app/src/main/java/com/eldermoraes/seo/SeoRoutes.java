@@ -40,6 +40,8 @@ public class SeoRoutes {
      * <li>the SEO files (robots.txt, sitemap.xml, llms.txt, og-image.png);</li>
      * <li>/index.html: 301 to /, with the query string;</li>
      * <li>the backend (/api, /mcp, /openapi.json): passed on;</li>
+     * <li>a page that exists, asked with a trailing slash: 301 to the bare path
+     * (2.10.0), relative, with the query string;</li>
      * <li>a page that exists: 200 with its document;</li>
      * <li>anything else under /resource/, even with a dot: 404 with the document;</li>
      * <li>a file candidate (a dot in the last segment, or /assets/, /.well-known/,
@@ -66,7 +68,9 @@ public class SeoRoutes {
             case OG_IMAGE -> ogImage(rc);
             case "/index.html" -> redirectHome(rc);
             default -> {
-                String page = withoutTrailingSlash(rawPath(rc));
+                String raw = rawPath(rc);
+                String page = withoutTrailingSlash(raw);
+                Optional<String> bare;
                 if (isBackend(path)) {
                     // /api keeps its own 404 policy (edge-cacheable, CacheControlFilter);
                     // an unknown /mcp/... path is a framework 404 like a missing file.
@@ -74,6 +78,8 @@ public class SeoRoutes {
                         noCacheOn404(rc);
                     }
                     rc.next();
+                } else if ((bare = barePage(raw)).isPresent()) {
+                    redirect(rc, bare.get());
                 } else if (metadata.isKnownDocumentPath(page)) {
                     document(rc, page);
                 } else if (path.startsWith("/resource/")) {
@@ -94,13 +100,39 @@ public class SeoRoutes {
      * keeps the redirect for longer.
      */
     private void redirectHome(RoutingContext rc) {
+        redirect(rc, "/");
+    }
+
+    private void redirect(RoutingContext rc, String location) {
         String query = rc.request().query();
         rc.response()
                 .setStatusCode(301)
-                .putHeader(HttpHeaders.LOCATION, query == null || query.isEmpty() ? "/" : "/?" + query)
+                .putHeader(HttpHeaders.LOCATION, query == null || query.isEmpty() ? location : location + "?" + query)
                 .putHeader(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL)
                 .putHeader(HttpHeaders.VARY, "Origin")
                 .end();
+    }
+
+    /**
+     * The bare path of a page that exists, when the raw path asks for it with one
+     * or more trailing slashes (/docs/ -> /docs, one hop). Empty for anything
+     * else: an unknown path keeps its 404, and a path that only looks like a page
+     * after the slashes go (//docs) is never a Location, so no protocol-relative
+     * redirect can come out of here.
+     */
+    private Optional<String> barePage(String raw) {
+        if (raw.length() <= 1 || !raw.endsWith("/")) {
+            return Optional.empty();
+        }
+        int end = raw.length();
+        while (end > 0 && raw.charAt(end - 1) == '/') {
+            end--;
+        }
+        String bare = raw.substring(0, end);
+        if (bare.isEmpty() || !bare.startsWith("/") || bare.startsWith("//") || !metadata.isKnownDocumentPath(bare)) {
+            return Optional.empty();
+        }
+        return Optional.of(bare);
     }
 
     /**
@@ -192,6 +224,11 @@ public class SeoRoutes {
         text(rc, "text/plain; charset=utf-8", LLMS_TXT.replace("{base}", base));
     }
 
+    /**
+     * Pages, lists and the records of the indexable types (SeoMetadataRegistry).
+     * Never a lastmod: not the build date, not the deploy date. It enters only the
+     * day there is a real date of content change per address, and there is none.
+     */
     private void sitemap(RoutingContext rc) {
         StringBuilder xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
                 .append("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
@@ -294,12 +331,23 @@ public class SeoRoutes {
         String mcp = urls.absoluteUrl(rc, "/docs/mcp");
         String repo = "https://github.com/eldermoraes/swapi.build";
         String license = "https://www.apache.org/licenses/LICENSE-2.0";
+        // On a record address the SoftwareApplication is still the site, never the
+        // record (2.10.0): "A New Hope, Star Wars Episode 4" as the description of
+        // an application would be misleading markup. Dataset is slice E.
+        boolean record = isRecordAddress(route.path());
+        String appUrl = record ? home : canonical;
+        String appDescription = record ? metadata.home().description() : route.description();
         return "{"
                 + "\"@context\":\"https://schema.org\","
                 + "\"@graph\":["
                 + "{\"@type\":\"WebSite\",\"name\":\"swapi.build\",\"url\":\"" + json(home) + "\",\"description\":\"" + json(route.description()) + "\",\"image\":\"" + json(image) + "\"},"
-                + "{\"@type\":\"SoftwareApplication\",\"name\":\"swapi.build\",\"applicationCategory\":\"DeveloperApplication\",\"operatingSystem\":\"Any\",\"url\":\"" + json(canonical) + "\",\"description\":\"" + json(route.description()) + "\",\"image\":\"" + json(image) + "\",\"license\":\"" + license + "\",\"sameAs\":[\"" + repo + "\",\"" + json(docs) + "\",\"" + json(mcp) + "\"]}"
+                + "{\"@type\":\"SoftwareApplication\",\"name\":\"swapi.build\",\"applicationCategory\":\"DeveloperApplication\",\"operatingSystem\":\"Any\",\"url\":\"" + json(appUrl) + "\",\"description\":\"" + json(appDescription) + "\",\"image\":\"" + json(image) + "\",\"license\":\"" + license + "\",\"sameAs\":[\"" + repo + "\",\"" + json(docs) + "\",\"" + json(mcp) + "\"]}"
                 + "]}";
+    }
+
+    private static boolean isRecordAddress(String path) {
+        String[] parts = path.split("/");
+        return parts.length == 4 && "resource".equals(parts[1]);
     }
 
     private static boolean isBackend(String path) {

@@ -10,7 +10,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Which /resource/{type}/{id} pages exist (2.9.1). Plain JUnit: the services
@@ -56,5 +62,46 @@ class KnownEntitiesTest {
     void nullsAreNotEntities() {
         assertEquals(false, entities.exists(null, "1"));
         assertEquals(false, entities.exists("people", null));
+    }
+
+    // The fields the metadata templates of seo/site.json may use (2.10.0).
+    @Test
+    void fieldsOfAFilm() {
+        assertEquals(Optional.of(Map.of("title", "A New Hope", "episode_id", "4",
+                        "director", "George Lucas", "release_date", "1977-05-25")),
+                entities.fields("films", "1"));
+    }
+
+    @Test
+    void fieldsOfAPersonAndOfEachOtherType() {
+        assertEquals(Optional.of(Map.of("name", "Luke Skywalker")), entities.fields("people", "1"));
+        assertEquals(Optional.of(Map.of("name", "Tatooine")), entities.fields("planets", "1"));
+        assertEquals(Optional.of(Map.of("name", "Human")), entities.fields("species", "1"));
+        assertEquals(Optional.of(Map.of("name", "CR90 corvette")), entities.fields("starships", "2"));
+        assertEquals(Optional.of(Map.of("name", "Sand Crawler")), entities.fields("vehicles", "4"));
+    }
+
+    @Test
+    void noFieldsForARecordThatDoesNotExist() {
+        assertEquals(Optional.empty(), entities.fields("people", "17"));
+        assertEquals(Optional.empty(), entities.fields("people", "01"));
+        assertEquals(Optional.empty(), entities.fields("droids", "1"));
+    }
+
+    @Test
+    void idsInAscendingOrder() {
+        assertEquals(List.of(1, 2, 3, 4, 5, 6), entities.ids("films"));
+        List<Integer> people = entities.ids("people");
+        assertEquals(82, people.size());
+        assertFalse(people.contains(17));
+        assertEquals(people.stream().sorted().toList(), people);
+        assertEquals(List.of(), entities.ids("droids"));
+    }
+
+    @Test
+    void theSupportedFieldsOfEachType() {
+        assertEquals(Set.of("title", "episode_id", "director", "release_date"), KnownEntities.supportedFields("films"));
+        assertEquals(Set.of("name"), KnownEntities.supportedFields("people"));
+        assertEquals(Set.of("people", "films", "planets", "species", "starships", "vehicles"), KnownEntities.TYPES);
     }
 }

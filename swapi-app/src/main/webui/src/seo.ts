@@ -1,5 +1,5 @@
-import { getResourceMeta, RESOURCES } from './constants';
 import { CANONICAL_ID } from './routes';
+import { recordValues, renderTemplate, site } from './site';
 
 export interface SeoMetadata {
   path: string;
@@ -13,63 +13,17 @@ export interface SeoMetadata {
 /** A page that exists: it always has a canonical. */
 export type PageSeoMetadata = SeoMetadata & { canonicalPath: string };
 
-// Mirrored by hand in SeoMetadataRegistry.java until the single metadata file of
-// slice D; seo-parity.test.ts compares the two. Intent words first, the brand
-// "swapi.build" last; never "drop-in".
-const BRAND_SUFFIX = ' | swapi.build';
-const HOME_TITLE = `SWAPI alternative: free Star Wars API and MCP server${BRAND_SUFFIX}`;
-const HOME_DESCRIPTION =
-  'Free SWAPI alternative: Star Wars REST JSON API and remote MCP server with people, films, planets, species, starships and vehicles (Episodes I–VI). No API key.';
+// Every title and description comes from seo/site.json, the file the server
+// also reads (SeoMetadataRegistry.java); golden.json checks both sides. Intent
+// words first, the brand "swapi.build" last; never "drop-in".
+const BRAND_SUFFIX = site.brandSuffix;
 const OG_IMAGE_PATH = '/og-image.png';
 const OG_IMAGE_ALT = 'swapi.build — Star Wars API and MCP server in a Holonet terminal style';
-// NOT_FOUND_TITLE and NOT_FOUND_DESCRIPTION in SeoMetadataRegistry.java.
-const NOT_FOUND_TITLE = `Page not found${BRAND_SUFFIX}`;
-const NOT_FOUND_DESCRIPTION =
-  'This page does not exist on swapi.build. Browse the Star Wars API, its docs or the MCP server instead.';
 
 export const PUBLIC_SEO_ROUTES: PageSeoMetadata[] = [
-  route('/', HOME_TITLE, HOME_DESCRIPTION),
-  route(
-    '/docs',
-    `SWAPI docs: Star Wars REST API endpoints and OpenAPI${BRAND_SUFFIX}`,
-    'Star Wars API reference for swapi.build: REST endpoints, JSON response schemas and live examples, generated from the OpenAPI contract.',
-  ),
-  route(
-    '/docs/mcp',
-    `Star Wars MCP server: remote, no API key${BRAND_SUFFIX}`,
-    'Add the Star Wars MCP server to Claude, OpenAI Codex, GitHub Copilot or IBM Bob in one step. Remote Streamable HTTP at /mcp, read-only, no API key.',
-  ),
-  route(
-    '/docs/webmcp',
-    `Star Wars WebMCP tools in the browser${BRAND_SUFFIX}`,
-    'Explore Star Wars together with a browser agent using experimental WebMCP tools.',
-  ),
-  route(
-    '/about',
-    `About: a SWAPI alternative built with Quarkus${BRAND_SUFFIX}`,
-    'Learn why swapi.build exists, how it is built with Quarkus and GraalVM, and how to contribute.',
-  ),
-  ...RESOURCES.map((resource) =>
-    route(
-      `/resource/${resource.key}`,
-      `Star Wars ${resource.title} API: JSON data${BRAND_SUFFIX}`,
-      `Browse Star Wars ${recordNoun(resource.key)} records as JSON from the free swapi.build REST API and MCP server.`,
-    ),
-  ),
-  route(
-    '/stats',
-    `Usage stats${BRAND_SUFFIX}`,
-    'Anonymous request counts for the swapi.build REST API, MCP server and site, per route and per group, for the last 24 hours, 7 days or 30 days.',
-  ),
-  route(
-    '/privacy',
-    `Privacy Policy${BRAND_SUFFIX}`,
-    'Plain-language privacy policy for swapi.build, the free public Star Wars API and MCP server.',
-  ),
-  route(
-    '/terms',
-    `Terms of Use${BRAND_SUFFIX}`,
-    'Terms of use for swapi.build, the free public Star Wars API and MCP server.',
+  ...site.pages.map((page) => route(page.path, page.title, page.description)),
+  ...site.resources.map((resource) =>
+    route(`/resource/${resource.type}`, resource.list.title, resource.list.description),
   ),
 ];
 
@@ -78,12 +32,18 @@ export function spokenTitle(title: string): string {
   return title.endsWith(BRAND_SUFFIX) ? title.slice(0, -BRAND_SUFFIX.length) : title;
 }
 
-export function getSeoMetadata(rawPath: string): SeoMetadata {
+/**
+ * The metadata of a path. On a record address, `entity` is the record the API
+ * returned: its fields fill the templates of its type. Without it (or with an
+ * empty field) the fallback title and description of the type are used; robots
+ * and the canonical depend only on the type, never on the record.
+ */
+export function getSeoMetadata(rawPath: string, entity?: Record<string, unknown>): SeoMetadata {
   const path = normalizePath(rawPath);
   const known = PUBLIC_SEO_ROUTES.find((route) => route.path === path);
   if (known) return known;
 
-  const resourceDetail = resourceDetailMetadata(path);
+  const resourceDetail = resourceDetailMetadata(path, entity);
   if (resourceDetail) return resourceDetail;
 
   return notFoundMetadata(path);
@@ -94,16 +54,17 @@ export function getSeoMetadata(rawPath: string): SeoMetadata {
  * page but is a 404 (the server marked it, or the API has no such id). On a 404
  * only the title, the description and robots are written; the canonical and
  * og:url are removed and no Open Graph or Twitter Card tag is written, as on the
- * server. The next navigation to a page recreates what is missing.
+ * server. The next navigation to a page recreates what is missing. `entity` is
+ * the record of a record address (getSeoMetadata).
  */
 export function applySeoMetadata(
   rawPath: string,
   origin: string,
-  options: { notFound?: boolean } = {},
+  options: { notFound?: boolean; entity?: Record<string, unknown> } = {},
 ): SeoMetadata {
   const meta = options.notFound
     ? notFoundMetadata(normalizePath(rawPath))
-    : getSeoMetadata(rawPath);
+    : getSeoMetadata(rawPath, options.entity);
 
   document.title = meta.title;
   setMetaName('description', meta.description);
@@ -139,14 +100,6 @@ export function applySeoMetadata(
   return meta;
 }
 
-/**
- * The singular noun used as a modifier ("film records", not "films records").
- * "people" and "species" are already right. Same rule as SeoMetadataRegistry.java.
- */
-function recordNoun(key: string): string {
-  return key === 'people' || key === 'species' ? key : key.replace(/s$/, '');
-}
-
 function route(path: string, title: string, description: string): PageSeoMetadata {
   return { path, canonicalPath: path, title, description, robots: 'index,follow' };
 }
@@ -155,26 +108,42 @@ function notFoundMetadata(path: string): SeoMetadata {
   return {
     path,
     canonicalPath: null,
-    title: NOT_FOUND_TITLE,
-    description: NOT_FOUND_DESCRIPTION,
+    title: site.notFound.title,
+    description: site.notFound.description,
     robots: 'noindex',
   };
 }
 
-/** Only one of the six types with a canonical id, like getRoute (routes.ts). */
-function resourceDetailMetadata(path: string): SeoMetadata | undefined {
+/**
+ * A record address: one of the six types with a canonical id, like getRoute
+ * (routes.ts). Same rule as SeoMetadataRegistry.resourceDetail: an indexable
+ * type gets index,follow and its own canonical; any other type noindex,follow
+ * and the canonical of its list.
+ */
+function resourceDetailMetadata(
+  path: string,
+  entity: Record<string, unknown> | undefined,
+): SeoMetadata | undefined {
   const parts = path.split('/').filter(Boolean);
   if (parts.length !== 3 || parts[0] !== 'resource') return undefined;
-  if (!RESOURCES.some((resource) => resource.key === parts[1])) return undefined;
-  if (!CANONICAL_ID.test(parts[2])) return undefined;
-  const meta = getResourceMeta(parts[1]);
-  return {
-    path,
-    canonicalPath: `/resource/${meta.key}`,
-    title: `${meta.title} #${parts[2]}${BRAND_SUFFIX}`,
-    description: `Star Wars ${recordNoun(meta.key)} record #${parts[2]} from the swapi.build REST API.`,
-    robots: 'noindex,follow',
-  };
+  const resource = site.resources.find((candidate) => candidate.type === parts[1]);
+  if (!resource || !CANONICAL_ID.test(parts[2])) return undefined;
+  const { detail } = resource;
+  const values = { ...(entity ? recordValues(entity, detail.fields) : {}), id: parts[2] };
+  const title =
+    renderTemplate(detail.title, values) ?? renderTemplate(detail.fallbackTitle, values)!;
+  const description =
+    renderTemplate(detail.description, values) ??
+    renderTemplate(detail.fallbackDescription, values)!;
+  return detail.indexable
+    ? { path, canonicalPath: path, title, description, robots: 'index,follow' }
+    : {
+        path,
+        canonicalPath: `/resource/${resource.type}`,
+        title,
+        description,
+        robots: 'noindex,follow',
+      };
 }
 
 function normalizePath(rawPath: string): string {
