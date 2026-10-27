@@ -183,11 +183,20 @@ record addresses), and only after every probe line read `PASS`:
      -d '{"host":"swapi.build","key":"a5b77f3621994d6d59f6e5f3d85055a5","keyLocation":"https://swapi.build/a5b77f3621994d6d59f6e5f3d85055a5.txt","urlList":["https://swapi.build/","https://swapi.build/docs","https://swapi.build/docs/mcp","https://swapi.build/about","https://swapi.build/sitemap.xml"]}'
    ```
 
+   Example from 2.12.0 (the record addresses now drawn on the server; only the
+   six films are indexable, so only they go, with the sitemap):
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST https://api.indexnow.org/indexnow \
+     -H 'Content-Type: application/json; charset=utf-8' \
+     -d '{"host":"swapi.build","key":"a5b77f3621994d6d59f6e5f3d85055a5","keyLocation":"https://swapi.build/a5b77f3621994d6d59f6e5f3d85055a5.txt","urlList":["https://swapi.build/resource/films/1","https://swapi.build/resource/films/2","https://swapi.build/resource/films/3","https://swapi.build/resource/films/4","https://swapi.build/resource/films/5","https://swapi.build/resource/films/6","https://swapi.build/sitemap.xml"]}'
+   ```
+
    Expect `200` or `202`.
 2. Search Console (maintainer): resubmit `sitemap.xml` and inspect one of the
    new URLs as the baseline for the coverage reading that gates the next batch.
    For a release that changed what a crawler reads, use "Test live URL" on one
-   changed page (for 2.11.0, `/docs/mcp`) and check the text of `<main>` in the
+   changed page (for 2.11.0, `/docs/mcp`; for 2.12.0, `/resource/films/1`) and check the text of `<main>` in the
    rendered HTML before requesting indexing.
 
 ## Troubleshooting

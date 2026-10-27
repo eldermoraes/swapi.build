@@ -3,7 +3,7 @@
   "name": "build.swapi/star-wars",
   "title": "Star Wars API & MCP server (swapi.build)",
   "description": "Free remote Star Wars MCP server (SWAPI data): people, films, planets, starships. No API key.",
-  "version": "2.11.0",
+  "version": "2.12.0",
   "websiteUrl": "https://swapi.build",
   "icons": [
     {

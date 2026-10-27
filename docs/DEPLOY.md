@@ -163,6 +163,20 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   fails to render on the server serves the shell without the marker, so the
   probe fails even though the page still works in a browser. Any `FAIL` here
   after a deploy is an immediate rollback (see [5. Rollback](#5-rollback)).
+- **Record content (2.12.0+)**: every record address of the six types is drawn
+  by the server with one template of detail. `/resource/films/1` answers
+  `200 text/html` with the marker `data-ssr-page="resource-detail"
+  data-ssr-type="films" data-ssr-id="1"`, and its `<main>` has `A New Hope`,
+  `George Lucas`, the link `href="/resource/people/1"` (the related records are
+  links) and `curl https://<host>/api/films/1` (the samples carry the request
+  host) in at least 200 characters of text. `/resource/people/1` has
+  `Luke Skywalker` and `href="/resource/planets/1"` and still answers
+  `noindex,follow` with the canonical `/resource/people` (the batch rule of
+  2.10.0 holds with content). `/resource/people/9999` has no `data-ssr-`
+  marker, and `/resource/films/1` has a `BreadcrumbList`. The links and the
+  samples are read from the markup of `<main>` (`main_html` in
+  `scripts/lib/main-text.sh`), the text from `main_text`. Any `FAIL` here after
+  a deploy is an immediate rollback to 2.11.0.
 - **Cold start**: the time of one request, informational only.
 - **MCP stateless**: a `tools/call` of `sw_get` with the 2026-07-28 headers and
   `_meta` returns `isError: false` and URLs on the host. `server/discover` and
@@ -184,10 +198,12 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   `sitemap.xml` and `llms.txt`) must carry `Vary: Origin`, and a
   request without `Origin` gets no `Access-Control-Allow-Origin`.
 - **Poisoning**: a spoofed `X-Forwarded-Host: evil.example` never reaches the
-  REST body, the sitemap, `llms.txt`, the SPA HTML, the not-found document or
+  REST body, the sitemap, `llms.txt`, the SPA HTML, the not-found document,
   `/docs/mcp` (2.11.0+, whose `<main>` carries the request host; Caddy
-  overwrites the header), and an
-  RFC 7239 `Forwarded` header is ignored by the app.
+  overwrites the header) or the record pages `/resource/films/1` and
+  `/resource/people/1` (2.12.0+, an indexable type and a `noindex` one), and an
+  RFC 7239 `Forwarded` header is ignored by the app, on `/api/people/3` and,
+  from 2.12.0, on `/resource/films/1`.
 - **Caddy headers**: `Strict-Transport-Security: max-age=63072000` and no
   `Server` header.
 
@@ -211,7 +227,9 @@ From 2.11.0 the mode also follows one redirect, the road of an agent without
 JavaScript that arrives through `www`: it reads the `Location` of
 `GET /docs/mcp` and fetches it once (never a `Location` outside
 `https://swapi.build/`), wanting the `claude mcp add` line with the apex
-endpoint inside a `<main>` of at least 200 characters. A `FAIL` there with the
+endpoint inside a `<main>` of at least 200 characters. From 2.12.0 it follows
+`GET /resource/films/1` the same way, wanting `George Lucas` (the record page
+is the one an agent is most often handed). A `FAIL` there with the
 `origin` mode all `PASS`: run the `redirect` mode once more; if it repeats,
 roll back.
 
@@ -966,6 +984,24 @@ it repeats, roll back (an agent without JavaScript that arrives through `www`
 would not get the text). If `swapi-update` prints "is not answering", the site
 is already down (the link was switched and the service restarted): roll back at
 once with the command it printed.
+
+From 2.12.0 the same rule also covers the record content (the probes of
+`/resource/films/1` and `/resource/people/1`), the `noindex` control of people
+with content and the poisoning pairs of the record addresses (and `Forwarded`
+on `/resource/films/1`): any of those `FAIL`s, or one on any older probe, is an
+immediate rollback to 2.11.0, and `mcp-publisher publish` does not run. The
+`www` follow of `/resource/films/1` follows the rule of the 2.11.0 follow above.
+
+A rollback from 2.12.0 to 2.11.0 puts the record addresses back to
+"Loading resource…" and the client drawing from `/api`, with the head of 2.10.0
+intact; the four fixed pages stay drawn on the server; no index changes. A tab
+still open with the 2.12.0 JavaScript that fetches a 2.11.0 record document
+does not find the marker and makes a full page load, as above. The stats
+snapshot is compatible both ways (no new route template). `swapi-update` keeps
+only the active version and the one before it: after 2.12.0 the previous one on
+the host is 2.11.0. Going straight back to 2.10.0 (should 2.11.0 also have to
+go) is not an `ln -sfn`: run `sudo swapi-update v2.10.0 <sha256>` with the hash
+of the 2.10.0 Release binary.
 
 A rollback from 2.11.0 to 2.10.0 puts the four pages back to an empty `<main>`
 drawn by the client and the JSON-LD back to the 2.10.0 one; no index changes. A

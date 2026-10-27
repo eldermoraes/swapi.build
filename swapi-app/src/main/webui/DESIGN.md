@@ -204,6 +204,20 @@ Each row is an `IndexRow` (`title`, `endpoint`, `href`), for example
 | Table           | `.sw-table`, `.sw-table-wrap`               | Hairline rows, mono for identifiers; always wrapped                                |
 | Footer          | `.sw-footer`                                | Hairline top, dim text                                                             |
 
+### Record detail — `templates/ssr/record.html` (2.12.0)
+
+Every `/resource/{type}/{id}` page is drawn by the server with one template;
+the client adopts it (`bindRecord`) and only colours the JSON (and binds any
+`.copy-btn` the markup carries).
+
+| Part          | Classes                                         | Notes                                                                                     |
+| ------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Section       | `.record-section`, `.record-subtitle`           | Flex column, `min-width: 0` so no child widens the page; `.detail-view > *` does the same |
+| Attributes    | `.sw-table-wrap` > `.sw-table.record-table`     | Always wrapped; cells break long values (`overflow-wrap: anywhere`)                       |
+| Opening crawl | `.record-crawl`                                 | `white-space: pre-line`: keeps the crawl's line breaks, wraps at phone width              |
+| Relations     | `.record-relation`, `.record-links`             | Wrapping list of links to the related records; never a horizontal scroll                  |
+| API sample    | `.sw-code.result-panel`, `pre.result-body`      | Body is `JSON.stringify(x, null, 2)` text; the client colours it after load               |
+
 ## 7. New-page checklist
 
 A new page or section is on-standard when:
