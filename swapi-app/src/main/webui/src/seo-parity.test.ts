@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import registry from '../../java/com/eldermoraes/seo/SeoMetadataRegistry.java?raw';
 import { getSeoMetadata, PUBLIC_SEO_ROUTES } from './seo';
+import { getRoute } from './routes';
 
 /**
  * Provisional, until the metadata moves to a single JSON file (slice D): the
@@ -43,12 +44,17 @@ describe('SEO metadata parity between SeoMetadataRegistry.java and seo.ts', () =
     },
   );
 
-  it('gives an unknown path the same fallback title as the server', () => {
-    const fallback = registry.match(/new SeoMetadata\(path, "\/", "([^"]*)", HOME_DESCRIPTION/);
-    expect(fallback?.[1]).toBe(HOME_TITLE);
+  it('gives an unknown path the same not-found title and description as the server', () => {
     const meta = getSeoMetadata('/nao-existe');
-    expect(meta.title).toBe(HOME_TITLE);
-    expect(meta.description).toBe(javaConstant('HOME_DESCRIPTION'));
+    expect(meta.title).toBe(javaConstant('NOT_FOUND_TITLE'));
+    expect(meta.description).toBe(javaConstant('NOT_FOUND_DESCRIPTION'));
+    expect(meta.title).not.toBe(HOME_TITLE);
+  });
+
+  // The client side of "server and client agree on what exists": every page the
+  // server lists is a page for the client router too, never the not-found page.
+  it.each(PUBLIC_SEO_ROUTES.map((r) => [r.path] as const))('%s is a page for getRoute', (path) => {
+    expect(getRoute(path).page).not.toBe('not-found');
   });
 
   it('gives a resource detail the same title and description as the server (SeoRoutesTest literals)', () => {

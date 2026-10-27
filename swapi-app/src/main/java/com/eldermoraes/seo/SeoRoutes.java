@@ -33,6 +33,24 @@ public class SeoRoutes {
     @Inject PublicSiteUrlResolver urls;
     @Inject WebAnalytics analytics;
 
+    /**
+     * The router of the site (2.9.1; Quinoa's SPA routing is off, QuinoaConfigTest).
+     * In this order, for GET and HEAD, and never by the Accept header:
+     * <ol>
+     * <li>the SEO files (robots.txt, sitemap.xml, llms.txt, og-image.png);</li>
+     * <li>/index.html: 301 to /, with the query string;</li>
+     * <li>the backend (/api, /mcp, /openapi.json): passed on;</li>
+     * <li>a page that exists: 200 with its document;</li>
+     * <li>anything else under /resource/, even with a dot: 404 with the document;</li>
+     * <li>a file candidate (a dot in the last segment, or /assets/, /.well-known/,
+     * /@, /q/): passed on to the static handler, or to the framework 404, which
+     * leaves with no-cache;</li>
+     * <li>everything else: 404 with the document.</li>
+     * </ol>
+     * Pages are matched on the raw path (rc.request().path()), not on
+     * rc.normalizedPath(), which percent-decodes: the browser keeps /resource/people/%31
+     * as it is in location.pathname, so server and client agree it is not a page.
+     */
     @RouteFilter(100)
     void route(RoutingContext rc) {
         if (!HttpMethod.GET.equals(rc.request().method()) && !HttpMethod.HEAD.equals(rc.request().method())) {
@@ -46,14 +64,75 @@ public class SeoRoutes {
             case "/sitemap.xml" -> sitemap(rc);
             case "/llms.txt" -> llms(rc);
             case OG_IMAGE -> ogImage(rc);
+            case "/index.html" -> redirectHome(rc);
             default -> {
-                if (isDocumentRequest(rc, path)) {
-                    document(rc, path);
-                } else {
+                String page = withoutTrailingSlash(rawPath(rc));
+                if (isBackend(path)) {
+                    // /api keeps its own 404 policy (edge-cacheable, CacheControlFilter);
+                    // an unknown /mcp/... path is a framework 404 like a missing file.
+                    if (path.startsWith("/mcp/")) {
+                        noCacheOn404(rc);
+                    }
                     rc.next();
+                } else if (metadata.isKnownDocumentPath(page)) {
+                    document(rc, page);
+                } else if (path.startsWith("/resource/")) {
+                    notFound(rc, page);
+                } else if (isFileCandidate(path)) {
+                    noCacheOn404(rc);
+                    rc.next();
+                } else {
+                    notFound(rc, page);
                 }
             }
         }
+    }
+
+    /**
+     * Relative Location on purpose: it does not depend on the request host, so
+     * there is nothing to poison. max-age=300, so after a rollback no browser
+     * keeps the redirect for longer.
+     */
+    private void redirectHome(RoutingContext rc) {
+        String query = rc.request().query();
+        rc.response()
+                .setStatusCode(301)
+                .putHeader(HttpHeaders.LOCATION, query == null || query.isEmpty() ? "/" : "/?" + query)
+                .putHeader(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL)
+                .putHeader(HttpHeaders.VARY, "Origin")
+                .end();
+    }
+
+    /**
+     * A 404 page: the shell with a reduced head (title, description, robots
+     * noindex and the swapi:status marker the client reads), and no canonical,
+     * Open Graph, Twitter Card or JSON-LD, so it carries no URL built from the
+     * host and reflects nothing of the path. no-cache replaces whatever the spa
+     * or assets filters stamped: the path may start to exist in a release.
+     */
+    private void notFound(RoutingContext rc, String path) {
+        Optional<String> shell = readIndexHtml();
+        if (shell.isEmpty()) {
+            noCacheOn404(rc);
+            rc.next();
+            return;
+        }
+        SeoMetadata route = metadata.notFound(path);
+        rc.response()
+                .setStatusCode(404)
+                .putHeader(HttpHeaders.CONTENT_TYPE, "text/html; charset=utf-8")
+                .putHeader(HttpHeaders.CACHE_CONTROL, "no-cache")
+                .putHeader(HttpHeaders.VARY, "Origin")
+                .end(inject(shell.get(), notFoundBlock(route)));
+    }
+
+    /** Every 404 the app answers leaves with no-cache, never with the assets' immutable year. */
+    private static void noCacheOn404(RoutingContext rc) {
+        rc.addHeadersEndHandler(v -> {
+            if (rc.response().getStatusCode() == 404) {
+                rc.response().headers().set(HttpHeaders.CACHE_CONTROL, "no-cache");
+            }
+        });
     }
 
     private void robots(RoutingContext rc) {
@@ -134,7 +213,7 @@ public class SeoRoutes {
             return;
         }
         SeoMetadata route = metadata.forPath(path);
-        String html = injectSeo(shell.get(), rc, route);
+        String html = inject(shell.get(), seoBlock(rc, route));
         rc.response()
                 .putHeader(HttpHeaders.CONTENT_TYPE, "text/html; charset=utf-8")
                 .end(html);
@@ -154,16 +233,17 @@ public class SeoRoutes {
                 .end(Buffer.buffer(image.get()));
     }
 
+    // Vary: Origin because CORS echoes the request Origin and these files carry s-maxage.
     private void text(RoutingContext rc, String contentType, String body) {
         rc.response()
                 .putHeader(HttpHeaders.CONTENT_TYPE, contentType)
                 .putHeader(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL)
+                .putHeader(HttpHeaders.VARY, "Origin")
                 .end(body);
     }
 
-    private String injectSeo(String html, RoutingContext rc, SeoMetadata route) {
+    private String inject(String html, String block) {
         String cleaned = EXISTING_SEO_TAG.matcher(html).replaceAll("");
-        String block = seoBlock(rc, route);
         String withSeo = cleaned.replaceFirst("(?i)</head>", Matcher.quoteReplacement(block + "\n  </head>"));
         // The analytics beacon goes before </body>, where Cloudflare recommends it.
         return analytics.beacon()
@@ -201,6 +281,13 @@ public class SeoRoutes {
                 + "    <script type=\"application/ld+json\">" + json + "</script>";
     }
 
+    private static String notFoundBlock(SeoMetadata route) {
+        return "\n    <title>" + html(route.title()) + "</title>\n"
+                + "    <meta name=\"description\" content=\"" + html(route.description()) + "\" />\n"
+                + "    <meta name=\"robots\" content=\"" + html(route.robots()) + "\" />\n"
+                + "    <meta name=\"swapi:status\" content=\"404\" />";
+    }
+
     private String jsonLd(RoutingContext rc, SeoMetadata route, String canonical, String image) {
         String home = urls.absoluteUrl(rc, "/");
         String docs = urls.absoluteUrl(rc, "/docs");
@@ -215,30 +302,29 @@ public class SeoRoutes {
                 + "]}";
     }
 
-    private boolean isDocumentRequest(RoutingContext rc, String path) {
-        if (excluded(path)) {
-            return false;
-        }
-        // The SPA HTML is stored at the edge by path alone (quarkus.http.filter.spa)
-        // and Accept is not part of the cache key, so a known route must answer the
-        // same document to every client. Deciding by Accept here would let the first
-        // non-HTML request after a deploy pin the wrong body for the whole deployment.
-        if (metadata.isKnownDocumentPath(path)) {
-            return true;
-        }
-        String accept = rc.request().getHeader(HttpHeaders.ACCEPT);
-        boolean acceptsHtml = accept == null || accept.contains("text/html") || accept.contains("*/*");
-        return acceptsHtml && !lastSegment(path).contains(".");
-    }
-
-    private boolean excluded(String path) {
-        return path.startsWith("/api")
+    private static boolean isBackend(String path) {
+        return path.equals("/api")
+                || path.startsWith("/api/")
                 || path.equals("/mcp")
                 || path.startsWith("/mcp/")
-                || path.equals("/openapi.json")
-                || path.startsWith("/_vercel/")
+                || path.equals("/openapi.json");
+    }
+
+    // A path that may be a file of the build or of public/: the static handler
+    // serves it, or the framework answers 404. /@ is Vite's namespace in dev mode
+    // and /q/ the Dev UI; in prod both are a framework 404. A future public/ file
+    // without an extension would be treated as a page (docs/DEPLOY.md).
+    private static boolean isFileCandidate(String path) {
+        return lastSegment(path).contains(".")
                 || path.startsWith("/assets/")
-                || path.equals("/favicon.svg");
+                || path.startsWith("/.well-known/")
+                || path.startsWith("/@")
+                || path.startsWith("/q/");
+    }
+
+    private static String rawPath(RoutingContext rc) {
+        String raw = rc.request().path();
+        return raw == null || raw.isEmpty() ? "/" : raw;
     }
 
     private static String withoutTrailingSlash(String path) {

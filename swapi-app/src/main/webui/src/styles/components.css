@@ -424,6 +424,21 @@
   text-transform: uppercase;
 }
 
+/* Not-found page (pages/not-found.ts). The actions wrap on a phone, and a long
+   requested path breaks anywhere instead of pushing the page sideways. */
+.not-found .sw-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-top: 1.6rem;
+}
+
+.not-found code {
+  overflow-wrap: anywhere;
+  font-family: var(--sw-font-mono);
+  color: var(--sw-cyan);
+}
+
 @media (max-width: 640px) {
   .sw-row {
     grid-template-columns: 1fr auto;

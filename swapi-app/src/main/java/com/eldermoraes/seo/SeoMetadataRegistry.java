@@ -1,11 +1,24 @@
 package com.eldermoraes.seo;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import java.util.List;
 
 @ApplicationScoped
 public class SeoMetadataRegistry {
+
+    // The 404 document (2.9.1). One line each: seo-parity.test.ts reads them with
+    // javaConstant() and compares them with seo.ts.
+    static final String NOT_FOUND_TITLE = "Page not found | swapi.build";
+    static final String NOT_FOUND_DESCRIPTION = "This page does not exist on swapi.build. Browse the Star Wars API, its docs or the MCP server instead.";
+
+    private final KnownEntities entities;
+
+    @Inject
+    public SeoMetadataRegistry(KnownEntities entities) {
+        this.entities = entities;
+    }
 
     // Titles and descriptions are mirrored by hand in webui/src/seo.ts until the
     // single metadata file of slice D; seo-parity.test.ts compares the two.
@@ -32,6 +45,11 @@ public class SeoMetadataRegistry {
         return ROUTES.stream().filter(SeoMetadata::sitemap).toList();
     }
 
+    /**
+     * The metadata of a page, or {@link #notFound} when the path is not a page.
+     * The path is matched as given (callers pass the raw request path, not the
+     * percent-decoded one), so /resource/people/%31 is not the page of id 1.
+     */
     public SeoMetadata forPath(String rawPath) {
         String path = normalizePath(rawPath);
         for (SeoMetadata route : ROUTES) {
@@ -43,8 +61,7 @@ public class SeoMetadataRegistry {
         if (resourceDetail != null) {
             return resourceDetail;
         }
-        return new SeoMetadata(path, "/", "SWAPI alternative: free Star Wars API and MCP server | swapi.build", HOME_DESCRIPTION,
-                SeoMetadata.NOINDEX_FOLLOW, false, null, null);
+        return notFound(path);
     }
 
     public boolean isKnownDocumentPath(String rawPath) {
@@ -52,13 +69,19 @@ public class SeoMetadataRegistry {
         return ROUTES.stream().anyMatch(route -> route.path().equals(path)) || resourceDetail(path) != null;
     }
 
+    /** No canonical, noindex, out of the sitemap. Nothing of the path goes into the document. */
+    public SeoMetadata notFound(String path) {
+        return new SeoMetadata(path, null, NOT_FOUND_TITLE, NOT_FOUND_DESCRIPTION, SeoMetadata.NOINDEX, false, null, null);
+    }
+
     private static SeoMetadata route(String path, String title, String description, String frequency, String priority) {
         return new SeoMetadata(path, path, title, description, SeoMetadata.INDEX_FOLLOW, true, frequency, priority);
     }
 
-    private static SeoMetadata resourceDetail(String path) {
+    /** Only an entity that exists, with its id in the canonical form (KnownEntities). */
+    private SeoMetadata resourceDetail(String path) {
         String[] parts = path.split("/");
-        if (parts.length == 4 && "resource".equals(parts[1]) && !parts[3].isBlank()) {
+        if (parts.length == 4 && "resource".equals(parts[1]) && entities.exists(parts[2], parts[3])) {
             String resourceTitle = switch (parts[2]) {
                 case "people" -> "People";
                 case "films" -> "Films";

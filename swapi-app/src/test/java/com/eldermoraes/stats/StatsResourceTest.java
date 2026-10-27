@@ -154,6 +154,40 @@ class StatsResourceTest {
                 .body("groups.seo", greaterThanOrEqualTo(1));
     }
 
+    // --- 404s (2.9.1) ----------------------------------------------------------
+
+    private static long routeCount(String route) {
+        Number n = given().get("/api/stats").then().statusCode(200).extract().path("routes.'" + route + "'");
+        return n == null ? 0 : n.longValue();
+    }
+
+    // Guard: Quinoa's reroute to "/" counted an unknown dotted path twice (other + /).
+    // The suite runs without Quinoa, so this pins that SeoRoutes itself never reroutes.
+    @Test
+    void unknownPathIsCountedOnceAsOther() {
+        long other = routeCount("other");
+        long home = routeCount("/");
+        given().accept("text/html").get("/zz-unknown.json").then().statusCode(404);
+        given().accept("text/html").get("/zz-unknown").then().statusCode(404);
+
+        assertEquals(other + 2, routeCount("other"));
+        assertEquals(home, routeCount("/"));
+    }
+
+    // A 404 is not a route: it is counted under the template of its path, like
+    // /api/people/9999 under /api/people/{id}. No new template, no new group.
+    @Test
+    void nonexistentEntityIsCountedUnderItsTemplate() {
+        long before = routeCount("/resource/people/{id}");
+        given().accept("text/html").get("/resource/people/9999").then().statusCode(404);
+
+        assertEquals(before + 1, routeCount("/resource/people/{id}"));
+        given().when().get("/api/stats").then()
+                .statusCode(200)
+                .body("groups.size()", equalTo(5))
+                .body("groups.keySet()", hasItems("rest", "mcp", "pages", "seo", "other"));
+    }
+
     @Test
     void isDocumentedInTheOpenApiSpec() {
         given().when().get("/openapi.json").then()

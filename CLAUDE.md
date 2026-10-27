@@ -85,7 +85,9 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   suite if the pom version has no changelog section, and `OpenApiVersionTest` fails
   if `/openapi.json` stops advertising the pom version. Tags point at the **last**
   commit of a version line, never at the bump commit.
-- **Successful GETs return HTTP 200; nonexistent ids return 404.**
+- **Successful GETs return HTTP 200; nonexistent ids return 404.** This holds for
+  the site pages too: an unknown page or entity answers 404 (`SeoRoutes`), and
+  Quinoa's SPA routing stays off.
 - **Container tooling is `podman`** (`/opt/podman/bin`), not `docker`. The podman
   machine needs 8 GB for local native builds.
 - **MCP serves stateful and stateless clients on the same `/mcp` endpoint.**

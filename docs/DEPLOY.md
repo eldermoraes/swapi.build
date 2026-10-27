@@ -82,7 +82,7 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   `info.version` equals the pom of the checked-out tag: the deployed version
   is the released one.
 - **SEO routes / social preview**: `robots.txt` (text/plain), `sitemap.xml`
-  (XML), `og-image.png` (PNG) bypass the SPA fallback; `robots.txt` points at the
+  (XML), `og-image.png` (PNG) are served by the app; `robots.txt` points at the
   sitemap on the host; the sitemap lists `/docs` and `/docs/webmcp`; the home
   page carries `canonical`, `og:url` and the Twitter Card with absolute URLs on
   the host; `/docs/webmcp` has its own title. `llms.txt` (2.9.0+) answers
@@ -92,6 +92,31 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   `server.json` gives the MCP Registry. The IndexNow key file (the one
   `public/*.txt` of the checked-out tag) answers `text/plain` with the key as
   its body.
+- **Site still works (2.9.1+)**: Quinoa's SPA routing is off, so every page must
+  still be served by the app and the bundle must still load. Every `/assets/...`
+  the home references answers `200` by `GET` (a `HEAD` carries no
+  `Content-Type`) with `text/javascript` or `text/css` and `immutable`, at least
+  one of each; every `<loc>` of `sitemap.xml` answers `200 text/html` with its
+  `rel="canonical"` equal to the `loc`; the highest id of each type
+  (`/resource/people/83`, `films/6`, `planets/1`, `species/1`, `starships/2`,
+  `vehicles/4`) and `/docs/` answer `200`; `HEAD /` answers `200`;
+  `/index.html` answers `301` with `Location` exactly `/` (and keeps the query);
+  `/` carries `Cache-Control: public, max-age=0, must-revalidate, s-maxage=300`.
+  Any `FAIL` here after a deploy is an immediate rollback (see
+  [5. Rollback](#5-rollback)).
+- **Not found and variants (2.9.1+)**: up to 2.9.0 every unknown path answered
+  `200` with the home (a soft 404 for search engines), a path with a dot came
+  back `index,follow`, a missing asset got the HTML shell, and each of them was
+  counted twice in `/stats` (Quinoa's reroute). Now `/not-a-real-page` and
+  `/resource/people/9999` answer `404 text/html` with the app's not-found
+  document (`content="noindex"`, `<meta name="swapi:status" content="404" />`,
+  no `rel="canonical"`, `Cache-Control: no-cache`); `/resource/people/1` stays
+  `200` with its canonical (control). `/foo.json`, `/assets/does-not-exist.js`
+  (with `no-cache`, never the `immutable` of a real asset) and
+  `/.well-known/oauth-protected-resource` answer the framework 404. That body
+  is Vert.x's default, `<html><body><h1>Resource not found</h1></body></html>`,
+  so the probe does not check for "no HTML": it checks that none of the shell
+  marks is there (`id="app"`, `id="main-content"`, `swapi:status`, `<title>`).
 - **Cold start**: the time of one request, informational only.
 - **MCP stateless**: a `tools/call` of `sw_get` with the 2026-07-28 headers and
   `_meta` returns `isError: false` and URLs on the host. `server/discover` and
@@ -109,10 +134,12 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   served (200); `GET /mcp` is 405; `GET /mcp/sse` is 404 (legacy transport
   rejected); `POST /mcp/messages/*` is 404 with a JSON body citing `/mcp`.
 - **CORS and `Vary: Origin`**: CORS echoes the request `Origin`, so cacheable
-  responses (`/api/*` and the SPA HTML) must carry `Vary: Origin`, and a
+  responses (`/api/*`, the SPA HTML and, from 2.9.1, the SEO files `robots.txt`,
+  `sitemap.xml` and `llms.txt`) must carry `Vary: Origin`, and a
   request without `Origin` gets no `Access-Control-Allow-Origin`.
 - **Poisoning**: a spoofed `X-Forwarded-Host: evil.example` never reaches the
-  REST body, the sitemap, `llms.txt` or the SPA HTML (Caddy overwrites the header), and an
+  REST body, the sitemap, `llms.txt`, the SPA HTML or the not-found document
+  (Caddy overwrites the header), and an
   RFC 7239 `Forwarded` header is ignored by the app.
 - **Caddy headers**: `Strict-Transport-Security: max-age=63072000` and no
   `Server` header.
@@ -128,7 +155,8 @@ its body.
 `scripts/verify-deploy.sh redirect www.swapi.build swapi.build`, run by the
 `deploy` job right after the `origin` probes and by hand after any change to
 the `Caddyfile`, sends `GET /`, `GET /api/people/1?format=json`,
-`GET /sitemap.xml`, `GET /llms.txt` and `POST /mcp` to `https://www.swapi.build` without
+`GET /sitemap.xml`, `GET /llms.txt`, `GET /index.html`, `GET /not-a-real-page`
+and `POST /mcp` to `https://www.swapi.build` without
 following redirects. Each must answer `308` with `Location` exactly
 `https://swapi.build` + the same path and query. Every line must read `PASS`.
 `scripts/verify-deploy-redirect.test.sh` (CI) runs the same mode against a
@@ -145,6 +173,8 @@ applied there and verified with the probe on 2026-10-26 (18:25 BRT).
 | 404 `Mcp session not found` on a stateful MCP call | `quarkus.mcp.server.http.streamable.auto-init=true` is off in the running version. It serves an unknown session id with a throwaway session (introduced for Vercel's lack of session affinity; on the single host it keeps clients working across restarts). |
 | 202 responses from the API | Legacy quirk retired 2026-08-01 — current builds return 200; a 202 means a very old binary is live. |
 | The OpenAPI version probe fails right after a deploy | The host still runs the previous version: `swapi-update` failed, or the probe ran against a tag other than the deployed one. Read the `deploy` job log; on the host, `readlink /opt/swapi/current`. |
+| A file from `public/` or an asset answers 404 from 2.9.1 on | Its path has no dot in the last segment and is not under `/assets/`, so `SeoRoutes` treats it as a page and, not knowing it, answers the not-found document. Every new file in `public/` needs an extension. |
+| A page of the site answers 404 from 2.9.1 on | The route is missing from `SeoMetadataRegistry` (the server) or from `routes.ts` (the client); both must list it until fatia D. Quinoa's SPA routing stays off: turning it back on brings back the soft 404s and the double count in `/stats`. |
 
 ## WebMCP verification (2.5.0+)
 
@@ -845,6 +875,18 @@ answer. A rollback is a host change (maintainer, or a session he opens for it);
 the next release then goes out through the normal pipeline. Rolling back to a
 version older than the previous one: run `sudo swapi-update <tag> <sha256>` with
 the hash from that release's run summary.
+
+From 2.9.1: any `FAIL` on a known route (the sitemap pages, the highest ids,
+`/docs/`, `HEAD /`) or on the asset bundle right after a deploy is an
+**immediate rollback**, not a fix forward, and `mcp-publisher publish` does not
+run. The `301` of `/index.html` carries `max-age=300`, so no browser keeps it
+more than five minutes after a rollback.
+
+A rollback from 2.9.1 to 2.9.0 brings back the soft 404s, the `index,follow`
+on dotted paths and the double count in `/stats`. The stats snapshot is
+compatible both ways (2.9.1 adds no route template). The MCP Registry keeps
+2.9.1 as `isLatest`, with no practical effect (its `server.json` changes only
+the `version`).
 
 The usage counters survive a rollback: from 2.8.2, a rollback loses only the
 counts of routes the target version does not know (their snapshot lines are
