@@ -76,10 +76,20 @@ function writeHead(
 
 const container = document.getElementById('main-content')!;
 const pageLifecycle = new AbortController();
+// The fetch of the document of a server-rendered page; a new navigation, or an
+// action of the explorer on the page still shown, aborts it.
+let documentLoad: AbortController | null = null;
+
+function abortDocumentLoad(): void {
+  documentLoad?.abort();
+  documentLoad = null;
+}
+
 const explorer = new ResourceExplorer(
   container,
   (path, entity) => {
     cancelPending();
+    abortDocumentLoad();
     const generation = ++navigationGeneration;
     if (window.location.pathname !== path) history.pushState(null, '', path);
     updateActiveNav(getRoute(path).page);
@@ -94,6 +104,7 @@ const explorer = new ResourceExplorer(
     });
   },
   () => {
+    abortDocumentLoad();
     navigationGeneration++;
   },
 );
@@ -116,8 +127,12 @@ function bindPage(page: Page): void {
   }
 }
 
-// The fetch of the document of a server-rendered page; a new navigation aborts it.
-let documentLoad: AbortController | null = null;
+/**
+ * How a navigation started. A link click carries the full URL it left (path,
+ * query and fragment), so a failed fetch can put the address back; Back and
+ * Forward ('history') never have their history rewritten.
+ */
+type NavigationSource = { via: 'start' } | { via: 'history' } | { via: 'link'; from: string };
 
 /**
  * A page whose <main> the server draws (2.11.0, slice E1). The first load adopts
@@ -126,7 +141,13 @@ let documentLoad: AbortController | null = null;
  * to draw it) a static error, never a request or a reload. A later navigation
  * fetches the document and writes the head once, after the swap.
  */
-async function showServerPage(path: string, route: Route, first: boolean, generation: number) {
+async function showServerPage(
+  path: string,
+  route: Route,
+  first: boolean,
+  generation: number,
+  source: NavigationSource,
+) {
   if (first) {
     if (adoptServerMain(container, route)) {
       bindPage(route.page);
@@ -140,9 +161,13 @@ async function showServerPage(path: string, route: Route, first: boolean, genera
   const controller = new AbortController();
   documentLoad = controller;
   container.setAttribute('aria-busy', 'true');
-  const result = await loadServerMain(container, path, route, controller.signal);
+  const result = await loadServerMain(container, path, route, {
+    signal: controller.signal,
+    isCurrent: () => generation === navigationGeneration,
+    search: window.location.search,
+  });
+  if (documentLoad === controller) documentLoad = null;
   if (generation !== navigationGeneration) return;
-  documentLoad = null;
   container.removeAttribute('aria-busy');
 
   let title: string;
@@ -160,9 +185,11 @@ async function showServerPage(path: string, route: Route, first: boolean, genera
       title = writeHead(path);
       break;
     case 'error':
-      // The content, the head and the URL stay those of the page that was there.
+      // The content and the head stay those of the page that was there. After a
+      // link the address goes back to the full URL it left; after Back or
+      // Forward the history is left alone (rewriting it would lose an entry).
       showLoadFailure(container, path);
-      history.replaceState(null, '', headPath);
+      if (source.via === 'link') history.replaceState(null, '', source.from);
       updateActiveNav(getRoute(headPath).page);
       return;
     default:
@@ -174,11 +201,10 @@ async function showServerPage(path: string, route: Route, first: boolean, genera
   announce(spokenTitle(title));
 }
 
-async function navigate() {
+async function navigate(source: NavigationSource) {
   cancelPending();
   explorer.interrupt();
-  documentLoad?.abort();
-  documentLoad = null;
+  abortDocumentLoad();
   container.removeAttribute('aria-busy');
   const generation = ++navigationGeneration;
 
@@ -192,7 +218,7 @@ async function navigate() {
   updateActiveNav(route.page);
 
   if (isServerRendered(route)) {
-    await showServerPage(path, route, first, generation);
+    await showServerPage(path, route, first, generation, source);
     return;
   }
 
@@ -288,16 +314,19 @@ document.addEventListener(
       return;
 
     e.preventDefault();
+    const from = window.location.pathname + window.location.search + window.location.hash;
     if (href !== window.location.pathname + window.location.search) {
       history.pushState(null, '', href);
     }
-    void navigate();
+    void navigate({ via: 'link', from });
   },
   { signal: pageLifecycle.signal },
 );
 
-window.addEventListener('popstate', navigate, { signal: pageLifecycle.signal });
-navigate();
+window.addEventListener('popstate', () => void navigate({ via: 'history' }), {
+  signal: pageLifecycle.signal,
+});
+navigate({ via: 'start' });
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {

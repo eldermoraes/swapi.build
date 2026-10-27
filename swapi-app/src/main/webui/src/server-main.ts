@@ -17,17 +17,31 @@ export type LoadResult = 'ok' | 'not-found' | 'reload' | 'unavailable' | 'error'
 /** Paths kept in memory, so back and forward do not ask (or count) again. */
 export const CACHE_LIMIT = 32;
 
+/** A page that has not answered in this time is an error (the alert), not a wait forever. */
+export const FETCH_TIMEOUT_MS = 10_000;
+
 const cache = new Map<string, Element>();
 let documentPath = window.location.pathname;
 let assign: (url: string) => void = (url) => window.location.assign(url);
+let timeoutMs = FETCH_TIMEOUT_MS;
 
-/** Test hook: empty the cache; the path of the loaded document; the full-load function. */
+/** Test hook: empty the cache; the path of the loaded document; the full-load function; the timeout. */
 export function resetServerMain(
-  options: { documentPath?: string; assign?: (url: string) => void } = {},
+  options: { documentPath?: string; assign?: (url: string) => void; timeoutMs?: number } = {},
 ): void {
   cache.clear();
   documentPath = options.documentPath ?? window.location.pathname;
   assign = options.assign ?? ((url) => window.location.assign(url));
+  timeoutMs = options.timeoutMs ?? FETCH_TIMEOUT_MS;
+}
+
+export interface LoadOptions {
+  /** Aborted by a newer navigation: the result is 'aborted'. */
+  signal?: AbortSignal;
+  /** Checked right before the swap: false means the screen moved on ('aborted'). */
+  isCurrent?: () => boolean;
+  /** The query of the target URL, kept by the full load. */
+  search?: string;
 }
 
 function matches(main: Element, route: Route): boolean {
@@ -52,22 +66,40 @@ function swap(container: HTMLElement, main: Element): void {
   unmark(container);
 }
 
+/**
+ * The request's signal: the caller's plus the timeout. The timeout aborts only
+ * the request; the caller's signal alone means 'aborted'. A browser without
+ * AbortSignal.any or AbortSignal.timeout (Safari before 17.4) keeps the
+ * caller's signal and no timeout, rather than failing every navigation.
+ */
+function withTimeout(signal?: AbortSignal): AbortSignal | undefined {
+  if (typeof AbortSignal.timeout !== 'function') return signal;
+  if (!signal) return AbortSignal.timeout(timeoutMs);
+  if (typeof AbortSignal.any !== 'function') return signal;
+  return AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
+}
+
 /** Fetches the document of `path` and puts its <main> in the container. */
 export async function loadServerMain(
   container: HTMLElement,
   path: string,
   route: Route,
-  signal?: AbortSignal,
+  options: LoadOptions = {},
 ): Promise<LoadResult> {
+  const { signal, isCurrent = () => true, search = '' } = options;
   const cached = cache.get(path);
   if (cached) {
+    if (!isCurrent()) return 'aborted';
     swap(container, cached);
     return 'ok';
   }
 
   let main: Element | null;
   try {
-    const res = await fetch(path, { headers: { Accept: 'text/html' }, signal });
+    const res = await fetch(path, {
+      headers: { Accept: 'text/html' },
+      signal: withTimeout(signal),
+    });
     if (res.status === 404) return signal?.aborted ? 'aborted' : 'not-found';
     const type = res.headers.get('Content-Type') ?? '';
     if (!res.ok || !type.toLowerCase().startsWith('text/html')) {
@@ -81,9 +113,10 @@ export async function loadServerMain(
     return signal?.aborted ? 'aborted' : 'error';
   }
 
+  if (!isCurrent()) return 'aborted';
   if (!main || !matches(main, route)) {
     if (path !== documentPath) {
-      assign(path);
+      assign(path + search);
       return 'reload';
     }
     return 'unavailable';

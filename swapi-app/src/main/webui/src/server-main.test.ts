@@ -75,12 +75,15 @@ describe('loadServerMain', () => {
     const container = mountShell(SHELL_EMPTY);
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(html(documentWith(aboutMain)));
     const controller = new AbortController();
-    await loadServerMain(container, '/about', { page: 'about' }, controller.signal);
+    await loadServerMain(container, '/about', { page: 'about' }, { signal: controller.signal });
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [url, init] = fetchSpy.mock.calls[0];
     expect(url).toBe('/about');
     expect(new Headers(init?.headers).get('Accept')).toBe('text/html');
-    expect(init?.signal).toBe(controller.signal);
+    // The fetch signal follows the caller's (and the timeout, below).
+    expect(init?.signal?.aborted).toBe(false);
+    controller.abort();
+    expect(init?.signal?.aborted).toBe(true);
   });
 
   it('without a marker on another path: one full load and "reload"', async () => {
@@ -90,6 +93,78 @@ describe('loadServerMain', () => {
     expect(assign).toHaveBeenCalledTimes(1);
     expect(assign).toHaveBeenCalledWith('/about');
   });
+
+  it('the full load keeps the query of the target URL', async () => {
+    const container = mountShell(homeMain);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(html(documentWith(SHELL_EMPTY)));
+    expect(
+      await loadServerMain(container, '/about', { page: 'about' }, { search: '?ref=docs&x=1' }),
+    ).toBe('reload');
+    expect(assign).toHaveBeenCalledWith('/about?ref=docs&x=1');
+  });
+
+  it('a page that does not answer in time: "error", nothing swapped', async () => {
+    resetServerMain({ documentPath: '/', assign, timeoutMs: 20 });
+    const container = mountShell(homeMain);
+    // A server that never answers; only the abort of its signal ends the request.
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal!.reason), {
+            once: true,
+          });
+        }),
+    );
+    expect(await loadServerMain(container, '/about', { page: 'about' })).toBe('error');
+    expect(container.querySelector('h1')?.textContent).toBe('The Star Wars API');
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it.each(['any', 'timeout'] as const)(
+    'a browser without AbortSignal.%s still loads the page, with the caller signal',
+    async (missing) => {
+      const original = Object.getOwnPropertyDescriptor(AbortSignal, missing)!;
+      Object.defineProperty(AbortSignal, missing, { value: undefined, configurable: true });
+      try {
+        const container = mountShell(SHELL_EMPTY);
+        const fetchSpy = vi
+          .spyOn(globalThis, 'fetch')
+          .mockResolvedValue(html(documentWith(aboutMain)));
+        const controller = new AbortController();
+        expect(
+          await loadServerMain(
+            container,
+            '/about',
+            { page: 'about' },
+            { signal: controller.signal },
+          ),
+        ).toBe('ok');
+        controller.abort();
+        expect(fetchSpy.mock.calls[0][1]?.signal?.aborted).toBe(true);
+      } finally {
+        Object.defineProperty(AbortSignal, missing, original);
+      }
+    },
+  );
+
+  it.each([
+    ['fetched', false],
+    ['cached', true],
+  ])(
+    'no longer current when the answer is ready (%s): "aborted", nothing swapped',
+    async (_name, cachedFirst) => {
+      let container = mountShell(homeMain);
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(html(documentWith(aboutMain)));
+      if (cachedFirst) {
+        await loadServerMain(container, '/about', { page: 'about' });
+        container = mountShell(homeMain);
+      }
+      expect(
+        await loadServerMain(container, '/about', { page: 'about' }, { isCurrent: () => false }),
+      ).toBe('aborted');
+      expect(container.querySelector('h1')?.textContent).toBe('The Star Wars API');
+    },
+  );
 
   it('without a marker on the path of the loaded document: "unavailable", never a reload', async () => {
     const container = mountShell(SHELL_EMPTY);
@@ -133,9 +208,9 @@ describe('loadServerMain', () => {
       controller.abort();
       return Promise.reject(new DOMException('aborted', 'AbortError'));
     });
-    expect(await loadServerMain(container, '/about', { page: 'about' }, controller.signal)).toBe(
-      'aborted',
-    );
+    expect(
+      await loadServerMain(container, '/about', { page: 'about' }, { signal: controller.signal }),
+    ).toBe('aborted');
     expect(container.querySelector('h1')?.textContent).toBe('The Star Wars API');
   });
 
@@ -146,9 +221,9 @@ describe('loadServerMain', () => {
       controller.abort();
       return Promise.resolve(html(documentWith(aboutMain)));
     });
-    expect(await loadServerMain(container, '/about', { page: 'about' }, controller.signal)).toBe(
-      'aborted',
-    );
+    expect(
+      await loadServerMain(container, '/about', { page: 'about' }, { signal: controller.signal }),
+    ).toBe('aborted');
     expect(container.querySelector('h1')?.textContent).toBe('The Star Wars API');
   });
 
