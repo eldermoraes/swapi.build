@@ -83,7 +83,14 @@ export const VIEWS: { id: View; label: string }[] = [
 /** Ids match com.eldermoraes.stats.RouteGroup (RouteGroupTest pins them). */
 export const GROUPS: { id: GroupId; label: string; hint: string }[] = [
   { id: 'rest', label: 'REST API', hint: '/api and /openapi.json' },
-  { id: 'mcp', label: 'MCP', hint: '/mcp' },
+  // 2.12.1: a subscriptions/listen is answered at once (McpTransportFilter),
+  // so the group's latency no longer carries calls of minutes. The count is of
+  // HTTP requests (RouteCountingFilter), not JSON-RPC calls.
+  {
+    id: 'mcp',
+    label: 'MCP',
+    hint: '/mcp: every request, one per POST (a batch counts once, the lists a client reads when it connects included), plus GET and DELETE',
+  },
   // 2.11.0: an in-site navigation to a server-rendered page fetches its document.
   {
     id: 'pages',

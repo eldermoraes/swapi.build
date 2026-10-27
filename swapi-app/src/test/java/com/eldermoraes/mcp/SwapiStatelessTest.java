@@ -35,7 +35,11 @@ public class SwapiStatelessTest {
                 .post("/mcp")
         .then()
                 .statusCode(200)
-                .body("result.serverInfo.name", equalTo("swapi.build"))
+                // 2.12.1 (extension 2.0.3, quarkus-mcp-server PR #1037): the
+                // serverInfo of server/discover moved into _meta, as the
+                // 2026-07-28 schema says.
+                .body("result._meta.'io.modelcontextprotocol/serverInfo'.name", equalTo("swapi.build"))
+                .body("result", not(hasKey("serverInfo")))
                 .body("result.ttlMs", equalTo(0))
                 .body("result.cacheScope", equalTo("public"))
                 .body("result", not(hasKey("cacheControl")));
