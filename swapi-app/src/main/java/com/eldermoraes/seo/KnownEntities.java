@@ -138,6 +138,15 @@ public class KnownEntities {
     }
 
     /**
+     * The name of a record that exists: the title of a film, the name of
+     * anything else (2.12.0, the text of a link to a related record). Same rule
+     * as exists and fields, and nothing reads getUrl(). Empty otherwise.
+     */
+    public Optional<String> name(String type, String id) {
+        return fields(type, id).map(values -> values.get("films".equals(type) ? "title" : "name"));
+    }
+
+    /**
      * The ids of a type, ascending, taken from the suffix of getUrl() (only the
      * suffix, as in exists: the base the event loop may hold is never used). A
      * record added to the data is listed here with no code change.

@@ -98,7 +98,8 @@ class ServerRenderedPagesTest {
         assertTrue(main.contains("Paul Hallett"), main);
     }
 
-    // The host goes into the <main> only on /docs/mcp, always as escaped text.
+    // The host goes into the <main> only on /docs/mcp (and, since 2.12.0, on the
+    // record addresses, ServerRenderedRecordTest), always as escaped text.
     @Test
     void theHostIsEscaped() {
         String body = given().accept("text/html")
@@ -125,8 +126,9 @@ class ServerRenderedPagesTest {
     }
 
     // Guard: the pages still drawn by the client leave with the empty <main>.
+    // /resource/films/1 left this list on purpose in 2.12.0 (ServerRenderedRecordTest).
     @ParameterizedTest
-    @ValueSource(strings = {"/docs/webmcp", "/stats", "/privacy", "/terms", "/resource/films", "/resource/films/1"})
+    @ValueSource(strings = {"/docs/webmcp", "/stats", "/privacy", "/terms", "/resource/films"})
     void theOtherPagesStayClientRendered(String path) {
         String body = given().accept("text/html").when().get(path).then().statusCode(200).extract().asString();
         assertTrue(body.contains(ServerRendering.EMPTY_MAIN), path);

@@ -1,0 +1,48 @@
+
+    <div class="detail-view sw-inner-wide">
+      <div class="detail-header">
+        <a href="/resource/{view.type}" class="back-btn">&larr; {view.typeLabel}</a>
+        <h1 class="detail-title">{view.name}</h1>
+      </div>
+      <section class="record-section record-attributes">
+        {#sectionLabel text="Attributes" /}
+        <div class="sw-table-wrap">
+          <table class="sw-table record-table">
+            <tbody>{#for attribute in view.attributes}
+              <tr><th scope="row">{attribute.label}</th><td>{attribute.value}</td></tr>{/for}
+            </tbody>
+          </table>
+        </div>{#if view.openingCrawl}
+        <h3 class="record-subtitle">Opening crawl</h3>
+        <p class="record-crawl">{view.openingCrawl}</p>{/if}
+      </section>{#if view.relations}
+      <section class="record-section record-relations">
+        {#sectionLabel text="Related records" /}{#for related in view.relations}
+        <div class="record-relation">
+          <h3 class="record-subtitle">{related.label}</h3>
+          <ul class="record-links">{#for link in related.links}<li>{#if link.linked}<a href="{link.href}">{link.name}</a>{#else}<span>{link.name}</span>{/if}</li>{/for}</ul>
+        </div>{/for}
+      </section>{/if}
+      <section class="record-section record-usage">
+        {#sectionLabel text="Use this record" /}
+        <h3 class="record-subtitle">curl</h3>
+        {#codeBlock id="record-curl" lang="bash" content=view.curl /}
+        <h3 class="record-subtitle">JavaScript</h3>
+        {#codeBlock id="record-js" lang="js" content=view.fetch /}
+        <h3 class="record-subtitle">Python</h3>
+        {#codeBlock id="record-python" lang="python" content=view.python /}
+        <h3 class="record-subtitle">MCP</h3>
+        <p class="guide-note">Connect your agent once:</p>
+        {#codeBlock id="record-mcp-add" lang="bash" content=view.mcpAdd /}
+        <p class="guide-note">then call the tool <code>sw_get</code> with:</p>
+        {#codeBlock id="record-mcp-args" lang="json" content=view.mcpArgs /}
+      </section>
+      <div id="detail-content" aria-live="polite">
+        <div class="sw-code result-panel">
+          <div class="result-header">
+            <span class="result-status">GET {view.apiPath} <span class="status-code">200</span></span>
+          </div>
+          <pre class="result-body">{view.json}</pre>
+        </div>
+      </div>
+    </div>

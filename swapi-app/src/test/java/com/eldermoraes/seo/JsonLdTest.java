@@ -89,12 +89,26 @@ class JsonLdTest {
                 list.getJsonArray("itemListElement").stream().map(JsonValue::asJsonObject).toList());
     }
 
-    // E2 (2.12.0) adds the record crumbs; in 2.11.0 a record address has neither.
+    // Changes on purpose in 2.12.0 (slice E2): a record address had no crumbs in
+    // 2.11.0. Home, the list of its type, the record; the noindex of the other
+    // types does not stop the markup. Still no Dataset.
     @Test
-    void aRecordAddressHasNoBreadcrumbAndNoDataset() {
-        JsonObject graph = graph("/resource/films/1");
-        assertTrue(node(graph, "BreadcrumbList").isEmpty());
-        assertTrue(node(graph, "Dataset").isEmpty());
+    void aRecordAddressHasThreeCrumbsAndNoDataset() {
+        JsonObject film = graph("/resource/films/1");
+        assertEquals(List.of(crumb(1, "Home", "https://preview.example/"),
+                        crumb(2, "Films", "https://preview.example/resource/films"),
+                        crumb(3, "A New Hope", "https://preview.example/resource/films/1")),
+                node(film, "BreadcrumbList").orElseThrow().getJsonArray("itemListElement").stream()
+                        .map(JsonValue::asJsonObject).toList());
+        assertTrue(node(film, "Dataset").isEmpty());
+
+        JsonObject person = graph("/resource/people/1");
+        assertEquals(List.of(crumb(1, "Home", "https://preview.example/"),
+                        crumb(2, "People", "https://preview.example/resource/people"),
+                        crumb(3, "Luke Skywalker", "https://preview.example/resource/people/1")),
+                node(person, "BreadcrumbList").orElseThrow().getJsonArray("itemListElement").stream()
+                        .map(JsonValue::asJsonObject).toList());
+        assertTrue(node(person, "Dataset").isEmpty());
     }
 
     // Changes on purpose from 2.10.0, which used the description of the route.

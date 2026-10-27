@@ -53,4 +53,16 @@ public class SsrPages {
     public String about() {
         return SsrTemplates.about().render();
     }
+
+    @Inject
+    RecordViews records;
+
+    /**
+     * The template of detail (2.12.0) for a record that exists; empty otherwise.
+     * RecordViews builds the view with the base of this request set and restored;
+     * the render runs after, on Strings only.
+     */
+    public Optional<String> record(String type, String id, String apiBase, String siteRoot) {
+        return records.build(type, id, apiBase, siteRoot).map(view -> SsrTemplates.record(view).render());
+    }
 }

@@ -98,6 +98,21 @@ class KnownEntitiesTest {
         assertEquals(List.of(), entities.ids("droids"));
     }
 
+    // The text of a link to a related record in the template of detail (2.12.0):
+    // the title of a film, the name of anything else; never read from getUrl().
+    @Test
+    void theNameOfARecord() {
+        assertEquals(Optional.of("Tatooine"), entities.name("planets", "1"));
+        assertEquals(Optional.of("A New Hope"), entities.name("films", "1"));
+        assertEquals(Optional.of("Luke Skywalker"), entities.name("people", "1"));
+        assertEquals(Optional.of("Droid"), entities.name("species", "2"));
+        assertEquals(Optional.of("CR90 corvette"), entities.name("starships", "2"));
+        assertEquals(Optional.of("Sand Crawler"), entities.name("vehicles", "4"));
+        assertEquals(Optional.empty(), entities.name("people", "17"));
+        assertEquals(Optional.empty(), entities.name("people", "01"));
+        assertEquals(Optional.empty(), entities.name("droids", "1"));
+    }
+
     @Test
     void theSupportedFieldsOfEachType() {
         assertEquals(Set.of("title", "episode_id", "director", "release_date"), KnownEntities.supportedFields("films"));

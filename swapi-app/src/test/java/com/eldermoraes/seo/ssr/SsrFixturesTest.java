@@ -53,6 +53,25 @@ class SsrFixturesTest {
         compare(parts[0] + ".html", main);
     }
 
+    // 2.12.0 (slice E2): the record a client test adopts and navigates to, and
+    // the body of the API for the same record, so the client can prove that the
+    // <pre> of the page is JSON.stringify(apiBody, null, 2), byte for byte.
+    @Test
+    void theMainOfARecordAndItsApiBodyMatchTheirFixtures() throws IOException {
+        String body = given().accept("text/html")
+                .header("X-Forwarded-Proto", "https")
+                .header("X-Forwarded-Host", "preview.example")
+                .when().get("/resource/films/1").then().statusCode(200).extract().asString();
+        Matcher m = MAIN.matcher(body);
+        assertTrue(m.find(), "no <main> on /resource/films/1");
+        compare("record-films-1.html", m.group() + "\n");
+        String api = given().accept("application/json")
+                .header("X-Forwarded-Proto", "https")
+                .header("X-Forwarded-Host", "preview.example")
+                .when().get("/api/films/1").then().statusCode(200).extract().asString();
+        compare("record-films-1.api.json", api + "\n");
+    }
+
     @Test
     void thePillTagMatchesItsFixture() throws IOException {
         String pill = engine.parse("{#pill label='Get started' href='/docs' kind='solid' /}").render() + "\n";

@@ -34,6 +34,7 @@ public class SeoRoutes {
     @Inject PublicSiteUrlResolver urls;
     @Inject WebAnalytics analytics;
     @Inject ServerRendering rendering;
+    @Inject KnownEntities known;
 
     /**
      * The router of the site (2.9.1; Quinoa's SPA routing is off, QuinoaConfigTest).
@@ -261,7 +262,11 @@ public class SeoRoutes {
         // regex never reaches the content, and a literal replace: the content has
         // $ and \ (code samples) that a regex replacement would read. A failed
         // render leaves the empty <main> (ServerRendering logs it).
-        Optional<String> main = pageName(path).flatMap(page -> rendering.main(page, urls.siteRoot(rc)));
+        // A record address (2.12.0) is drawn by the one template of detail; it is
+        // known here (isKnownDocumentPath), so its type and id are a real record's.
+        Optional<String> main = recordOf(path)
+                .map(record -> rendering.record(record[0], record[1], urls.apiBase(rc), urls.siteRoot(rc)))
+                .orElseGet(() -> pageName(path).flatMap(page -> rendering.main(page, urls.siteRoot(rc))));
         if (main.isPresent()) {
             html = html.replace(ServerRendering.EMPTY_MAIN, main.get());
         }
@@ -342,9 +347,20 @@ public class SeoRoutes {
     }
 
     // JsonLd (2.11.0): JSON-P and the script escape; the graph per document is described there.
+    // The name of a record (2.12.0) is the last crumb of its address.
     private String jsonLd(RoutingContext rc, SeoMetadata route, String canonical, String image) {
+        Optional<String> recordName = recordOf(route.path()).flatMap(record -> known.name(record[0], record[1]));
         return JsonLd.document(metadata.site(), path -> urls.absoluteUrl(rc, path), route, canonical, image,
-                metadata.home().description());
+                metadata.home().description(), recordName);
+    }
+
+    /** The type and id of a record address (/resource/{type}/{id}); empty for anything else. */
+    private static Optional<String[]> recordOf(String path) {
+        String[] parts = path.split("/");
+        if (parts.length == 4 && parts[0].isEmpty() && "resource".equals(parts[1])) {
+            return Optional.of(new String[]{parts[2], parts[3]});
+        }
+        return Optional.empty();
     }
 
     /** The page name of a fixed page of seo/site.json; empty for lists and record addresses. */
