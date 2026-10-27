@@ -146,6 +146,84 @@ describe('SEO metadata', () => {
   });
 });
 
+// 2.10.0: the record addresses, from seo/site.json.
+describe('record addresses', () => {
+  const film = {
+    title: 'A New Hope',
+    episode_id: 4,
+    director: 'George Lucas',
+    release_date: '1977-05-25',
+    url: 'https://swapi.build/api/films/1',
+  };
+  const luke = { name: 'Luke Skywalker', url: 'https://swapi.build/api/people/1' };
+
+  it('a film is indexable, with its own canonical and a title with its name', () => {
+    expect(getSeoMetadata('/resource/films/1', film)).toEqual({
+      path: '/resource/films/1',
+      canonicalPath: '/resource/films/1',
+      title: 'A New Hope — Star Wars film JSON | swapi.build',
+      description:
+        'A New Hope, Star Wars Episode 4, directed by George Lucas and released 1977-05-25. Its JSON record from the free swapi.build REST API and MCP server.',
+      robots: 'index,follow',
+    });
+  });
+
+  it('a person has the name in the title, but stays noindex with the list canonical', () => {
+    expect(getSeoMetadata('/resource/people/1', luke)).toEqual({
+      path: '/resource/people/1',
+      canonicalPath: '/resource/people',
+      title: 'Luke Skywalker — Star Wars character JSON | swapi.build',
+      description: 'Star Wars people record #1 from the swapi.build REST API.',
+      robots: 'noindex,follow',
+    });
+  });
+
+  it('without the record: the fallback title, with the robots and canonical of the type', () => {
+    expect(getSeoMetadata('/resource/films/3')).toMatchObject({
+      title: 'Films #3 | swapi.build',
+      description: 'Star Wars film record #3 from the swapi.build REST API.',
+      robots: 'index,follow',
+      canonicalPath: '/resource/films/3',
+    });
+    expect(getSeoMetadata('/resource/people/1').title).toBe('People #1 | swapi.build');
+  });
+
+  it('a record with an empty field gets the fallback, never "undefined"', () => {
+    expect(getSeoMetadata('/resource/films/8', { episode_id: 8 }).title).toBe(
+      'Films #8 | swapi.build',
+    );
+  });
+
+  // A record of an enabled type that the code has never seen is indexable by the
+  // rule of its type, with no code change.
+  it('a new film is indexable by the rule of its type', () => {
+    expect(
+      getSeoMetadata('/resource/films/7', {
+        title: 'The Force Awakens',
+        episode_id: 7,
+        director: 'J. J. Abrams',
+        release_date: '2015-12-18',
+      }),
+    ).toMatchObject({
+      title: 'The Force Awakens — Star Wars film JSON | swapi.build',
+      robots: 'index,follow',
+      canonicalPath: '/resource/films/7',
+    });
+  });
+
+  it('applies the record head with its own canonical', () => {
+    document.head.innerHTML = '<title>old</title>';
+    applySeoMetadata('/resource/films/1', origin, { entity: film });
+    expect(document.title).toBe('A New Hope — Star Wars film JSON | swapi.build');
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+      `${origin}/resource/films/1`,
+    );
+    expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe(
+      'index,follow',
+    );
+  });
+});
+
 it('gives the WebMCP guide an indexable canonical route', () => {
   expect(getSeoMetadata('/docs/webmcp')).toMatchObject({
     canonicalPath: '/docs/webmcp',

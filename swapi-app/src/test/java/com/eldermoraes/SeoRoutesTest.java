@@ -115,7 +115,24 @@ class SeoRoutesTest {
                         containsString("<loc>https://preview.example/resource/species</loc>"),
                         containsString("<loc>https://preview.example/resource/starships</loc>"),
                         containsString("<loc>https://preview.example/resource/vehicles</loc>"),
+                        containsString("<loc>https://preview.example/resource/films/1</loc>"),
+                        containsString("<loc>https://preview.example/resource/films/2</loc>"),
+                        containsString("<loc>https://preview.example/resource/films/3</loc>"),
+                        containsString("<loc>https://preview.example/resource/films/4</loc>"),
+                        containsString("<loc>https://preview.example/resource/films/5</loc>"),
+                        containsString("<loc>https://preview.example/resource/films/6</loc>"),
                         not(containsString("<!doctype html>"))));
+    }
+
+    // The first batch (2.10.0): 8 pages + 6 lists + the 6 films. No record of a
+    // type not yet enabled, and no lastmod (guard: there is no real date of change
+    // per address, and the build date would be a lie).
+    @Test
+    void sitemapListsOnlyIndexableTypes() {
+        String xml = given().when().get("/sitemap.xml").then().statusCode(200).extract().body().asString();
+        Assertions.assertEquals(20, xml.split("<loc>", -1).length - 1, xml);
+        Assertions.assertFalse(java.util.regex.Pattern.compile("/resource/people/\\d").matcher(xml).find(), xml);
+        Assertions.assertFalse(xml.contains("<lastmod>"), xml);
     }
 
     @Test
@@ -208,22 +225,68 @@ class SeoRoutesTest {
                         containsString("<meta name=\"description\" content=\"Browse Star Wars film records as JSON "
                                 + "from the free swapi.build REST API and MCP server.\" />"),
                         not(containsString("films records"))));
+        // 2.10.0: a film record says what it is (seo/site.json).
         given().accept("text/html").when().get("/resource/films/3").then()
                 .statusCode(200)
                 .body(allOf(
-                        containsString("<title>Films #3 | swapi.build</title>"),
-                        containsString("<meta name=\"description\" content=\""
-                                + "Star Wars film record #3 from the swapi.build REST API.\" />")));
+                        containsString("<title>Return of the Jedi — Star Wars film JSON | swapi.build</title>"),
+                        containsString("<meta name=\"description\" content=\"Return of the Jedi, Star Wars Episode 6, "
+                                + "directed by Richard Marquand and released 1983-05-25. Its JSON record from the free "
+                                + "swapi.build REST API and MCP server.\" />")));
     }
 
+    // 2.10.0: the title has the name; people are not indexable yet (one type per
+    // release), so the description, robots and canonical stay as they were.
     @Test
     void resourceDetailHasItsTitleAndDescription() {
         given().accept("text/html").when().get("/resource/people/1").then()
                 .statusCode(200)
                 .body(allOf(
-                        containsString("<title>People #1 | swapi.build</title>"),
+                        containsString("<title>Luke Skywalker — Star Wars character JSON | swapi.build</title>"),
                         containsString("<meta name=\"description\" content=\""
-                                + "Star Wars people record #1 from the swapi.build REST API.\" />")));
+                                + "Star Wars people record #1 from the swapi.build REST API.\" />"),
+                        containsString("<meta name=\"robots\" content=\"noindex,follow\" />"),
+                        containsString("/resource/people\" />")));
+    }
+
+    // The first batch (2.10.0): the six films are indexable, each with its own
+    // canonical, built from the request host like every canonical.
+    @Test
+    void filmDetailIsIndexableWithItsOwnCanonical() {
+        given()
+                .accept("text/html")
+                .header("X-Forwarded-Proto", "https")
+                .header("X-Forwarded-Host", "preview.example")
+        .when()
+                .get("/resource/films/1")
+        .then()
+                .statusCode(200)
+                .body(allOf(
+                        containsString("<title>A New Hope — Star Wars film JSON | swapi.build</title>"),
+                        containsString("<meta name=\"robots\" content=\"index,follow\" />"),
+                        containsString("<link rel=\"canonical\" href=\"https://preview.example/resource/films/1\" />"),
+                        containsString("<meta property=\"og:url\" content=\"https://preview.example/resource/films/1\" />")));
+    }
+
+    // A SoftwareApplication described as "A New Hope, Star Wars Episode 4" would be
+    // misleading markup: on a record address it keeps the site's URL and description.
+    @Test
+    void filmJsonLdDescribesTheSiteNotTheRecord() {
+        String body = given()
+                .accept("text/html")
+                .header("X-Forwarded-Proto", "https")
+                .header("X-Forwarded-Host", "preview.example")
+        .when()
+                .get("/resource/films/1")
+        .then()
+                .statusCode(200)
+                .extract().body().asString();
+        int at = body.indexOf("\"@type\":\"SoftwareApplication\"");
+        Assertions.assertTrue(at > 0, body);
+        String app = body.substring(at, body.indexOf('}', at));
+        Assertions.assertTrue(app.contains("\"url\":\"https://preview.example/\""), app);
+        Assertions.assertTrue(app.contains("\"description\":\"Free SWAPI alternative:"), app);
+        Assertions.assertFalse(app.contains("A New Hope"), app);
     }
 
     // The SPA HTML is stored at the edge by path alone (quarkus.http.filter.spa),
@@ -259,7 +322,7 @@ class SeoRoutesTest {
                 .statusCode(200)
                 .contentType(containsString("text/html"))
                 .body(allOf(
-                        containsString("<title>People #1 | swapi.build</title>"),
+                        containsString("<title>Luke Skywalker — Star Wars character JSON | swapi.build</title>"),
                         containsString("<link rel=\"canonical\" href=\"https://preview.example/resource/people\"")));
     }
 
@@ -355,13 +418,62 @@ class SeoRoutesTest {
         }
     }
 
+    // 2.10.0 (it was 200 with a canonical): a known page with a trailing slash is a
+    // 301 to the bare path, relative, with the raw query, like /index.html.
     @Test
-    void trailingSlashStays200() {
-        for (String path : new String[] {"/resource/people/", "/resource/people/1/"}) {
-            given().accept("text/html").when().get(path).then()
-                    .statusCode(200)
-                    .body(containsString("<link rel=\"canonical\""));
+    void trailingSlashRedirectsToTheBarePath() {
+        String[][] cases = {
+                {"/docs/", "/docs"},
+                {"/resource/people/", "/resource/people"},
+                {"/resource/films/1/", "/resource/films/1"},
+                {"/resource/films/1/?x=1", "/resource/films/1?x=1"},
+                {"/about/", "/about"},
+                // More than one slash still lands on the page in one hop.
+                {"/docs//", "/docs"},
+        };
+        for (String[] c : cases) {
+            io.restassured.response.Response response = given().redirects().follow(false)
+                    .urlEncodingEnabled(false).when().get(c[0]);
+            Assertions.assertEquals(301, response.statusCode(), c[0]);
+            Assertions.assertEquals(c[1], response.header("Location"), c[0]);
+            Assertions.assertEquals(java.util.List.of("public, max-age=300, s-maxage=86400"),
+                    response.headers().getValues("Cache-Control"), c[0]);
+            Assertions.assertEquals("Origin", response.header("Vary"), c[0]);
         }
+        given().redirects().follow(false).when().head("/docs/").then()
+                .statusCode(301)
+                .header("Location", "/docs");
+    }
+
+    // Only a page that exists is redirected: anything else with a slash is the 404
+    // document, and a path that only looks like a page never becomes a Location
+    // (//evil.example/ must not turn into a protocol-relative redirect).
+    @Test
+    void unknownPathWithTrailingSlashStays404() {
+        for (String path : new String[] {"/resource/people/9999/", "/docs/nope/", "/resource/people/17/",
+                "/resource/droids/"}) {
+            assertNotFoundDocument(path);
+        }
+        io.restassured.response.Response evil = given().redirects().follow(false)
+                .urlEncodingEnabled(false).when().get("//evil.example/");
+        Assertions.assertNotEquals(301, evil.statusCode());
+        Assertions.assertNull(evil.header("Location"));
+        // //docs/ may reach the app as /docs/ (the leading slashes collapse before
+        // the router); whatever it becomes, the Location is a path of this host.
+        for (String path : new String[] {"//docs/", "///docs/", "/%2Fevil.example/"}) {
+            String location = given().redirects().follow(false).urlEncodingEnabled(false).when().get(path)
+                    .header("Location");
+            Assertions.assertTrue(location == null || (location.startsWith("/") && !location.startsWith("//")
+                    && !location.contains("evil")), path + " -> " + location);
+        }
+    }
+
+    // The API keeps its own contract: a trailing slash there is not redirected.
+    @Test
+    void apiWithTrailingSlashIsNotRedirected() {
+        io.restassured.response.Response response = given().redirects().follow(false).when().get("/api/people/1/");
+        Assertions.assertNotEquals(301, response.statusCode());
+        Assertions.assertNull(response.header("Location"));
     }
 
     @Test
@@ -443,7 +555,8 @@ class SeoRoutesTest {
 
     @Test
     void knownRoutesStay200() {
-        for (String path : new String[] {"/", "/docs", "/docs/", "/resource/people", "/resource/people/1",
+        for (String path : new String[] {"/", "/docs", "/resource/people", "/resource/people/1",
+                "/resource/films/1", "/resource/films/3",
                 "/resource/films/6", "/resource/people/83", "/resource/starships/2", "/resource/vehicles/4"}) {
             given().accept("text/html").when().get(path).then()
                     .statusCode(200)

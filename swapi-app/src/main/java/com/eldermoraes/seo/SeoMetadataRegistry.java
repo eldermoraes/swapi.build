@@ -1,48 +1,72 @@
 package com.eldermoraes.seo;
 
+import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
+/**
+ * The head of every page, from seo/site.json (2.10.0: the one source, read by
+ * the site too, webui/src/site.ts). Built at startup (@Startup): a missing or
+ * invalid file stops the app with its message instead of serving untitled pages.
+ *
+ * Record addresses: one template per type. Whether a type is indexable is a rule
+ * of the file (detail.indexable), never a list of records: a record added to the
+ * data of an enabled type gets its title, index,follow, its own canonical and a
+ * sitemap entry with no code change.
+ */
+@Startup
 @ApplicationScoped
 public class SeoMetadataRegistry {
 
-    // The 404 document (2.9.1). One line each: seo-parity.test.ts reads them with
-    // javaConstant() and compares them with seo.ts.
-    static final String NOT_FOUND_TITLE = "Page not found | swapi.build";
-    static final String NOT_FOUND_DESCRIPTION = "This page does not exist on swapi.build. Browse the Star Wars API, its docs or the MCP server instead.";
-
     private final KnownEntities entities;
+    private final SeoSiteFile site;
+    private final List<SeoMetadata> routes;
 
     @Inject
     public SeoMetadataRegistry(KnownEntities entities) {
         this.entities = entities;
+        this.site = SeoSiteFile.load();
+        List<SeoMetadata> routes = new ArrayList<>();
+        for (SeoSiteFile.Page page : site.pages()) {
+            routes.add(route(page.path(), page.title(), page.description(), page.changefreq(), page.priority()));
+        }
+        for (SeoSiteFile.ResourceType resource : site.resources()) {
+            SeoSiteFile.Listing list = resource.list();
+            routes.add(route("/resource/" + resource.type(), list.title(), list.description(), list.changefreq(),
+                    list.priority()));
+        }
+        this.routes = List.copyOf(routes);
     }
 
-    // Titles and descriptions are mirrored by hand in webui/src/seo.ts until the
-    // single metadata file of slice D; seo-parity.test.ts compares the two.
-    // Intent words first, the brand "swapi.build" last; never "drop-in".
-    private static final String HOME_DESCRIPTION = "Free SWAPI alternative: Star Wars REST JSON API and remote MCP server with people, films, planets, species, starships and vehicles (Episodes I–VI). No API key.";
+    /** The home page: the site as a whole (its URL and description describe the site in JSON-LD). */
+    public SeoMetadata home() {
+        return forPath("/");
+    }
 
-    private static final List<SeoMetadata> ROUTES = List.of(
-            route("/", "SWAPI alternative: free Star Wars API and MCP server | swapi.build", HOME_DESCRIPTION, "weekly", "1.0"),
-            route("/docs", "SWAPI docs: Star Wars REST API endpoints and OpenAPI | swapi.build", "Star Wars API reference for swapi.build: REST endpoints, JSON response schemas and live examples, generated from the OpenAPI contract.", "weekly", "0.9"),
-            route("/docs/mcp", "Star Wars MCP server: remote, no API key | swapi.build", "Add the Star Wars MCP server to Claude, OpenAI Codex, GitHub Copilot or IBM Bob in one step. Remote Streamable HTTP at /mcp, read-only, no API key.", "weekly", "0.8"),
-            route("/docs/webmcp", "Star Wars WebMCP tools in the browser | swapi.build", "Explore Star Wars together with a browser agent using experimental WebMCP tools.", "weekly", "0.8"),
-            route("/about", "About: a SWAPI alternative built with Quarkus | swapi.build", "Learn why swapi.build exists, how it is built with Quarkus and GraalVM, and how to contribute.", "monthly", "0.7"),
-            route("/resource/people", "Star Wars People API: JSON data | swapi.build", "Browse Star Wars people records as JSON from the free swapi.build REST API and MCP server.", "weekly", "0.7"),
-            route("/resource/films", "Star Wars Films API: JSON data | swapi.build", "Browse Star Wars film records as JSON from the free swapi.build REST API and MCP server.", "weekly", "0.7"),
-            route("/resource/planets", "Star Wars Planets API: JSON data | swapi.build", "Browse Star Wars planet records as JSON from the free swapi.build REST API and MCP server.", "weekly", "0.7"),
-            route("/resource/species", "Star Wars Species API: JSON data | swapi.build", "Browse Star Wars species records as JSON from the free swapi.build REST API and MCP server.", "weekly", "0.7"),
-            route("/resource/starships", "Star Wars Starships API: JSON data | swapi.build", "Browse Star Wars starship records as JSON from the free swapi.build REST API and MCP server.", "weekly", "0.7"),
-            route("/resource/vehicles", "Star Wars Vehicles API: JSON data | swapi.build", "Browse Star Wars vehicle records as JSON from the free swapi.build REST API and MCP server.", "weekly", "0.7"),
-            route("/stats", "Usage stats | swapi.build", "Anonymous request counts for the swapi.build REST API, MCP server and site, per route and per group, for the last 24 hours, 7 days or 30 days.", "daily", "0.4"),
-            route("/privacy", "Privacy Policy | swapi.build", "Plain-language privacy policy for swapi.build, the free public Star Wars API and MCP server.", "yearly", "0.3"),
-            route("/terms", "Terms of Use | swapi.build", "Terms of use for swapi.build, the free public Star Wars API and MCP server.", "yearly", "0.3"));
-
+    /**
+     * The pages, the lists and every record of a type marked indexable, walked
+     * from the data. No lastmod: there is no real date of change per address (the
+     * data has not changed since 2014), and the build or deploy date would be a lie.
+     */
     public List<SeoMetadata> sitemapRoutes() {
-        return ROUTES.stream().filter(SeoMetadata::sitemap).toList();
+        List<SeoMetadata> sitemap = new ArrayList<>(routes);
+        for (SeoSiteFile.ResourceType resource : site.resources()) {
+            if (resource.detail().indexable()) {
+                for (int id : entities.ids(resource.type())) {
+                    SeoMetadata record = resourceDetail("/resource/" + resource.type() + "/" + id);
+                    if (record != null) {
+                        sitemap.add(record);
+                    }
+                }
+            }
+        }
+        return sitemap.stream().filter(SeoMetadata::sitemap).toList();
     }
 
     /**
@@ -52,7 +76,7 @@ public class SeoMetadataRegistry {
      */
     public SeoMetadata forPath(String rawPath) {
         String path = normalizePath(rawPath);
-        for (SeoMetadata route : ROUTES) {
+        for (SeoMetadata route : routes) {
             if (route.path().equals(path)) {
                 return route;
             }
@@ -66,43 +90,49 @@ public class SeoMetadataRegistry {
 
     public boolean isKnownDocumentPath(String rawPath) {
         String path = normalizePath(rawPath);
-        return ROUTES.stream().anyMatch(route -> route.path().equals(path)) || resourceDetail(path) != null;
+        return routes.stream().anyMatch(route -> route.path().equals(path)) || resourceDetail(path) != null;
     }
 
     /** No canonical, noindex, out of the sitemap. Nothing of the path goes into the document. */
     public SeoMetadata notFound(String path) {
-        return new SeoMetadata(path, null, NOT_FOUND_TITLE, NOT_FOUND_DESCRIPTION, SeoMetadata.NOINDEX, false, null, null);
+        return new SeoMetadata(path, null, site.notFound().title(), site.notFound().description(),
+                SeoMetadata.NOINDEX, false, null, null);
     }
 
     private static SeoMetadata route(String path, String title, String description, String frequency, String priority) {
         return new SeoMetadata(path, path, title, description, SeoMetadata.INDEX_FOLLOW, true, frequency, priority);
     }
 
-    /** Only an entity that exists, with its id in the canonical form (KnownEntities). */
+    /**
+     * Only a record that exists, with its id in the canonical form (KnownEntities).
+     * Title and description from the type's template, with the record's fields; a
+     * record with an empty field gets the fallback. Indexable type: index,follow,
+     * its own canonical and the sitemap. Otherwise: noindex,follow and the list's
+     * canonical.
+     */
     private SeoMetadata resourceDetail(String path) {
         String[] parts = path.split("/");
-        if (parts.length == 4 && "resource".equals(parts[1]) && entities.exists(parts[2], parts[3])) {
-            String resourceTitle = switch (parts[2]) {
-                case "people" -> "People";
-                case "films" -> "Films";
-                case "planets" -> "Planets";
-                case "species" -> "Species";
-                case "starships" -> "Starships";
-                case "vehicles" -> "Vehicles";
-                default -> null;
-            };
-            if (resourceTitle != null) {
-                // The singular noun is the modifier: "film record", not "films record".
-                String noun = switch (parts[2]) {
-                    case "people", "species" -> parts[2];
-                    default -> parts[2].substring(0, parts[2].length() - 1);
-                };
-                return new SeoMetadata(path, "/resource/" + parts[2], resourceTitle + " #" + parts[3] + " | swapi.build",
-                        "Star Wars " + noun + " record #" + parts[3] + " from the swapi.build REST API.",
-                        SeoMetadata.NOINDEX_FOLLOW, false, null, null);
-            }
+        if (parts.length != 4 || !"resource".equals(parts[1])) {
+            return null;
         }
-        return null;
+        Optional<SeoSiteFile.ResourceType> type = site.resource(parts[2]);
+        Optional<Map<String, String>> fields = entities.fields(parts[2], parts[3]);
+        if (type.isEmpty() || fields.isEmpty()) {
+            return null;
+        }
+        SeoSiteFile.Detail detail = type.get().detail();
+        Map<String, String> values = new HashMap<>(fields.get());
+        values.put("id", parts[3]);
+        String title = SeoSiteFile.render(detail.title(), values)
+                .orElseGet(() -> SeoSiteFile.render(detail.fallbackTitle(), values).orElseThrow());
+        String description = SeoSiteFile.render(detail.description(), values)
+                .orElseGet(() -> SeoSiteFile.render(detail.fallbackDescription(), values).orElseThrow());
+        if (detail.indexable()) {
+            return new SeoMetadata(path, path, title, description, SeoMetadata.INDEX_FOLLOW, true,
+                    detail.changefreq(), detail.priority());
+        }
+        return new SeoMetadata(path, "/resource/" + parts[2], title, description, SeoMetadata.NOINDEX_FOLLOW, false,
+                null, null);
     }
 
     private static String normalizePath(String rawPath) {

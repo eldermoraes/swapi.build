@@ -225,3 +225,32 @@ it.each(['button', 'submit', 'enter'])(
     expect(container.querySelector('output')!.textContent).toBe('Human result');
   },
 );
+
+// 2.10.0: the head of a record is written once, after the record arrives, from
+// the record itself; lists have no record.
+it('commits the path with the record for a detail and without it for a list', async () => {
+  const commits: [string, unknown][] = [];
+  const local = new ResourceExplorer(document.createElement('div'), (path, entity) => {
+    commits.push([path, entity]);
+  });
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(luke)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(leia)))
+      .mockResolvedValueOnce(new Response(JSON.stringify([luke, leia])))
+      .mockResolvedValueOnce(new Response(JSON.stringify([luke]))),
+  );
+  await local.execute('sw_get', { resource: 'PEOPLE', id: 1 });
+  await local.execute('sw_random', { resource: 'PEOPLE' });
+  await local.execute('sw_list', { resource: 'PEOPLE' });
+  await local.execute('sw_search', { resource: 'PEOPLE', query: 'Luke' });
+  local.dispose();
+  expect(commits).toEqual([
+    ['/resource/people/1', luke],
+    ['/resource/people/5', leia],
+    ['/resource/people', undefined],
+    ['/resource/people', undefined],
+  ]);
+});

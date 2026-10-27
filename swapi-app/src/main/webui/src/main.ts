@@ -58,16 +58,34 @@ function resolveRoute(path: string): Route {
   return route;
 }
 
+// The path the head describes. On the first load it is the server's head, which
+// is the truth (2.10.0): the client never rewrites it, not even with the same
+// values, so a crawler that runs the script sees one title, one canonical and
+// one robots. Later navigations write the head once, for a new path.
+let headPath = window.location.pathname;
+
+/** Writes the head for a path, unless it already describes it; the title the head has. */
+function writeHead(
+  path: string,
+  options: { notFound?: boolean; entity?: Record<string, unknown> } = {},
+): string {
+  if (path === headPath) return document.title;
+  headPath = path;
+  return applySeoMetadata(path, window.location.origin, options).title;
+}
+
 const container = document.getElementById('main-content')!;
 const pageLifecycle = new AbortController();
 const explorer = new ResourceExplorer(
   container,
-  (path) => {
+  (path, entity) => {
     cancelPending();
     const generation = ++navigationGeneration;
     if (window.location.pathname !== path) history.pushState(null, '', path);
     updateActiveNav(getRoute(path).page);
-    const title = applySeoMetadata(path, window.location.origin).title;
+    // Written after the record arrived, from the record: a record address never
+    // shows its fallback title ("Films #1") on the way to its real one.
+    const title = writeHead(path, { entity });
     requestAnimationFrame(() => {
       if (generation !== navigationGeneration) return;
       window.scrollTo(0, 0);
@@ -90,13 +108,15 @@ async function navigate() {
   const path = window.location.pathname;
   // The route is resolved before the head is touched, and the head is written
   // once: on a server 404 the client never shows "People #9999" with the list's
-  // canonical while it waits for a fetch that would fail.
+  // canonical while it waits for a fetch that would fail. A record address
+  // writes nothing here: its head comes with the record (the explorer's commit).
   const route = resolveRoute(path);
   updateActiveNav(route.page);
 
-  const title = applySeoMetadata(path, window.location.origin, {
-    notFound: route.page === 'not-found',
-  }).title;
+  const title =
+    route.page === 'resource-detail'
+      ? document.title
+      : writeHead(path, { notFound: route.page === 'not-found' });
 
   switch (route.page) {
     case 'home':
@@ -143,14 +163,15 @@ async function navigate() {
       // not-found page and head, like the server's 404.
       if (generation === navigationGeneration && !result.ok && result.error.code === 'NOT_FOUND') {
         renderNotFound(container, path);
-        const notFoundTitle = applySeoMetadata(path, window.location.origin, {
-          notFound: true,
-        }).title;
+        const notFoundTitle = writeHead(path, { notFound: true });
         container.focus({ preventScroll: true });
         announce(spokenTitle(notFoundTitle));
         return;
       }
       if (generation === navigationGeneration && !result.ok) {
+        // The record did not arrive (network, 5xx): the fallback head of its type,
+        // so the head no longer describes the page before.
+        writeHead(path);
         heading.textContent = 'Resource unavailable';
         if (!container.querySelector('[role="alert"]')) {
           const error = document.createElement('p');
