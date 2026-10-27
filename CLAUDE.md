@@ -114,6 +114,15 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   `GET /mcp` answers 405 (no server→client stream) and `DELETE` answers 204.
   The legacy HTTP+SSE transport (`/mcp/sse`) is rejected on purpose. Never
   reintroduce session-affine state, and never depend on the legacy transport.
+  The server sends no notifications (the data never changes), so
+  `McpTransportFilter` (2.12.1+) reads the POST body before the extension and
+  answers `subscriptions/listen` itself, at once, with `-32601` (the extension
+  would keep an SSE stream open with no limit), and `resources/subscribe` /
+  `unsubscribe` with a session without recording anything (the extension keeps
+  one subscriber per request in a list never cleaned). Stateless subscribe goes
+  on to the extension, which refuses it with `-32601`. `McpListenLimitTest`
+  guards it; never let a POST to `/mcp` open a stream that waits for
+  notifications.
 - **Public base URL is discovered per request** (REST via `UriInfo`, MCP via
   `HttpServerRequest`, honoring `X-Forwarded-*`). `swapi.public-base-url` is an
   optional override only — never reintroduce a hardcoded domain default. When
