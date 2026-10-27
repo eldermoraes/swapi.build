@@ -7,8 +7,11 @@ trademarked assets, no official logos, no film stills.
 **Source of truth is code, not this file.** Tokens live in
 [`src/styles/tokens.css`](src/styles/tokens.css); components live in
 [`src/ui/components.ts`](src/ui/components.ts) +
-[`src/styles/components.css`](src/styles/components.css). When this document and
-the code disagree, the code wins and this document is the bug.
+[`src/styles/components.css`](src/styles/components.css). Components the server
+draws (2.11.0+) live in the Qute tags of
+[`../resources/templates/tags/`](../resources/templates/tags/), with the same
+classes as `components.ts`. When this document and the code disagree, the code
+wins and this document is the bug.
 
 ---
 
@@ -114,15 +117,19 @@ falls below AA.
 
 ## 6. Component inventory
 
-Import from `src/ui/components.ts`. Each helper returns an HTML **string**
-(pages render by assigning `innerHTML`), and every interpolated value is passed
-through `escapeHtml`.
+Two places draw components. Pages drawn by the client import from
+`src/ui/components.ts`; each helper returns an HTML **string** (pages render by
+assigning `innerHTML`), and every interpolated value is passed through
+`escapeHtml`. The four pages drawn by the server (home, `/docs`, `/docs/mcp`,
+`/about`, 2.11.0+) use the Qute tags in `src/main/resources/templates/tags/`,
+which Qute escapes (templates never use `raw` or `safe`); the client only binds
+behaviour to what the server drew.
 
 ```ts
-import { pill, sectionLabel, terminalMarkup, initTerminal, indexRows } from '../ui/components';
+import { pill, initTerminal } from '../ui/components';
 ```
 
-### Pill button — `pill()`
+### Pill button — `pill()` / `pill.html`
 
 The only button shape on the site.
 
@@ -132,45 +139,51 @@ pill('Read the docs', '/docs', 'ghost'); // ghost
 pill('Try it', '/docs', 'ghost', true); // small
 ```
 
-### Section label — `sectionLabel()`
+On the server:
 
-```ts
-sectionLabel('The resources'); // <h2 class="sw-section-label">
+```html
+{#pill label="MCP for agents" href="/docs/mcp" kind="ghost" /}
 ```
 
-### Terminal — `terminalMarkup()` + `initTerminal()`
+`components.test.ts` keeps the two equal: it compares `pill()` with the output
+of the tag (fixture `src/test/resources/ssr/pill.html`, written by
+`SsrFixturesTest`).
 
-The live try-it. Render the markup, then wire it up on the same container.
+### Section label — `sectionLabel.html`
+
+```html
+{#sectionLabel text="The resources" /}  <!-- <h2 class="sw-section-label"> -->
+```
+
+### Terminal — markup in `ssr/home.html` + `initTerminal()`
+
+The live try-it. The server draws the markup (`[data-term="home"]`, with the
+suggestion chips) inside `templates/ssr/home.html`; `initTerminal()` binds EXEC,
+Enter and the chips on the same container, reading the chips from the DOM:
 
 ```ts
-container.innerHTML = terminalMarkup({
-  idPrefix: 'home',
-  initialPath: '/api/people/1',
-  suggestions: ['/api/people/1', '/api/films/1', '/api/planets/1'],
-});
-initTerminal(container, { idPrefix: 'home' });
+initTerminal(container, 'home');
 ```
 
 `idPrefix` must be unique per terminal on the page. Output is `aria-live="polite"`,
 suggestion chips are real `<button>`s, and JSON is coloured with the terminal
 palette.
 
-### Index rows — `indexRows()`
+### Index rows — `indexRows.html`
 
 The resource list. **Never poster cards on home.** Wrap it — together with its
 section label — in a `.sw-band` so it stays aligned with the terminal above
 instead of running edge-to-edge:
 
-```ts
-`<div class="sw-band">
-  ${sectionLabel('The resources')}
-  ${indexRows(rows)}
-</div>`;
+```html
+<div class="sw-band">
+  {#sectionLabel text="The resources" /}
+  {#indexRows rows=view.rows /}
+</div>
 ```
 
-```ts
-indexRows([{ title: 'People', endpoint: '/api/people', href: '/resource/people' }]);
-```
+Each row is an `IndexRow` (`title`, `endpoint`, `href`), for example
+`People`, `/api/people`, `/resource/people`.
 
 ### CSS-only components
 
@@ -178,7 +191,7 @@ indexRows([{ title: 'People', endpoint: '/api/people', href: '/resource/people' 
 | --------------- | ------------------------------------------- | ---------------------------------------------------------------------------------- |
 | Framed wordmark | `.sw-wordmark`                              | White 3px frame, gold on hover (`index.html`)                                      |
 | Header          | `.sw-header`, `.sw-menu`, `.nav-link`       | Keep `.nav-link` — `main.ts` targets it for active state                           |
-| Hero            | `.sw-hero`, `.sw-greeting`, `.sw-starfield` | Markup is inline in `home.ts`; hero children sit above the starfield via `z-index` |
+| Hero            | `.sw-hero`, `.sw-greeting`, `.sw-starfield` | Markup is in `templates/ssr/home.html`; hero children sit above the starfield via `z-index` |
 | Panel           | `.sw-panel`                                 | 8px radius, hairline border — endpoint blocks, schema details                      |
 | Code block      | `.sw-code`, `.sw-copy`                      | Dark panel + copy button                                                           |
 | Tabs            | `.sw-tabs`, `.sw-tab`                       | Gold underline on active                                                           |
@@ -192,13 +205,18 @@ A new page or section is on-standard when:
 1. It uses **only tokens** — no raw hex anywhere in page styles.
 2. The display face is **uppercase + letter-spaced**, never bold.
 3. Gold/cyan roles are respected (gold = action, cyan = data).
-4. Actions are `.sw-pill` — via `pill()`.
+4. Actions are `.sw-pill` — via `pill()` on the client or the `pill.html` tag
+   on the server.
 5. Data views use the terminal palette.
 6. It is **keyboard-operable with a visible gold focus ring**; interactive
    things are real `<a>`/`<button>`, never a `div` with `role="button"`.
 7. It is **reduced-motion safe**.
 8. It uses the **full-width shell** with per-band inner widths.
 9. It ships **no trademarked assets**.
+10. A page drawn on the server carries the `data-ssr-page` marker on its
+    `<main>`; its client code only binds behaviour and never redraws the
+    `<main>`; and what it hides with JavaScript stays visible without it (tab
+    panels hide only under `.js`).
 
 ## 8. Voice & copy
 

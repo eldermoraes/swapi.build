@@ -93,6 +93,15 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   rewrites the head on the first load. Record addresses become indexable one type
   per release (`indexable` in that file), each gated on Search Console coverage;
   `/api/*` answers `X-Robots-Tag: noindex`, never the HTML.
+- **Server-rendered pages have one source**: the Qute templates in
+  `swapi-app/src/main/resources/templates/ssr/` draw the `<main>` of every page
+  marked `ssr` in `seo/site.json`; the client adopts it on the first load (never
+  redraws it when the `data-ssr-*` marker matches the route) and fetches the
+  document on later navigations (a first load without the marker never fetches
+  or reloads). Templates never use `raw` or `safe`, and Java never builds a
+  `RawString`. Code that renders an entity sets `RequestBaseUrl` and restores the
+  previous value. `swapi.public-base-url` is the **API** base
+  (`https://host/api`); the site root is derived from it.
 - **Container tooling is `podman`** (`/opt/podman/bin`), not `docker`. The podman
   machine needs 8 GB for local native builds.
 - **MCP serves stateful and stateless clients on the same `/mcp` endpoint.**
@@ -107,7 +116,9 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   reintroduce session-affine state, and never depend on the legacy transport.
 - **Public base URL is discovered per request** (REST via `UriInfo`, MCP via
   `HttpServerRequest`, honoring `X-Forwarded-*`). `swapi.public-base-url` is an
-  optional override only — never reintroduce a hardcoded domain default.
+  optional override only — never reintroduce a hardcoded domain default. When
+  set, it is the **API** base (`https://host/api`): MCP and the pages derive the
+  site root from it by dropping the final `/api`; REST ignores it.
 - **Frontend design system:** tokens, components and the new-page checklist live
   in `swapi-app/src/main/webui/DESIGN.md`. New pages/features must follow it —
   tokens only, gold means action and cyan means data, and every action is a

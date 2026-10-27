@@ -26,7 +26,14 @@ Publishing a GitHub Release (`docs/RELEASE.md`, step 7) runs
    frontend).
 2. **`build`**: the native binary (section 1 below), attached to the Release with
    its `application.sha256`; the hash also goes to the run summary and to the
-   job's output.
+   job's output. Before it is attached, **Native smoke** (2.11.0+) starts the
+   binary on port 8099 and runs `scripts/native-smoke.sh`: it waits up to 20 s
+   for `/api/people/1` (Luke Skywalker), then checks `/openapi.json` (paths not
+   empty, the version of the pom) and the four server-rendered pages (marker,
+   phrase, at least 200 characters of `<main>`). A failure prints the app log
+   and stops the job, so nothing is attached and the deploy never begins:
+   `swapi-update` switches the link before it knows the new version answers,
+   and a binary that does not start would take the whole site down.
 3. **`deploy`**: waits for **manual approval** (environment `production`), then
    connects to the host over SSH as the `deploy` user and sends
    `update <tag> <sha256>`. On the host, the forced command `swapi-deploy-gate`
@@ -138,6 +145,24 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   `llms.txt` have no `X-Robots-Tag` at all: on a page it would deindex the
   site. `/api/people/1` keeps exactly
   `Cache-Control: public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400`.
+- **Server-rendered content (2.11.0+)**: the `<main>` of `/`, `/docs`,
+  `/docs/mcp` and `/about` is drawn by the server (Qute) for whoever does not
+  run JavaScript (GPTBot, ClaudeBot, PerplexityBot, agents that `fetch`). Each
+  page answers `200 text/html` with its marker on the opening tag
+  (`data-ssr-page="home"`, `docs`, `mcp`, `about`), its phrase in the text of
+  `<main>` (`The Star Wars API`, `/api/people/{id}`,
+  `claude mcp add --transport http swapi-build https://<host>/mcp`,
+  `Why build another one?`) and at least 200 characters of text. The text comes
+  from `scripts/lib/main-text.sh`, which cuts at the first `</main>`, so the
+  footer never counts; the `/docs/mcp` phrase carries the request host, so it
+  also proves the host. The 404 document has no `data-ssr-` marker; `/docs/mcp`
+  keeps `Cache-Control: public, max-age=0, must-revalidate, s-maxage=300`, says
+  neither "scales to zero" nor "different instance", and has the Codex guide
+  (an inactive tab) in the HTML. JSON-LD: the home has `alternateName`, a
+  `Person` and a `Dataset`; `/docs/mcp` has a `BreadcrumbList`. A page that
+  fails to render on the server serves the shell without the marker, so the
+  probe fails even though the page still works in a browser. Any `FAIL` here
+  after a deploy is an immediate rollback (see [5. Rollback](#5-rollback)).
 - **Cold start**: the time of one request, informational only.
 - **MCP stateless**: a `tools/call` of `sw_get` with the 2026-07-28 headers and
   `_meta` returns `isError: false` and URLs on the host. `server/discover` and
@@ -159,8 +184,9 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   `sitemap.xml` and `llms.txt`) must carry `Vary: Origin`, and a
   request without `Origin` gets no `Access-Control-Allow-Origin`.
 - **Poisoning**: a spoofed `X-Forwarded-Host: evil.example` never reaches the
-  REST body, the sitemap, `llms.txt`, the SPA HTML or the not-found document
-  (Caddy overwrites the header), and an
+  REST body, the sitemap, `llms.txt`, the SPA HTML, the not-found document or
+  `/docs/mcp` (2.11.0+, whose `<main>` carries the request host; Caddy
+  overwrites the header), and an
   RFC 7239 `Forwarded` header is ignored by the app.
 - **Caddy headers**: `Strict-Transport-Security: max-age=63072000` and no
   `Server` header.
@@ -180,9 +206,19 @@ the `Caddyfile`, sends `GET /`, `GET /api/people/1?format=json`,
 `GET /resource/films/1` (2.10.0+) and `POST /mcp` to `https://www.swapi.build` without
 following redirects. Each must answer `308` with `Location` exactly
 `https://swapi.build` + the same path and query. Every line must read `PASS`.
-`scripts/verify-deploy-redirect.test.sh` (CI) runs the same mode against a
-fake host on `127.0.0.1` and proves that a correct redirect passes and a wrong
-status, a wrong host or a dropped query fails.
+
+From 2.11.0 the mode also follows one redirect, the road of an agent without
+JavaScript that arrives through `www`: it reads the `Location` of
+`GET /docs/mcp` and fetches it once (never a `Location` outside
+`https://swapi.build/`), wanting the `claude mcp add` line with the apex
+endpoint inside a `<main>` of at least 200 characters. A `FAIL` there with the
+`origin` mode all `PASS`: run the `redirect` mode once more; if it repeats,
+roll back.
+
+`scripts/verify-deploy-redirect.test.sh` (CI) runs the same mode against two
+fake hosts on `127.0.0.1` (one for `www`, one for the apex) and proves that a
+correct redirect passes and a wrong status, a wrong host, a dropped query, a
+redirect to somewhere else or an empty `<main>` at the destination fails.
 
 The redirect lives on the host, in the `Caddyfile` (section 4). It was
 applied there and verified with the probe on 2026-10-26 (18:25 BRT).
@@ -196,7 +232,10 @@ applied there and verified with the probe on 2026-10-26 (18:25 BRT).
 | The OpenAPI version probe fails right after a deploy | The host still runs the previous version: `swapi-update` failed, or the probe ran against a tag other than the deployed one. Read the `deploy` job log; on the host, `readlink /opt/swapi/current`. |
 | A file from `public/` or an asset answers 404 from 2.9.1 on | Its path has no dot in the last segment and is not under `/assets/`, so `SeoRoutes` treats it as a page and, not knowing it, answers the not-found document. Every new file in `public/` needs an extension. |
 | A page of the site answers 404 from 2.9.1 on | The route is missing from `swapi-app/src/main/resources/seo/site.json`, the one source the server and the site both read (2.10.0+). Quinoa's SPA routing stays off: turning it back on brings back the soft 404s and the double count in `/stats`. |
-| The app does not start after a release that touched `seo/site.json` (2.10.0+) | The file is invalid (the log names the key and the reason, for example a placeholder that is not a field of its type) or it is missing from `quarkus.native.resources.includes` in `application.properties` (the log names `seo/site.json`). The app refuses to start rather than serve pages without metadata; `swapi-update` reports "is not answering" and keeps the previous version. |
+| The app does not start after a release that touched `seo/site.json` (2.10.0+) | The file is invalid (the log names the key and the reason, for example a placeholder that is not a field of its type) or it is missing from `quarkus.native.resources.includes` in `application.properties` (the log names `seo/site.json`). The app refuses to start rather than serve pages without metadata. `swapi-update` has already switched the link and restarted the service when it reports "is not answering": the site is down until you run the rollback command it printed. |
+| A page shows its text, but the tabs, the copy buttons or "Try it" do not respond (2.11.0+) | The client code of that page did not bind: the `data-ssr-page` marker of the `<main>` did not match the route the client resolved. The browser console says which; compare the marker with the page's key in `seo/site.json`. |
+| A page shows "This page could not be loaded" (2.11.0+) | Its render failed on the server, which then served the shell without the marker. The log has an `ERROR` from `ServerRendering` or `OpenApiDocs` naming the page, and the server-rendered content probe reads `FAIL`: roll back (see [5. Rollback](#5-rollback)). |
+| The app does not start after a release that touched the Qute templates (2.11.0+) | A page marked `ssr` in `seo/site.json` has no renderer or template; the log names it. The **Native smoke** step of the build should have stopped that release; if it reached the host, roll back with the command `swapi-update` printed. |
 
 ## WebMCP verification (2.5.0+)
 
@@ -455,6 +494,13 @@ done
 
 Rolling back a version is `sudo ln -sfn /opt/swapi/<previous tag> /opt/swapi/current`
 and `sudo systemctl restart swapi`.
+
+`swapi-update` does not keep the previous version running while it checks the
+new one: it switches the link and restarts the service **before** it knows the
+new version answers. If the new version does not start, the whole site (pages,
+`/api`, `/mcp`) is down from the restart until someone runs the rollback command
+the script printed. That is why the build runs **Native smoke** before the
+binary is attached (see [Automated deploy](#automated-deploy)).
 
 #### 2.6 `swapi.service`
 
@@ -909,6 +955,26 @@ From 2.10.0 the same rule also covers the record addresses (the title,
 HTML: any of those `FAIL`s is an immediate rollback. The only new `FAIL` that
 admits a fix forward is an `X-Robots-Tag` **missing** on `/api` (the JSON stays
 indexable as in 2.9.1, with no new harm).
+
+From 2.11.0 the rule also covers the server-rendered content (the marker or the
+phrase of one of the four pages), the JSON-LD, the HTML poisoning pairs and the
+cache of `/docs/mcp`: any of those `FAIL`s, or one on any older probe of a
+known route, the assets or the record addresses, is an immediate rollback to
+2.10.0, and `mcp-publisher publish` does not run. A `FAIL` only in the `www`
+follow with the `origin` mode all `PASS`: run the `redirect` mode once more; if
+it repeats, roll back (an agent without JavaScript that arrives through `www`
+would not get the text). If `swapi-update` prints "is not answering", the site
+is already down (the link was switched and the service restarted): roll back at
+once with the command it printed.
+
+A rollback from 2.11.0 to 2.10.0 puts the four pages back to an empty `<main>`
+drawn by the client and the JSON-LD back to the 2.10.0 one; no index changes. A
+tab still open with the 2.11.0 JavaScript that fetches a 2.10.0 document does
+not find the marker and makes a full page load; that load is 2.10.0 and never
+fetches again, so there is no loop and no empty page. The stats snapshot is
+compatible both ways (no new route template). The MCP Registry keeps 2.11.0 as
+`isLatest`, with no practical effect (its `server.json` changes only the
+`version`).
 
 A rollback from 2.10.0 to 2.9.1 puts the films back to `noindex,follow` with the
 canonical of their list and the sitemap back to 14 URLs (search engines drop
