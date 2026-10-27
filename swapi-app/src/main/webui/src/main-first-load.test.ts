@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import mcpMain from '../../../test/resources/ssr/mcp.html?raw';
+import recordMain from '../../../test/resources/ssr/record-films-1.html?raw';
 
 const seo = vi.hoisted(() => ({ apply: vi.fn() }));
 
@@ -17,14 +18,6 @@ function settle(): Promise<void> {
   );
 }
 
-const film = {
-  title: 'A New Hope',
-  episode_id: 4,
-  director: 'George Lucas',
-  release_date: '1977-05-25',
-  url: 'http://localhost:3000/api/films/1',
-};
-
 // The head the server sends for /resource/films/1 (SeoGoldenTest checks it).
 const SERVER_HEAD = `
   <title>A New Hope — Star Wars film JSON | swapi.build</title>
@@ -41,35 +34,73 @@ function seoHead(): string[] {
 }
 
 // 2.10.0, the end of the overwrite: on the first load the head is the server's,
-// and the client writes nothing to it, not before the fetch and not after.
+// and the client writes nothing to it. Changes on purpose in 2.12.0 (slice E2):
+// the server draws the record, so the first load makes no request at all (it
+// asked /api/films/1 until 2.11.0) and never swaps the <main>.
 describe('first load of an indexable record address', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('keeps the server head byte for byte and announces its title', async () => {
+  it('keeps the server head and <main>, asks nothing, colours the JSON without changing it', async () => {
     document.head.innerHTML = SERVER_HEAD;
     const before = seoHead();
     expect(before).toHaveLength(6);
     document.body.innerHTML = `
       <nav class="sw-menu"><a href="/resource/films" class="nav-link">Films</a></nav>
-      <main id="main-content" tabindex="-1"></main>
+      ${recordMain}
     `;
     history.replaceState(null, '', '/resource/films/1');
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(JSON.stringify(film), { status: 200 }));
+    const container = document.getElementById('main-content')!;
+    const text = container.querySelector('pre.result-body')!.textContent!;
+    const mutations: MutationRecord[] = [];
+    const observer = new MutationObserver((records) => mutations.push(...records));
+    observer.observe(container, { childList: true });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
     await import('./main');
     await settle();
+    observer.disconnect();
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(document.querySelector('#main-content h1')?.textContent).toBe('A New Hope');
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(mutations).toHaveLength(0);
+    expect(container.hasAttribute('data-ssr-page')).toBe(false);
+    expect(container.querySelector('h1')?.textContent).toBe('A New Hope');
+    const pre = container.querySelector('pre.result-body')!;
+    expect(pre.querySelector('.json-key')).not.toBeNull();
+    expect(pre.textContent).toBe(text);
+    expect(pre.textContent).toBe(JSON.stringify(JSON.parse(text), null, 2));
     expect(seo.apply).not.toHaveBeenCalled();
     expect(seoHead()).toEqual(before);
     expect(document.querySelector('[aria-live="polite"].sr-only')?.textContent).toBe(
       'A New Hope — Star Wars film JSON',
     );
+  });
+});
+
+// 2.12.0: a record address whose <main> the server failed to draw.
+describe('first load of a record address without the marker', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('shows "Resource unavailable" with a Reload link; no request, no reload', async () => {
+    vi.resetModules();
+    document.head.innerHTML = SERVER_HEAD;
+    document.body.innerHTML = `<nav class="sw-menu"></nav><main id="main-content" tabindex="-1"></main>`;
+    history.replaceState(null, '', '/resource/films/1');
+    const assign = vi.fn<(url: string) => void>();
+    (await import('./server-main')).resetServerMain({ assign });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    await import('./main');
+    await settle();
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
+    const container = document.getElementById('main-content')!;
+    expect(container.querySelector('h1')?.textContent).toBe('Resource unavailable');
+    expect(container.querySelector('a')?.getAttribute('href')).toBe('/resource/films/1');
   });
 });
 

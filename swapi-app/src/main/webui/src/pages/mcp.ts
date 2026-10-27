@@ -1,3 +1,5 @@
+import { bindCopyButtons } from '../ui/components';
+
 /**
  * The /docs/mcp page comes drawn by the server (2.11.0, templates/ssr/mcp.html),
  * with the endpoint of the request host. The client only binds the tabs and the
@@ -38,20 +40,5 @@ export function bindMcp(container: HTMLElement): void {
     });
   });
 
-  container.querySelectorAll<HTMLButtonElement>('.copy-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const target = document.getElementById(btn.dataset.copyTarget!);
-      if (!target) return;
-      navigator.clipboard
-        .writeText(target.textContent ?? '')
-        .then(() => {
-          btn.textContent = 'Copied!';
-          setTimeout(() => (btn.textContent = 'Copy'), 1500);
-        })
-        .catch(() => {
-          btn.textContent = 'Copy failed';
-          setTimeout(() => (btn.textContent = 'Copy'), 1500);
-        });
-    });
-  });
+  bindCopyButtons(container);
 }

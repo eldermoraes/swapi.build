@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import aboutMain from '../../../test/resources/ssr/about.html?raw';
 import homeMain from '../../../test/resources/ssr/home.html?raw';
+import apiBody from '../../../test/resources/ssr/record-films-1.api.json?raw';
+import recordMain from '../../../test/resources/ssr/record-films-1.html?raw';
 
 const seo = vi.hoisted(() => ({
   apply: vi.fn(),
@@ -30,10 +32,22 @@ const film = {
   url: 'http://localhost:3000/api/films/1',
 };
 
+// Changes on purpose in 2.12.0 (slice E2): the record is its document, the HTML
+// the server drew (fixture from SsrFixturesTest); only the list asks /api.
 function respond(input: RequestInfo | URL): Promise<Response> {
   const url = String(input);
-  const body = url.endsWith('/api/films/1') ? film : [film];
-  return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+  if (url === '/resource/films/1') {
+    return Promise.resolve(
+      new Response(
+        `<!doctype html><html><head><title>t</title></head><body>${recordMain}</body></html>`,
+        {
+          status: 200,
+          headers: { 'Content-Type': 'text/html;charset=UTF-8' },
+        },
+      ),
+    );
+  }
+  return Promise.resolve(new Response(JSON.stringify([film]), { status: 200 }));
 }
 
 // 2.10.0: from the list (first load, no write), a click on a record writes the
@@ -57,24 +71,36 @@ describe('client navigation from the list to a record', () => {
       <main id="main-content" tabindex="-1"></main>
     `;
     history.replaceState(null, '', '/resource/films');
-    vi.spyOn(globalThis, 'fetch').mockImplementation(respond);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(respond);
 
     await import('./main');
     await settle();
     expect(seo.apply).not.toHaveBeenCalled();
+    fetchSpy.mockClear();
 
     const titles: string[] = [];
     const observer = new MutationObserver(() => titles.push(document.title));
     observer.observe(document.head, { subtree: true, childList: true, characterData: true });
+    const headings: string[] = [];
+    const main = document.getElementById('main-content')!;
+    const mainObserver = new MutationObserver(() =>
+      headings.push(main.querySelector('h1')?.textContent ?? ''),
+    );
+    mainObserver.observe(main, { subtree: true, childList: true, characterData: true });
 
     document.getElementById('to-film')!.click();
     await settle();
     observer.disconnect();
+    mainObserver.disconnect();
 
     expect(window.location.pathname).toBe('/resource/films/1');
+    // One request, the document; none to /api/films/1.
+    expect(fetchSpy.mock.calls.map((call) => String(call[0]))).toEqual(['/resource/films/1']);
+    expect(headings).not.toContain('Loading resource…');
+    expect(main.querySelector('h1')?.textContent).toBe('A New Hope');
     expect(seo.apply).toHaveBeenCalledTimes(1);
     expect(seo.apply).toHaveBeenCalledWith('/resource/films/1', window.location.origin, {
-      entity: film,
+      entity: JSON.parse(apiBody),
     });
     expect(document.title).toBe('A New Hope — Star Wars film JSON | swapi.build');
     expect(titles).not.toContain('Films #1 | swapi.build');

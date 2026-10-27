@@ -19,6 +19,30 @@ export function pill(
 }
 
 /**
+ * The copy buttons of the code blocks the server drew (the Qute tag
+ * templates/tags/codeBlock.html): each copies the text of its
+ * `data-copy-target`. Used by /docs/mcp and, since 2.12.0, the record pages.
+ */
+export function bindCopyButtons(container: HTMLElement): void {
+  container.querySelectorAll<HTMLButtonElement>('.copy-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.copyTarget!);
+      if (!target) return;
+      navigator.clipboard
+        .writeText(target.textContent ?? '')
+        .then(() => {
+          btn.textContent = 'Copied!';
+          setTimeout(() => (btn.textContent = 'Copy'), 1500);
+        })
+        .catch(() => {
+          btn.textContent = 'Copy failed';
+          setTimeout(() => (btn.textContent = 'Copy'), 1500);
+        });
+    });
+  });
+}
+
+/**
  * Binds the terminal the server drew (`[data-term="<idPrefix>"]`, 2.11.0,
  * templates/ssr/home.html): EXEC, Enter and the suggestion chips, which it
  * reads from the DOM.

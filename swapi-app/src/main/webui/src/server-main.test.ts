@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import aboutMain from '../../../test/resources/ssr/about.html?raw';
 import homeMain from '../../../test/resources/ssr/home.html?raw';
+import recordMain from '../../../test/resources/ssr/record-films-1.html?raw';
 import {
   adoptServerMain,
+  fetchServerMain,
+  swapServerMain,
   loadServerMain,
   renderUnavailable,
   resetServerMain,
@@ -57,6 +60,49 @@ describe('adoptServerMain', () => {
 
   it('does not adopt an empty shell', () => {
     expect(adoptServerMain(mountShell(SHELL_EMPTY), { page: 'home' })).toBe(false);
+  });
+
+  // 2.12.0, slice E2: a record carries its type and id too; all three must match.
+  it('adopts a record only with its own type and id, and removes the three attributes', () => {
+    const film = { page: 'resource-detail', type: 'films', id: '1' } as const;
+    expect(adoptServerMain(mountShell(recordMain), { ...film, id: '2' })).toBe(false);
+    expect(adoptServerMain(mountShell(recordMain), { ...film, type: 'people' })).toBe(false);
+    const container = mountShell(recordMain);
+    const first = container.firstChild;
+    expect(adoptServerMain(container, film)).toBe(true);
+    expect(container.firstChild).toBe(first);
+    for (const name of ['data-ssr-page', 'data-ssr-type', 'data-ssr-id']) {
+      expect(container.hasAttribute(name)).toBe(false);
+    }
+  });
+});
+
+describe('fetchServerMain', () => {
+  it('gives the <main> of a record without touching the page; the swap is the caller’s', async () => {
+    const container = mountShell(SHELL_EMPTY);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(html(documentWith(recordMain)));
+    const fetched = await fetchServerMain('/resource/films/1', {
+      page: 'resource-detail',
+      type: 'films',
+      id: '1',
+    });
+    expect(fetched.result).toBe('ok');
+    expect(fetched.main?.querySelector('h1')?.textContent).toBe('A New Hope');
+    expect(container.childNodes).toHaveLength(0);
+    swapServerMain(container, fetched.main!);
+    expect(container.querySelector('h1')?.textContent).toBe('A New Hope');
+    expect(container.hasAttribute('data-ssr-id')).toBe(false);
+  });
+
+  it.each([
+    [503, 503],
+    [0, 0],
+  ])('a failed fetch (%s) tells the status, 0 for the network', async (status, expected) => {
+    const spy = vi.spyOn(globalThis, 'fetch');
+    if (status === 0) spy.mockRejectedValue(new TypeError('offline'));
+    else spy.mockResolvedValue(html('down', status));
+    const fetched = await fetchServerMain('/about', { page: 'about' });
+    expect(fetched).toEqual({ result: 'error', status: expected });
   });
 });
 
