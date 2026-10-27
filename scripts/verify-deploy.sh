@@ -6,16 +6,20 @@
 #                                           "Self-hosted origin on Oracle Cloud"): REST, OpenAPI, SEO,
 #                                           the site pages and assets, the not-found variants,
 #                                           MCP (stateless, stateful burst, edges), CORS, the
-#                                           X-Forwarded-Host / Forwarded poisoning probes, and the
-#                                           Caddy headers (HSTS, no Server)
+#                                           X-Forwarded-Host / Forwarded poisoning probes, the
+#                                           record addresses (2.10.0+: films indexable with their
+#                                           own canonical and title, 20 sitemap URLs, no lastmod),
+#                                           X-Robots-Tag noindex on /api only, the trailing-slash
+#                                           301, and the Caddy headers (HSTS, no Server)
 #        verify-deploy.sh redirect <from-host> <to-host>
 #                                          (a name that only redirects, today www.swapi.build ->
 #                                           swapi.build): without following redirects, GET /,
 #                                           GET with a path and query, GET /sitemap.xml,
-#                                           GET /llms.txt, GET /index.html, GET /not-a-real-page
-#                                           and POST /mcp on https://<from-host>
-#                                           must each answer 308 with Location exactly
-#                                           https://<to-host> + the same path and query
+#                                           GET /llms.txt, GET /index.html, GET /not-a-real-page,
+#                                           GET /resource/films/1 and POST /mcp on
+#                                           https://<from-host> must each answer 308 with
+#                                           Location exactly https://<to-host> + the same path
+#                                           and query
 #
 # The `preview` and `prod` modes probed the former Vercel deployments and were
 # removed with them.
@@ -25,7 +29,13 @@ USAGE="usage: verify-deploy.sh origin <host> | verify-deploy.sh redirect <from-h
 MODE="${1:?$USAGE}"
 HOST="${2:?$USAGE}"
 HOST="${HOST#https://}"; HOST="${HOST%%/*}"
-BASE="https://${HOST}"
+# VERIFY_DEPLOY_TEST_SCHEME exists only for tests and rehearsals that speak plain
+# http on a local port: scripts/verify-deploy-redirect.test.sh (its fake www host)
+# and the local prod-mode rehearsal of a release (origin mode against the jar on
+# localhost). CI and the operator never set it: the host is reached over https.
+# In redirect mode the expected Location is always https.
+SCHEME="${VERIFY_DEPLOY_TEST_SCHEME:-https}"
+BASE="${SCHEME}://${HOST}"
 
 case "$MODE" in origin|redirect) ;; *) echo "invalid mode: $MODE"; echo "$USAGE"; exit 2 ;; esac
 
@@ -39,11 +49,7 @@ fail() { printf 'FAIL  %s\n      expected: %s\n      got:      %s\n' "$1" "$2" "
 if [ "$MODE" = "redirect" ]; then
   TO="${3:?$USAGE}"
   TO="${TO#https://}"; TO="${TO%%/*}"
-  # VERIFY_DEPLOY_TEST_SCHEME exists only for scripts/verify-deploy-redirect.test.sh,
-  # whose fake host speaks plain http on 127.0.0.1. CI and the operator never set
-  # it: the probes reach <from-host> over https. The expected Location is always https.
-  SCHEME="${VERIFY_DEPLOY_TEST_SCHEME:-https}"
-  FROM_BASE="${SCHEME}://${HOST}"
+  FROM_BASE="$BASE"
 
   # redirect_probe <label> <path+query> [curl args...]: no -L, so the 308 itself is read.
   redirect_probe() {
@@ -66,6 +72,8 @@ if [ "$MODE" = "redirect" ]; then
   # 404 are proved in origin mode.
   redirect_probe GET "/index.html"
   redirect_probe GET "/not-a-real-page"
+  # A record address (2.10.0+, films are indexable): www sends it to the apex.
+  redirect_probe GET "/resource/films/1"
   # 308 (not 301) keeps the method and body: an MCP client posting to www must
   # be sent on to the apex still as a POST.
   redirect_probe POST "/mcp" -X POST \
@@ -259,10 +267,17 @@ done
 
 # The highest id of each type in the dataset: the edges of KnownEntities.
 for p in /resource/people/83 /resource/films/6 /resource/planets/1 /resource/species/1 \
-         /resource/starships/2 /resource/vehicles/4 /docs/; do
+         /resource/starships/2 /resource/vehicles/4; do
   code=$("${CURL[@]}" -o /dev/null -w '%{http_code}' -H 'Accept: text/html' "$BASE$p")
   [ "$code" = "200" ] && pass "$p -> 200" || fail "$p" "200" "$code"
 done
+# A trailing slash on a page (2.10.0+): 301 to the bare path, query kept. Before
+# 2.10.0 it answered 200 with the canonical of the bare path.
+got=$("${CURL[@]}" -o /dev/null -w '%{http_code} %header{location}' -H 'Accept: text/html' "$BASE/docs/")
+[ "$got" = "301 /docs" ] && pass "/docs/ -> 301 Location /docs" || fail "/docs/" "301 /docs" "$got"
+got=$("${CURL[@]}" -o /dev/null -w '%{http_code} %header{location}' -H 'Accept: text/html' "$BASE/resource/films/1/?probe=$$")
+[ "$got" = "301 /resource/films/1?probe=$$" ] && pass "/resource/films/1/?probe=$$ -> 301 Location /resource/films/1?probe=$$" \
+  || fail "/resource/films/1/?probe=$$" "301 /resource/films/1?probe=$$" "$got"
 code=$("${CURL[@]}" -o /dev/null -I -w '%{http_code}' "$BASE/")
 [ "$code" = "200" ] && pass "HEAD / -> 200" || fail "HEAD /" "200" "$code"
 
@@ -321,6 +336,68 @@ if [ "${page##*$'\n'}" = "200" ] && echo "$page" | grep -qF "<link rel=\"canonic
 else
   fail "/resource/people/1" "200 with canonical $BASE/resource/people" "${page##*$'\n'}"
 fi
+
+# --- Record addresses (2.10.0+) ------------------------------------------------
+# Indexing is a rule per type in seo/site.json; films is the first batch. Each
+# film: 200 text/html, index,follow, its own canonical. The exact title of film 1
+# proves site.json reached the native image (its absence stops the app instead).
+for id in 1 2 3 4 5 6; do
+  page=$("${CURL[@]}" -H 'Accept: text/html' -w '\n%{http_code} %{content_type}' "$BASE/resource/films/$id")
+  meta="${page##*$'\n'}"
+  if [[ "$meta" == "200 text/html"* ]] && echo "$page" | grep -qF 'name="robots" content="index,follow"' \
+     && echo "$page" | grep -qF "<link rel=\"canonical\" href=\"$BASE/resource/films/$id\" />"; then
+    pass "/resource/films/$id -> 200, index,follow, canonical = itself"
+  else
+    fail "/resource/films/$id" "200 text/html, index,follow, canonical $BASE/resource/films/$id" \
+      "$meta $(echo "$page" | grep -o '<link rel="canonical"[^>]*>' | head -1) $(echo "$page" | grep -o 'name="robots" content="[^"]*"' | head -1)"
+  fi
+  if [ "$id" = "1" ]; then
+    echo "$page" | grep -qF '<title>A New Hope — Star Wars film JSON | swapi.build</title>' \
+      && pass "/resource/films/1 title from seo/site.json" \
+      || fail "/resource/films/1 title" "<title>A New Hope — Star Wars film JSON | swapi.build</title>" \
+        "$(echo "$page" | grep -o '<title>[^<]*</title>' | head -1)"
+  fi
+done
+# Control: a type outside the batch stays noindex,follow with its list canonical.
+page=$("${CURL[@]}" -H 'Accept: text/html' -w '\n%{http_code}' "$BASE/resource/people/1")
+if [ "${page##*$'\n'}" = "200" ] && echo "$page" | grep -qF 'name="robots" content="noindex,follow"' \
+   && echo "$page" | grep -qF "<link rel=\"canonical\" href=\"$BASE/resource/people\" />"; then
+  pass "/resource/people/1 stays noindex,follow, canonical $BASE/resource/people"
+else
+  fail "/resource/people/1 robots" "200, noindex,follow, canonical $BASE/resource/people" "${page##*$'\n'}"
+fi
+# The sitemap: the 14 pages and lists plus the six films, nothing else, no lastmod.
+# Counted by occurrence, not by line: the count must not depend on the layout.
+nlocs=$(echo "$sitemap" | grep -o '<loc>' | wc -l | tr -d ' ')
+[ "$nlocs" = "20" ] && pass "sitemap.xml has 20 <loc>" || fail "sitemap.xml <loc> count" "20" "$nlocs"
+missing=""
+for id in 1 2 3 4 5 6; do
+  echo "$sitemap" | grep -qF "<loc>$BASE/resource/films/$id</loc>" || missing="$missing $id"
+done
+[ -z "$missing" ] && pass "sitemap.xml lists the six films" \
+  || fail "sitemap.xml films" "<loc>$BASE/resource/films/1..6</loc>" "missing:$missing"
+others=$(echo "$sitemap" | grep -cE '<loc>[^<]*/resource/(people|planets|species|starships|vehicles)/[0-9]')
+[ "$others" = "0" ] && pass "sitemap.xml lists no record of a type outside the batch" \
+  || fail "sitemap.xml other records" "0" "$others"
+lastmod=$(echo "$sitemap" | grep -o '<lastmod>' | wc -l | tr -d ' ')
+[ "$lastmod" = "0" ] && pass "sitemap.xml carries no <lastmod>" || fail "sitemap.xml <lastmod>" "0" "$lastmod"
+
+# --- Robots header (2.10.0+) ---------------------------------------------------
+# X-Robots-Tag: noindex on the API only (the JSON is not a page to rank). It must
+# never reach the HTML, robots.txt, the sitemap, llms.txt or the assets: on a
+# page it would deindex the site.
+for p in /api/people/1 /api/films/9; do
+  xrt=$("${CURL[@]}" -o /dev/null -w '%header{x-robots-tag}' "$BASE$p")
+  [ "$xrt" = "noindex" ] && pass "$p X-Robots-Tag: noindex" || fail "$p X-Robots-Tag" "noindex" "${xrt:-missing}"
+done
+for p in / /resource/films/1 /openapi.json /robots.txt /sitemap.xml /llms.txt; do
+  xrt=$("${CURL[@]}" -o /dev/null -w '%header{x-robots-tag}' -H 'Accept: text/html' "$BASE$p")
+  [ -z "$xrt" ] && pass "$p has no X-Robots-Tag" || fail "$p X-Robots-Tag" "absent" "$xrt"
+done
+cc=$("${CURL[@]}" -o /dev/null -w '%header{cache-control}' "$BASE/api/people/1")
+[ "$cc" = "public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400" ] \
+  && pass "/api/people/1 Cache-Control: $cc" \
+  || fail "/api/people/1 Cache-Control" "public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400" "${cc:-missing}"
 
 # --- Cold start (informational, never fails) ---------------------------------
 t=$("${CURL[@]}" -o /dev/null -w '%{time_total}' "$BASE/api/people/1")

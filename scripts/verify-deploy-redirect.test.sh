@@ -51,6 +51,13 @@ if grep -q 'SCHEME="${VERIFY_DEPLOY_TEST_SCHEME:-https}"' "$VERIFY"; then
 else
   fail "redirect mode: expected SCHEME to default to https"
 fi
+# Since 2.10.0 the origin mode honours the same override (the local rehearsal of
+# a release); both modes build their base from it, so both default to https.
+if grep -q 'BASE="${SCHEME}://${HOST}"' "$VERIFY" && ! grep -q 'BASE="http://' "$VERIFY"; then
+  pass "origin mode defaults to https"
+else
+  fail "origin mode: expected BASE to be built from SCHEME"
+fi
 
 probe ok
 if [ "$CODE" = "0" ] && ! echo "$OUT" | grep -q '^FAIL' \
