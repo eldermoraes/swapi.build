@@ -1,7 +1,7 @@
 import { ApiError, fetchResources, searchResource, fetchResourceById, fetchRandom } from './api';
 import { getResourceMeta, RESOURCES } from './constants';
 import { renderResourceList, renderResourceDetail, bindRecord, recordText } from './pages/resource';
-import { fetchServerMain, showLoadFailure, swapServerMain } from './server-main';
+import { fetchServerMain, forgetServerMain, showLoadFailure, swapServerMain } from './server-main';
 
 export const RESOURCE_NAMES = RESOURCES.map((resource) => resource.key.toUpperCase());
 export type ResourceTool = 'sw_list' | 'sw_search' | 'sw_get' | 'sw_random';
@@ -184,7 +184,10 @@ export class ResourceExplorer {
         // that was there stays, with an alert and a full load of the record.
         showLoadFailure(this.container, error.path);
         this.container.querySelector('.sw-load-failure')!.setAttribute('data-resource-error', '');
-        return failure(error.type === 'network' ? 'NETWORK_ERROR' : 'HTTP_ERROR', error.message);
+        return failure(
+          error.code ?? (error.type === 'network' ? 'NETWORK_ERROR' : 'HTTP_ERROR'),
+          error.message,
+        );
       }
       const code =
         error instanceof SyntaxError
@@ -241,10 +244,25 @@ export class ResourceExplorer {
     if (generation !== this.generation) return failure('SUPERSEDED', 'The user changed the page.');
     switch (fetched.result) {
       case 'ok': {
-        const text = recordText(fetched.main!);
-        if (text === null) throw new SyntaxError('Invalid resource record');
-        const data = validateEntity(JSON.parse(text), type);
-        if (entityId(data, type) !== id) throw new SyntaxError('Unexpected resource ID');
+        let data: Entity;
+        try {
+          const text = recordText(fetched.main!);
+          if (text === null) throw new SyntaxError('Invalid resource record');
+          data = validateEntity(JSON.parse(text), type);
+          if (entityId(data, type) !== id) throw new SyntaxError('Unexpected resource ID');
+        } catch (error) {
+          // The marker matched, so fetchServerMain kept this <main>; its record
+          // did not hold. Drop it, so a new try asks again, and offer the full load.
+          forgetServerMain(path);
+          if (!(error instanceof SyntaxError)) throw error;
+          throw new RecordDocumentError(
+            'The page returned an invalid record.',
+            200,
+            'http',
+            path,
+            'INVALID_RESPONSE',
+          );
+        }
         this.commit(path, data);
         swapServerMain(this.container, fetched.main!);
         bindRecord(this.container);
@@ -277,13 +295,17 @@ export class ResourceExplorer {
   }
 }
 
-/** A record document that did not come (5xx, network): the alert offers its full load. */
+/**
+ * A record document that did not come (5xx, network) or whose record did not
+ * hold (INVALID_RESPONSE): the alert offers its full load.
+ */
 class RecordDocumentError extends ApiError {
   constructor(
     message: string,
     status: number,
     type: 'network' | 'http',
     readonly path: string,
+    readonly code?: 'INVALID_RESPONSE',
   ) {
     super(message, status, type);
   }

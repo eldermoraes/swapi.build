@@ -330,6 +330,9 @@ async function navigate(source: NavigationSource) {
   announce(spokenTitle(title));
 }
 
+/** The href of the link navigation still running, if any (see the click handler). */
+let linkInFlight: string | null = null;
+
 // Intercept clicks on internal links to use History API instead of full page reload
 document.addEventListener(
   'click',
@@ -352,11 +355,19 @@ document.addEventListener(
       return;
 
     e.preventDefault();
+    // A second click on the link whose navigation is still running (2.12.0
+    // review): ignored. Taken as a new navigation, its `from` would be the
+    // address the first click pushed, and a failure would put that address
+    // back over the content that stayed: the URL and the page would disagree.
+    if (linkInFlight === href) return;
     const from = window.location.pathname + window.location.search + window.location.hash;
     if (href !== window.location.pathname + window.location.search) {
       history.pushState(null, '', href);
     }
-    void navigate({ via: 'link', from });
+    linkInFlight = href;
+    void navigate({ via: 'link', from }).finally(() => {
+      if (linkInFlight === href) linkInFlight = null;
+    });
   },
   { signal: pageLifecycle.signal },
 );

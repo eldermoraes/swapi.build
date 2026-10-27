@@ -131,14 +131,16 @@ class ServerRenderedRecordTest {
         assertFalse(main(body).contains("script"), main(body));
     }
 
+    // Changes on purpose in 2.12.0 (review): "a&b.example" used to go in escaped;
+    // now it is not a host, so the samples carry the request's own host.
     @Test
-    void theHostIsEscaped() {
+    void aHostWithAnAmpersandNeverReachesTheSamples() {
         String main = main(given().accept("text/html")
                 .header("X-Forwarded-Proto", "https")
                 .header("X-Forwarded-Host", "a&b.example")
                 .when().get("/resource/films/1").then().statusCode(200).extract().asString());
-        assertTrue(main.contains("curl https://a&amp;b.example/api/films/1"), main);
-        assertFalse(main.contains("a&b.example"), main);
+        assertTrue(main.contains("curl https://localhost"), main);
+        assertFalse(main.contains("b.example"), main);
     }
 
     @Test

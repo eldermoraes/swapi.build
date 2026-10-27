@@ -111,6 +111,35 @@ it('a record whose <pre> is not the record asked for is an invalid response, not
   expect(container.textContent).toContain('Keep this view');
 });
 
+// 2.12.0 review: fetchServerMain keeps a <main> whose marker matches before the
+// explorer reads its record. An invalid record must not stay in the cache (a
+// second try would get it again without asking), and the alert offers the full
+// load, as for a document that did not come.
+it('an invalid record leaves the cache and the alert offers the full load', async () => {
+  container.textContent = 'Keep this view';
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(recordDocument('people', 1, leia))
+    .mockResolvedValueOnce(recordDocument('people', 1, luke));
+  vi.stubGlobal('fetch', fetch);
+  expect(await explorer.execute('sw_get', { resource: 'PEOPLE', id: 1 })).toMatchObject({
+    ok: false,
+    error: { code: 'INVALID_RESPONSE' },
+  });
+  const alerts = container.querySelectorAll('[role="alert"]');
+  expect(alerts).toHaveLength(1);
+  expect(alerts[0].querySelector('a')?.getAttribute('href')).toBe('/resource/people/1');
+  expect(alerts[0].querySelector('a')?.getAttribute('target')).toBe('_self');
+  expect(container.textContent).toContain('Keep this view');
+
+  expect(await explorer.execute('sw_get', { resource: 'PEOPLE', id: 1 })).toMatchObject({
+    ok: true,
+    id: 1,
+  });
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(container.querySelector('h1')!.textContent).toBe('Luke Skywalker');
+});
+
 it('a newer action during the fetch of the document: the old answer is aborted and dropped', async () => {
   let finish!: (response: Response) => void;
   const signals: AbortSignal[] = [];

@@ -75,6 +75,61 @@ public class KnownEntities {
         species.getAllSpecies();
         starships.getAllStarships();
         vehicles.getAllVehicles();
+        names = buildNames();
+    }
+
+    /**
+     * The name of every record by type and canonical id (2.12.0): a record page
+     * asks one per related link, and the services find a record by a linear
+     * scan. Built once in warm(); null until then, when name() scans.
+     */
+    private volatile Map<String, Map<String, String>> names;
+
+    private Map<String, Map<String, String>> buildNames() {
+        Map<String, Map<String, String>> byType = new HashMap<>();
+        for (String type : TYPES) {
+            List<? extends SWObject> all = all(type);
+            Map<String, String> byId = new HashMap<>();
+            String prefix = "/" + type + "/";
+            for (SWObject entity : all == null ? List.<SWObject>of() : all) {
+                String url = url(entity);
+                int at = url == null ? -1 : url.lastIndexOf(prefix);
+                String name = nameOf(entity);
+                if (at < 0 || name == null) {
+                    continue;
+                }
+                String id = url.substring(at + prefix.length());
+                if (CANONICAL_ID.matcher(id).matches()) {
+                    byId.putIfAbsent(id, name);
+                }
+            }
+            byType.put(type, Map.copyOf(byId));
+        }
+        return Map.copyOf(byType);
+    }
+
+    private List<? extends SWObject> all(String type) {
+        return switch (type == null ? "" : type) {
+            case "people" -> people.getAllPeople();
+            case "films" -> films.getAllFilms();
+            case "planets" -> planets.getAllPlanets();
+            case "species" -> species.getAllSpecies();
+            case "starships" -> starships.getAllStarships();
+            case "vehicles" -> vehicles.getAllVehicles();
+            default -> List.of();
+        };
+    }
+
+    private static String nameOf(SWObject entity) {
+        return switch (entity) {
+            case People p -> p.getName();
+            case Film f -> f.getTitle();
+            case Planet p -> p.getName();
+            case Specie s -> s.getName();
+            case Starship s -> s.getName();
+            case Vehicle v -> v.getName();
+            default -> null;
+        };
     }
 
     public boolean exists(String resource, String id) {
@@ -142,10 +197,19 @@ public class KnownEntities {
     /**
      * The name of a record that exists: the title of a film, the name of
      * anything else (2.12.0, the text of a link to a related record). Same rule
-     * as exists and fields, and nothing reads getUrl(). Empty otherwise.
+     * as exists and fields; after warm() a lookup by (type, canonical id), built
+     * from the suffix of getUrl() only, as in ids(). Empty otherwise.
      */
     public Optional<String> name(String type, String id) {
-        return fields(type, id).map(values -> values.get("films".equals(type) ? "title" : "name"));
+        Map<String, Map<String, String>> lookup = names;
+        if (lookup == null) {
+            return fields(type, id).map(values -> values.get("films".equals(type) ? "title" : "name"));
+        }
+        if (type == null || id == null) {
+            return Optional.empty();
+        }
+        Map<String, String> byId = lookup.get(type);
+        return byId == null ? Optional.empty() : Optional.ofNullable(byId.get(id));
     }
 
     /**
@@ -154,15 +218,7 @@ public class KnownEntities {
      * record added to the data is listed here with no code change.
      */
     public List<Integer> ids(String type) {
-        List<? extends SWObject> all = switch (type == null ? "" : type) {
-            case "people" -> people.getAllPeople();
-            case "films" -> films.getAllFilms();
-            case "planets" -> planets.getAllPlanets();
-            case "species" -> species.getAllSpecies();
-            case "starships" -> starships.getAllStarships();
-            case "vehicles" -> vehicles.getAllVehicles();
-            default -> List.of();
-        };
+        List<? extends SWObject> all = all(type);
         if (all == null) {
             return List.of();
         }

@@ -21,9 +21,11 @@ import jakarta.json.bind.Jsonb;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * The data of the template of detail (2.12.0, slice E2) for any record of the
@@ -42,6 +44,10 @@ import java.util.regex.Pattern;
 public class RecordViews {
 
     private static final Pattern CANONICAL_ID = Pattern.compile("[1-9][0-9]{0,8}");
+
+    /** The id at the end of a related URL, one compiled Pattern per type. */
+    private static final Map<String, Pattern> ID_SUFFIX = KnownEntities.TYPES.stream()
+            .collect(Collectors.toUnmodifiableMap(t -> t, t -> Pattern.compile("/" + Pattern.quote(t) + "/([^/]+)$")));
 
     @Inject KnownEntities known;
     @Inject SeoMetadataRegistry metadata;
@@ -114,8 +120,9 @@ public class RecordViews {
      * itself, unlinked (none in today's data, the rule is tested).
      */
     RecordView.Link link(String type, String url) {
-        Matcher m = Pattern.compile("/" + Pattern.quote(type) + "/([^/]+)$").matcher(url);
-        if (m.find() && CANONICAL_ID.matcher(m.group(1)).matches()) {
+        Pattern suffix = ID_SUFFIX.get(type);
+        Matcher m = suffix == null || url == null ? null : suffix.matcher(url);
+        if (m != null && m.find() && CANONICAL_ID.matcher(m.group(1)).matches()) {
             Optional<String> name = known.name(type, m.group(1));
             if (name.isPresent()) {
                 return new RecordView.Link(name.get(), "/resource/" + type + "/" + m.group(1), true);

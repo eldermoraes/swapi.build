@@ -113,6 +113,44 @@ class KnownEntitiesTest {
         assertEquals(Optional.empty(), entities.name("droids", "1"));
     }
 
+    // 2.12.0 review: a record page asks a name per related link (a film has
+    // dozens). After warm() the name comes from a lookup by (type, id), not from
+    // the linear scans of exists() and fields().
+    @Test
+    void afterWarmANameIsALookupNotAScan() {
+        int[] scans = {0};
+        PeopleService counting = new PeopleService() {
+            @Override
+            public com.eldermoraes.people.People getPeopleById(int id) {
+                scans[0]++;
+                return super.getPeopleById(id);
+            }
+        };
+        KnownEntities warmed = new KnownEntities(counting, new FilmService(), new PlanetService(),
+                new SpecieService(), new StarshipService(), new VehicleService());
+        warmed.warm(null);
+        scans[0] = 0;
+        assertEquals(Optional.of("Luke Skywalker"), warmed.name("people", "1"));
+        assertEquals(Optional.empty(), warmed.name("people", "17"));
+        assertEquals(Optional.empty(), warmed.name("people", "01"));
+        assertEquals(0, scans[0]);
+    }
+
+    // The lookup and the scan agree on every record of every type.
+    @Test
+    void theLookupAgreesWithTheFieldsOnEveryRecord() {
+        KnownEntities warmed = new KnownEntities(new PeopleService(), new FilmService(), new PlanetService(),
+                new SpecieService(), new StarshipService(), new VehicleService());
+        warmed.warm(null);
+        for (String type : KnownEntities.TYPES) {
+            for (int id : warmed.ids(type)) {
+                String key = "films".equals(type) ? "title" : "name";
+                assertEquals(entities.fields(type, String.valueOf(id)).map(f -> f.get(key)),
+                        warmed.name(type, String.valueOf(id)), type + "/" + id);
+            }
+        }
+    }
+
     @Test
     void theSupportedFieldsOfEachType() {
         assertEquals(Set.of("title", "episode_id", "director", "release_date"), KnownEntities.supportedFields("films"));

@@ -42,12 +42,24 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
   a record is a little longer: the document is larger than the JSON.
 - "Loading resource…" is shown only for the listings. A record whose document
   does not come (5xx, network) keeps the page that was there, with an alert
-  that offers the full load.
+  that offers the full load. So does a record document whose record does not
+  hold (`INVALID_RESPONSE`), which is also dropped from the client's cache.
+- Only a host name or address with an optional port (or a bracketed IPv6
+  address) is taken from `X-Forwarded-Host` for the site URLs (`/docs/mcp`,
+  `llms.txt`, the head and the record samples); anything else falls back to the
+  request's host, then `localhost`. Defence in depth: Caddy already overwrites
+  the header in production. Only `http` and `https` are taken from
+  `X-Forwarded-Proto`.
+- The name of a related record comes from a lookup built at startup, not from
+  three linear scans per link.
 
 ### Fixed
 
 - The JSON colouring of the detail view dropped the line break after the last
   string of an array or object.
+- A second click on a record link while its navigation was running, followed
+  by a failure, put the record's URL back over the page that stayed. The second
+  click is now ignored.
 
 ## [2.11.0] - 2026-10-27
 

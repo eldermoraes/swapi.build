@@ -99,16 +99,19 @@ class ServerRenderedPagesTest {
     }
 
     // The host goes into the <main> only on /docs/mcp (and, since 2.12.0, on the
-    // record addresses, ServerRenderedRecordTest), always as escaped text.
+    // record addresses, ServerRenderedRecordTest). Changes on purpose in 2.12.0
+    // (review): until then a host such as "a&b.example" went in escaped; now it
+    // is not a host (PublicSiteUrlResolver), so it never goes in, escaped or not,
+    // and the request's own host is used (HostileForwardedHostTest).
     @Test
-    void theHostIsEscaped() {
+    void aHostWithAnAmpersandNeverReachesTheMain() {
         String body = given().accept("text/html")
                 .header("X-Forwarded-Proto", "https")
                 .header("X-Forwarded-Host", "a&b.example")
                 .when().get("/docs/mcp").then().statusCode(200).extract().asString();
         String main = first(MAIN, body);
-        assertTrue(main.contains("https://a&amp;b.example/mcp"), main);
-        assertFalse(main.contains("a&b.example/mcp"), main);
+        assertTrue(main.contains("https://localhost"), main);
+        assertFalse(main.contains("b.example"), main);
     }
 
     @Test

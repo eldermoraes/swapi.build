@@ -36,6 +36,14 @@ export function resetServerMain(
   timeoutMs = options.timeoutMs ?? FETCH_TIMEOUT_MS;
 }
 
+/**
+ * Drops `path` from the cache: a <main> whose marker matched but whose content
+ * the caller rejected (2.12.0, an invalid record) must be asked again.
+ */
+export function forgetServerMain(path: string): void {
+  cache.delete(path);
+}
+
 export interface LoadOptions {
   /** Aborted by a newer navigation: the result is 'aborted'. */
   signal?: AbortSignal;
