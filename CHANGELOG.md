@@ -45,6 +45,19 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
   "different instance" (texts from the Vercel days), and its five guides are
   readable without JavaScript.
 - The "Try it" buttons send nothing without JavaScript.
+- Until the web fonts arrive, the text is drawn with local fallback faces
+  scaled to their widths and metrics (`Arial` for Inter and Pathway Gothic One,
+  `Courier New` for JetBrains Mono), so the font swap no longer moves the page
+  (phone, 360 px: home 0.0000, `/docs` 0.0012, `/about` 0.0000, `/docs/mcp`
+  0.0485). Nothing changes once the web fonts load.
+
+### Known issues
+
+- `npm run test:browser` (`scripts/verify-webmcp.cjs:27`) fails on current
+  Chrome before any check runs: it passes the tool arguments to
+  `document.modelContext.executeTool` as a JSON string, and Chrome now wants an
+  object. It predates 2.11.0 (the same failure against 2.10.0); with an object
+  the script passes against both versions.
 
 ## [2.10.0] - 2026-10-27
 

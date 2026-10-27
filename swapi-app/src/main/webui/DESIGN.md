@@ -57,6 +57,12 @@ Pathway Gothic One ships **a single 400 weight**. Emphasis comes from size and
 letter-spacing — never `font-weight: bold`, because the browser's faux-bold
 mangles a condensed face.
 
+Each font token lists a metric-matched fallback face right after the web font
+(`'Pathway Gothic One Fallback'`, `'Inter Fallback'`, `'JetBrains Mono Fallback'`,
+defined in `tokens.css`): a local font scaled to the web font's widths and
+metrics, so the page does not move when the Google Fonts swap in
+(`font-fallbacks.test.ts`). A new web font gets its own fallback face.
+
 ## 3. Colour roles
 
 These are rules, not suggestions. The two accents mean different things and
