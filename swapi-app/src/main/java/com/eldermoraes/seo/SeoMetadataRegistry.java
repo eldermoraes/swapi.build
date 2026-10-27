@@ -44,6 +44,11 @@ public class SeoMetadataRegistry {
         this.routes = List.copyOf(routes);
     }
 
+    /** seo/site.json as read at startup: the labels and the ssr pages (2.11.0). */
+    public SeoSiteFile site() {
+        return site;
+    }
+
     /** The home page: the site as a whole (its URL and description describe the site in JSON-LD). */
     public SeoMetadata home() {
         return forPath("/");

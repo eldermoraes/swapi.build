@@ -96,44 +96,5 @@ export interface Vehicle extends SWResource {
   films: string[];
 }
 
-// Subset of the OpenAPI 3.x document consumed by the docs page
-export interface OpenApiParameter {
-  name: string;
-  in: 'path' | 'query';
-  description?: string;
-  // the spec emits numbers in path `id`s and strings in the query examples
-  example?: string | number;
-}
-
-export interface OpenApiSchemaRef {
-  $ref?: string;
-  items?: { $ref?: string };
-}
-
-export interface OpenApiResponse {
-  description?: string;
-  content?: Record<string, { schema?: OpenApiSchemaRef }>;
-}
-
-export interface OpenApiOperation {
-  summary?: string;
-  description?: string;
-  tags?: string[];
-  parameters?: OpenApiParameter[];
-  responses: Record<string, OpenApiResponse>;
-}
-
-export interface OpenApiSchemaObj {
-  description?: string;
-  type?: string;
-  properties?: Record<string, OpenApiSchemaObj>;
-  items?: OpenApiSchemaObj;
-}
-
-export interface OpenApiSpec {
-  openapi: string;
-  info: { title: string; version: string; description?: string };
-  tags?: { name: string; description?: string }[];
-  paths: Record<string, { get?: OpenApiOperation }>;
-  components?: { schemas?: Record<string, OpenApiSchemaObj> };
-}
+// The OpenAPI types of the docs page left in 2.11.0: the server reads the
+// document and draws /docs (OpenApiDocs.java, templates/ssr/docs.html).

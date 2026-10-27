@@ -1,48 +1,62 @@
 #!/usr/bin/env bash
 # Test for the `redirect` mode of scripts/verify-deploy.sh (run by
-# .github/workflows/ci.yml). Runs offline: a fake www host
-# (verify-deploy-redirect.server.py) listens on 127.0.0.1 and answers with a
-# correct or a broken redirect, and the probes must pass or fail accordingly.
+# .github/workflows/ci.yml). Runs offline: two fake hosts
+# (verify-deploy-redirect.server.py) listen on 127.0.0.1, a www host that
+# answers with a correct or a broken redirect to the other, and an apex host
+# that answers the page the redirect leads to (2.11.0+: the www follow). The
+# probes must pass or fail accordingly.
 #
-# The fake host speaks plain http, so the probes reach it through
-# VERIFY_DEPLOY_TEST_SCHEME=http, the test-only override of the scheme used to
-# reach <from-host>. The expected Location stays https://<to-host>... either way.
+# The fake hosts speak plain http, so the probes reach them through
+# VERIFY_DEPLOY_TEST_SCHEME=http, the test-only override of the scheme. The
+# expected Location stays https://<to-host>... either way; the follow swaps that
+# https for the same override.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VERIFY="$HERE/verify-deploy.sh"
 SERVER="$HERE/verify-deploy-redirect.server.py"
 TMP="$(mktemp -d)"
-PID=""
-cleanup() { [ -n "$PID" ] && kill "$PID" 2>/dev/null; rm -rf "$TMP"; }
+PIDS=()
+cleanup() { for p in "${PIDS[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null; done; rm -rf "$TMP"; }
 trap cleanup EXIT
 
 FAILURES=0
 pass() { printf 'PASS  %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; FAILURES=$((FAILURES+1)); }
 
-# start <behaviour>: starts the fake host and sets PORT.
+# start <behaviour> [<destination>]: starts a fake host; sets STARTED_PORT.
 start() {
   rm -f "$TMP/port"
-  python3 -I "$SERVER" "$1" "$TMP/port" &
-  PID=$!
+  python3 -I "$SERVER" "$1" "$TMP/port" ${2:+"$2"} &
+  PIDS+=("$!")
   for _ in $(seq 1 50); do
     [ -f "$TMP/port" ] && break
     sleep 0.1
   done
   [ -f "$TMP/port" ] || { echo "fake host did not start ($1)"; exit 1; }
-  PORT=$(cat "$TMP/port")
+  STARTED_PORT=$(cat "$TMP/port")
 }
-stop() { kill "$PID" 2>/dev/null; wait "$PID" 2>/dev/null || true; PID=""; }
+stop_all() {
+  for p in "${PIDS[@]:-}"; do
+    [ -n "$p" ] || continue
+    kill "$p" 2>/dev/null
+    wait "$p" 2>/dev/null || true
+  done
+  PIDS=()
+}
 
-# probe <behaviour>: runs the redirect mode against the fake host; sets OUT and CODE.
+# probe <www-behaviour> [<apex-behaviour>]: runs the redirect mode from the fake
+# www to the fake apex (default apex); sets OUT and CODE.
 probe() {
-  start "$1"
+  start "${2:-apex}"
+  local apex="127.0.0.1:$STARTED_PORT"
+  start "$1" "$apex"
+  local www="127.0.0.1:$STARTED_PORT"
   set +e
-  OUT=$(VERIFY_DEPLOY_TEST_SCHEME=http "$VERIFY" redirect "127.0.0.1:$PORT" swapi.build 2>&1)
+  OUT=$(VERIFY_DEPLOY_TEST_SCHEME=http "$VERIFY" redirect "$www" "$apex" 2>&1)
   CODE=$?
   set -e
-  stop
+  stop_all
 }
 
 # The override is test-only: without it the mode must reach the host over https.
@@ -70,6 +84,17 @@ echo "$OUT" | grep -q '^PASS.*POST /mcp' && pass "POST /mcp is probed" \
   || { fail "POST /mcp should be probed"; echo "$OUT"; }
 echo "$OUT" | grep -q '^PASS.*?format=json' && pass "a path with a query is probed" \
   || { fail "a path with a query should be probed"; echo "$OUT"; }
+# 2.11.0: an agent that gets www and follows the 308 without JavaScript reads text.
+echo "$OUT" | grep -q '^PASS.*follow /docs/mcp' && pass "the www follow of /docs/mcp passes" \
+  || { fail "the www follow of /docs/mcp should pass"; echo "$OUT"; }
+
+probe ok empty-main
+if [ "$CODE" = "1" ] && echo "$OUT" | grep -q '^FAIL.*follow /docs/mcp' \
+   && [ "$(echo "$OUT" | grep -c '^FAIL')" = "1" ]; then
+  pass "an empty <main> at the end of the follow fails (only the follow)"
+else
+  fail "an empty <main> at the end of the follow should fail (exit $CODE)"; echo "$OUT"
+fi
 
 probe wrong-status
 if [ "$CODE" = "1" ] && echo "$OUT" | grep -q '^FAIL'; then
@@ -84,6 +109,9 @@ if [ "$CODE" = "1" ] && echo "$OUT" | grep -q '^FAIL'; then
 else
   fail "Location on the wrong host should fail (exit $CODE)"; echo "$OUT"
 fi
+# Offline: a Location off the apex is never followed (it would leave the machine).
+echo "$OUT" | grep -q '^FAIL.*follow /docs/mcp' && pass "a Location off the apex is not followed" \
+  || { fail "a Location off the apex should fail the follow"; echo "$OUT"; }
 
 probe drop-query
 if [ "$CODE" = "1" ] && echo "$OUT" | grep -q '^FAIL.*?format=json'; then

@@ -1,5 +1,3 @@
-import type { OpenApiSpec } from './types';
-
 const BASE = '/api';
 
 let currentController: AbortController | null = null;
@@ -97,19 +95,4 @@ export async function fetchStats<T = unknown>(
   signal?: AbortSignal,
 ): Promise<ApiResponse<T>> {
   return request<T>(`${BASE}/stats?period=${encodeURIComponent(period)}`, signal);
-}
-
-// Direct fetch (outside request()): the spec does not take part in navigation
-// cancellation and needs an explicit Accept to guarantee JSON.
-export async function fetchOpenApiSpec(): Promise<OpenApiSpec> {
-  let res: Response;
-  try {
-    res = await fetch('/openapi.json', { headers: { Accept: 'application/json' } });
-  } catch {
-    throw new ApiError('Network error — check your connection', 0, 'network');
-  }
-  if (!res.ok) {
-    throw new ApiError(`HTTP ${res.status}: ${res.statusText}`, res.status, 'http');
-  }
-  return (await res.json()) as OpenApiSpec;
 }

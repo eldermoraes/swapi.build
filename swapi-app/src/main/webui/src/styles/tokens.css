@@ -1,3 +1,52 @@
+/*
+ * Metric-matched fallback faces (2.11.0). The pages drawn on the server paint
+ * before the Google Fonts arrive (display=swap); without these, the fallback's
+ * other widths wrap the header menu onto two lines on a phone and the swap
+ * moves the whole page. Each face is a local font scaled to the web font's
+ * widths (size-adjust) with its ascent and descent (the overrides are divided
+ * by size-adjust, which scales them too), measured in Chromium against the
+ * Google Fonts files of 2026-10. Once the web font loads, nothing changes.
+ */
+@font-face {
+  font-family: 'Pathway Gothic One Fallback';
+  src: local('Arial');
+  size-adjust: 56.59%;
+  ascent-override: 167.87%;
+  descent-override: 35.34%;
+  line-gap-override: 0%;
+}
+
+/* Inter is wider than Arial by about 5.8% in regular and 1.2% in bold (the
+   ratio on the text of the four pages), so the two weights get their own face. */
+@font-face {
+  font-family: 'Inter Fallback';
+  src: local('Arial');
+  font-weight: 100 500;
+  size-adjust: 105.8%;
+  ascent-override: 91.68%;
+  descent-override: 22.68%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'Inter Fallback';
+  src: local('Arial Bold'), local('Arial-BoldMT');
+  font-weight: 600 900;
+  size-adjust: 101.2%;
+  ascent-override: 95.85%;
+  descent-override: 23.72%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono Fallback';
+  src: local('Courier New');
+  size-adjust: 99.98%;
+  ascent-override: 102.02%;
+  descent-override: 30.01%;
+  line-gap-override: 0%;
+}
+
 :root {
   /* Grounds */
   --sw-ink: #000000; /* page ground */
@@ -46,9 +95,13 @@
   --sw-error-border: rgba(248, 81, 73, 0.4);
 
   /* Type */
-  --sw-font-display: 'Pathway Gothic One', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
-  --sw-font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --sw-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --sw-font-display:
+    'Pathway Gothic One', 'Pathway Gothic One Fallback', 'Arial Narrow', 'Helvetica Neue', Arial,
+    sans-serif;
+  --sw-font-body:
+    'Inter', 'Inter Fallback', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --sw-font-mono:
+    'JetBrains Mono', 'JetBrains Mono Fallback', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
   /* Shape */
   --sw-radius-pill: 999px; /* actions */

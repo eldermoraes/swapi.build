@@ -8,6 +8,7 @@
     {
       "path": "/",
       "page": "home",
+      "ssr": true,
       "title": "SWAPI alternative: free Star Wars API and MCP server | swapi.build",
       "description": "Free SWAPI alternative: Star Wars REST JSON API and remote MCP server with people, films, planets, species, starships and vehicles (Episodes I–VI). No API key.",
       "changefreq": "weekly",
@@ -16,6 +17,8 @@
     {
       "path": "/docs",
       "page": "docs",
+      "label": "Documentation",
+      "ssr": true,
       "title": "SWAPI docs: Star Wars REST API endpoints and OpenAPI | swapi.build",
       "description": "Star Wars API reference for swapi.build: REST endpoints, JSON response schemas and live examples, generated from the OpenAPI contract.",
       "changefreq": "weekly",
@@ -25,6 +28,8 @@
     {
       "path": "/docs/mcp",
       "page": "mcp",
+      "label": "MCP server",
+      "ssr": true,
       "title": "Star Wars MCP server: remote, no API key | swapi.build",
       "description": "Add the Star Wars MCP server to Claude, OpenAI Codex, GitHub Copilot or IBM Bob in one step. Remote Streamable HTTP at /mcp, read-only, no API key.",
       "changefreq": "weekly",
@@ -33,6 +38,7 @@
     {
       "path": "/docs/webmcp",
       "page": "webmcp",
+      "label": "WebMCP",
       "title": "Star Wars WebMCP tools in the browser | swapi.build",
       "description": "Explore Star Wars together with a browser agent using experimental WebMCP tools.",
       "changefreq": "weekly",
@@ -41,6 +47,8 @@
     {
       "path": "/about",
       "page": "about",
+      "label": "About",
+      "ssr": true,
       "title": "About: a SWAPI alternative built with Quarkus | swapi.build",
       "description": "Learn why swapi.build exists, how it is built with Quarkus and GraalVM, and how to contribute.",
       "changefreq": "monthly",
@@ -49,6 +57,7 @@
     {
       "path": "/stats",
       "page": "stats",
+      "label": "Usage stats",
       "title": "Usage stats | swapi.build",
       "description": "Anonymous request counts for the swapi.build REST API, MCP server and site, per route and per group, for the last 24 hours, 7 days or 30 days.",
       "changefreq": "daily",
@@ -57,6 +66,7 @@
     {
       "path": "/privacy",
       "page": "privacy",
+      "label": "Privacy Policy",
       "title": "Privacy Policy | swapi.build",
       "description": "Plain-language privacy policy for swapi.build, the free public Star Wars API and MCP server.",
       "changefreq": "yearly",
@@ -65,6 +75,7 @@
     {
       "path": "/terms",
       "page": "terms",
+      "label": "Terms of Use",
       "title": "Terms of Use | swapi.build",
       "description": "Terms of use for swapi.build, the free public Star Wars API and MCP server.",
       "changefreq": "yearly",
@@ -74,6 +85,7 @@
   "resources": [
     {
       "type": "people",
+      "label": "People",
       "list": {
         "title": "Star Wars People API: JSON data | swapi.build",
         "description": "Browse Star Wars people records as JSON from the free swapi.build REST API and MCP server.",
@@ -93,6 +105,7 @@
     },
     {
       "type": "films",
+      "label": "Films",
       "list": {
         "title": "Star Wars Films API: JSON data | swapi.build",
         "description": "Browse Star Wars film records as JSON from the free swapi.build REST API and MCP server.",
@@ -112,6 +125,7 @@
     },
     {
       "type": "planets",
+      "label": "Planets",
       "list": {
         "title": "Star Wars Planets API: JSON data | swapi.build",
         "description": "Browse Star Wars planet records as JSON from the free swapi.build REST API and MCP server.",
@@ -131,6 +145,7 @@
     },
     {
       "type": "species",
+      "label": "Species",
       "list": {
         "title": "Star Wars Species API: JSON data | swapi.build",
         "description": "Browse Star Wars species records as JSON from the free swapi.build REST API and MCP server.",
@@ -150,6 +165,7 @@
     },
     {
       "type": "starships",
+      "label": "Starships",
       "list": {
         "title": "Star Wars Starships API: JSON data | swapi.build",
         "description": "Browse Star Wars starship records as JSON from the free swapi.build REST API and MCP server.",
@@ -169,6 +185,7 @@
     },
     {
       "type": "vehicles",
+      "label": "Vehicles",
       "list": {
         "title": "Star Wars Vehicles API: JSON data | swapi.build",
         "description": "Browse Star Wars vehicle records as JSON from the free swapi.build REST API and MCP server.",

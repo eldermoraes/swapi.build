@@ -1,0 +1,166 @@
+<main id="main-content" tabindex="-1" data-ssr-page="mcp">
+    <div class="sw-inner-prose mcp-page">
+    <h1 class="sw-page-title">MCP Server</h1>
+    <p>To explore this site together with a browser agent, see <a href="/docs/webmcp">WebMCP in the browser</a>.</p>
+    <p class="page-sub">Use the Star Wars API from your AI agent.</p>
+
+    <section class="mcp-endpoint">
+      <h2>Endpoint</h2>
+<div class="code-block sw-code" data-copy-id="endpoint">
+  <button class="copy-btn sw-copy" data-copy-target="endpoint" aria-live="polite" aria-label="Copy to clipboard">Copy</button>
+  <pre id="endpoint" class="code-pre plain">https://preview.example/mcp</pre>
+</div>
+      <div class="spec-callout sw-panel">
+        <strong>Streamable HTTP — both paradigms on one endpoint.</strong>
+        Clients on the stateless spec (2026-07-28) send self-contained requests: no
+        <code>initialize</code> handshake, no session ids, nothing to keep alive between calls.
+        Clients on earlier revisions negotiate a session and work just as well, and keep working
+        after a server restart: a session id the server no longer knows is simply issued a fresh
+        session instead of failing. First-party, read-only, no authentication.
+      </div>
+    </section>
+
+    <section class="mcp-tools">
+      <h2>Tools</h2>
+      <div class="sw-table-wrap">
+      <table class="tools-table sw-table">
+        <thead><tr><th>Tool</th><th>Arguments</th><th>Returns</th></tr></thead>
+        <tbody>
+          <tr><td><code>sw_list</code></td><td><code>resource</code></td><td>All entities of a resource</td></tr>
+          <tr><td><code>sw_get</code></td><td><code>resource</code>, <code>id</code></td><td>One entity by id</td></tr>
+          <tr><td><code>sw_random</code></td><td><code>resource</code></td><td>A random entity</td></tr>
+          <tr><td><code>sw_search</code></td><td><code>resource</code>, <code>query</code></td><td>Name/title substring match</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p class="guide-note"><code>resource</code> is one of <code>PEOPLE</code>, <code>FILMS</code>, <code>PLANETS</code>,
+      <code>SPECIES</code>, <code>STARSHIPS</code>, <code>VEHICLES</code>. Ids are the record ids from each
+      entity's <code>url</code> field (for <code>FILMS</code>, <code>1</code> = A New Hope).</p>
+    </section>
+
+    <section class="mcp-setup">
+      <h2>Connect your client</h2>
+      <div class="tabs sw-tabs" role="tablist" aria-label="MCP client setup">
+        <button class="tab-btn sw-tab active" id="tab-claude-code" role="tab"
+                aria-selected="true" aria-controls="panel-claude-code" tabindex="0">
+          Claude Code
+        </button>
+        <button class="tab-btn sw-tab" id="tab-claude-desktop" role="tab"
+                aria-selected="false" aria-controls="panel-claude-desktop" tabindex="-1">
+          Claude Desktop &amp; claude.ai
+        </button>
+        <button class="tab-btn sw-tab" id="tab-codex" role="tab"
+                aria-selected="false" aria-controls="panel-codex" tabindex="-1">
+          OpenAI Codex
+        </button>
+        <button class="tab-btn sw-tab" id="tab-copilot" role="tab"
+                aria-selected="false" aria-controls="panel-copilot" tabindex="-1">
+          GitHub Copilot
+        </button>
+        <button class="tab-btn sw-tab" id="tab-ibm-bob" role="tab"
+                aria-selected="false" aria-controls="panel-ibm-bob" tabindex="-1">
+          IBM Bob
+        </button>
+      </div>
+
+      <div class="tab-panel" id="panel-claude-code" role="tabpanel" aria-labelledby="tab-claude-code">
+        <h3 class="tab-panel-title">Claude Code</h3>
+        <p>One command, from any terminal:</p>
+<div class="code-block sw-code" data-copy-id="cc-add">
+  <button class="copy-btn sw-copy" data-copy-target="cc-add" aria-live="polite" aria-label="Copy to clipboard">Copy</button>
+  <pre id="cc-add" class="code-pre bash">claude mcp add --transport http swapi-build https://preview.example/mcp</pre>
+</div>
+        <p>Or share it with your team via a <code>.mcp.json</code> at the repo root:</p>
+<div class="code-block sw-code" data-copy-id="cc-json">
+  <button class="copy-btn sw-copy" data-copy-target="cc-json" aria-live="polite" aria-label="Copy to clipboard">Copy</button>
+  <pre id="cc-json" class="code-pre json">{
+  &quot;mcpServers&quot;: {
+    &quot;swapi-build&quot;: {
+      &quot;type&quot;: &quot;http&quot;,
+      &quot;url&quot;: &quot;https://preview.example/mcp&quot;
+    }
+  }
+}</pre>
+</div>
+        <p class="guide-verify"><strong>Verify:</strong> <code>claude mcp list</code> shows <code>swapi-build ✔ Connected</code>, or type <code>/mcp</code> inside a session.</p>
+      </div>
+
+      <div class="tab-panel" id="panel-claude-desktop" role="tabpanel" aria-labelledby="tab-claude-desktop" data-inactive>
+        <h3 class="tab-panel-title">Claude Desktop &amp; claude.ai</h3>
+        <ol class="guide-steps">
+          <li>Open <strong>Settings &rarr; Connectors</strong> and click <strong>Add custom connector</strong>.</li>
+          <li>Name it <code>swapi-build</code> and paste the URL: <code>https://preview.example/mcp</code>.</li>
+          <li>Save — no authentication is required.</li>
+        </ol>
+        <p class="guide-verify"><strong>Verify:</strong> in any chat, the <strong>+</strong> menu &rarr; Connectors lists swapi-build with its tools.</p>
+        <p class="guide-note">Available on all plans (Free allows one custom connector). On Team/Enterprise an Owner adds it under Organization settings &rarr; Connectors.</p>
+      </div>
+
+      <div class="tab-panel" id="panel-codex" role="tabpanel" aria-labelledby="tab-codex" data-inactive>
+        <h3 class="tab-panel-title">OpenAI Codex</h3>
+        <p>Streamable HTTP is supported natively — no gateway needed:</p>
+<div class="code-block sw-code" data-copy-id="cx-add">
+  <button class="copy-btn sw-copy" data-copy-target="cx-add" aria-live="polite" aria-label="Copy to clipboard">Copy</button>
+  <pre id="cx-add" class="code-pre bash">codex mcp add swapi-build --url https://preview.example/mcp</pre>
+</div>
+        <p>Or add it to <code>~/.codex/config.toml</code> (shared by the CLI, IDE extension and ChatGPT desktop app):</p>
+<div class="code-block sw-code" data-copy-id="cx-toml">
+  <button class="copy-btn sw-copy" data-copy-target="cx-toml" aria-live="polite" aria-label="Copy to clipboard">Copy</button>
+  <pre id="cx-toml" class="code-pre toml">[mcp_servers.swapi-build]
+url = &quot;https://preview.example/mcp&quot;</pre>
+</div>
+        <p class="guide-verify"><strong>Verify:</strong> <code>codex mcp list</code>, or <code>/mcp</code> inside the TUI.</p>
+      </div>
+
+      <div class="tab-panel" id="panel-copilot" role="tabpanel" aria-labelledby="tab-copilot" data-inactive>
+        <h3 class="tab-panel-title">GitHub Copilot</h3>
+        <p>In VS Code, create <code>.vscode/mcp.json</code> in your workspace (note the top-level key is <code>servers</code>):</p>
+<div class="code-block sw-code" data-copy-id="cp-json">
+  <button class="copy-btn sw-copy" data-copy-target="cp-json" aria-live="polite" aria-label="Copy to clipboard">Copy</button>
+  <pre id="cp-json" class="code-pre json">{
+  &quot;servers&quot;: {
+    &quot;swapi-build&quot;: {
+      &quot;type&quot;: &quot;http&quot;,
+      &quot;url&quot;: &quot;https://preview.example/mcp&quot;
+    }
+  }
+}</pre>
+</div>
+        <p>Or use the Command Palette: <strong>MCP: Add Server</strong> &rarr; HTTP &rarr; paste the URL.</p>
+        <p class="guide-verify"><strong>Verify:</strong> open Copilot Chat and click the <strong>Configure Tools</strong> button — the four swapi tools appear under swapi-build.</p>
+        <p class="guide-note">On Copilot Business/Enterprise, an admin must enable the "MCP servers in Copilot" policy. Visual Studio and JetBrains also support remote HTTP servers via their own <code>mcp.json</code>.</p>
+      </div>
+
+      <div class="tab-panel" id="panel-ibm-bob" role="tabpanel" aria-labelledby="tab-ibm-bob" data-inactive>
+        <h3 class="tab-panel-title">IBM Bob</h3>
+        <p>Add to <code>~/.bob/settings/mcp_settings.json</code> (global) or <code>.bob/mcp.json</code> in your project:</p>
+<div class="code-block sw-code" data-copy-id="bob-json">
+  <button class="copy-btn sw-copy" data-copy-target="bob-json" aria-live="polite" aria-label="Copy to clipboard">Copy</button>
+  <pre id="bob-json" class="code-pre json">{
+  &quot;mcpServers&quot;: {
+    &quot;swapi-build&quot;: {
+      &quot;type&quot;: &quot;streamable-http&quot;,
+      &quot;url&quot;: &quot;https://preview.example/mcp&quot;,
+      &quot;disabled&quot;: false
+    }
+  }
+}</pre>
+</div>
+        <p>Or from the Bob panel: <strong>MCP tab &rarr; Edit Global MCP</strong> (or Edit Project MCP).</p>
+        <p class="guide-verify"><strong>Verify:</strong> Bob detects the tools automatically — expand swapi-build in the MCP tab to see them.</p>
+      </div>
+    </section>
+
+    <section class="mcp-prompts">
+      <h2>Try these prompts</h2>
+      <div class="prompt-card sw-panel">Using swapi-build, list every film Luke Skywalker appears in.</div><div class="prompt-card sw-panel">Pick a random starship from swapi-build and compare its specs with the Millennium Falcon.</div><div class="prompt-card sw-panel">Search swapi-build for planets matching &quot;Tatooine&quot; and summarize their climate and population.</div>
+    </section>
+
+    <section class="mcp-trouble" id="troubleshooting">
+      <h2>Troubleshooting</h2>
+      <p>Probing <code>/mcp</code> with raw <code>curl</code>? Stateless requests must include the
+      <code>MCP-Protocol-Version</code>, <code>Mcp-Method</code> and <code>Mcp-Name</code> headers —
+      MCP clients send these automatically.</p>
+    </section>
+    </div>
+</main>

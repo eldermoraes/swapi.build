@@ -1,0 +1,778 @@
+<main id="main-content" tabindex="-1" data-ssr-page="docs">
+    <div class="docs sw-inner-prose">
+      <h1 class="sw-page-title">Documentation</h1>
+      <p class="docs-intro">RESTful public API with data about the Star Wars universe. All successful GETs return 200; nonexistent ids return 404. The same data is also exposed as an MCP server (Streamable HTTP) at /mcp.</p>
+      <p class="spec-link">
+        OpenAPI 3.1.0 · version {{VERSION}} ·
+        <a href="/openapi.json" download="openapi.json">Download the spec</a> and generate a client:
+        <code>npx @openapitools/openapi-generator-cli generate -i /openapi.json -g typescript-fetch</code>
+      </p>
+        <h2>Root</h2>
+        <p class="tag-desc">API entry point</p>
+        <div class="endpoint-block sw-panel" data-path="/api">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api</span>
+          </div>
+          <div class="endpoint-desc">List all available resources — Returns the URLs of every resource collection, built from the request&#39;s base URL.</div>
+          <form class="try-form">
+            
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <h2>Films</h2>
+        <p class="tag-desc">Star Wars films</p>
+        <div class="endpoint-block sw-panel" data-path="/api/films">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/films?search=hope</span>
+          </div>
+          <div class="endpoint-desc">List all films — Returns every film, or only those whose title matches the search query.</div>
+          <form class="try-form">
+            <input class="input-field try-input" name="search" type="text"
+                 placeholder="search (optional)" value=""
+                 aria-label="Filter by title (case-insensitive contains)">
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <div class="endpoint-block sw-panel" data-path="/api/films/{id}">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/films/{id}</span>
+          </div>
+          <div class="endpoint-desc">Get a film by id <span class="status-note">200 / 404</span></div>
+          <form class="try-form">
+            <input class="input-field try-input" name="id" type="number" min="1"
+                 placeholder="id" value="1"
+                 aria-label="Numeric id of the film">
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <div class="endpoint-block sw-panel" data-path="/api/films/random">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/films/random</span>
+          </div>
+          <div class="endpoint-desc">Get a random film</div>
+          <form class="try-form">
+            
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <details class="schema-details">
+          <summary>Film fields</summary>
+          <div class="sw-table-wrap">
+          <table class="schema-table sw-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody><tr>
+              <td class="schema-field">title</td>
+              <td class="schema-type">string</td>
+              <td>Title of this film</td>
+            </tr><tr>
+              <td class="schema-field">episode_id</td>
+              <td class="schema-type">integer</td>
+              <td>Episode number of this film in the saga</td>
+            </tr><tr>
+              <td class="schema-field">opening_crawl</td>
+              <td class="schema-type">string</td>
+              <td>Opening crawl text at the beginning of this film</td>
+            </tr><tr>
+              <td class="schema-field">director</td>
+              <td class="schema-type">string</td>
+              <td>Director of this film</td>
+            </tr><tr>
+              <td class="schema-field">producer</td>
+              <td class="schema-type">string</td>
+              <td>Producer(s) of this film, comma-separated</td>
+            </tr><tr>
+              <td class="schema-field">release_date</td>
+              <td class="schema-type">string</td>
+              <td>Release date (ISO 8601 date) at original creator country</td>
+            </tr><tr>
+              <td class="schema-field">characters</td>
+              <td class="schema-type">array of string</td>
+              <td>URLs of the people resources that appear in this film</td>
+            </tr><tr>
+              <td class="schema-field">planets</td>
+              <td class="schema-type">array of string</td>
+              <td>URLs of the planet resources that appear in this film</td>
+            </tr><tr>
+              <td class="schema-field">starships</td>
+              <td class="schema-type">array of string</td>
+              <td>URLs of the starship resources that appear in this film</td>
+            </tr><tr>
+              <td class="schema-field">vehicles</td>
+              <td class="schema-type">array of string</td>
+              <td>URLs of the vehicle resources that appear in this film</td>
+            </tr><tr>
+              <td class="schema-field">species</td>
+              <td class="schema-type">array of string</td>
+              <td>URLs of the species resources that appear in this film</td>
+            </tr><tr>
+              <td class="schema-field">created</td>
+              <td class="schema-type">string</td>
+              <td>ISO 8601 timestamp of when this resource was created</td>
+            </tr><tr>
+              <td class="schema-field">edited</td>
+              <td class="schema-type">string</td>
+              <td>ISO 8601 timestamp of when this resource was last edited</td>
+            </tr><tr>
+              <td class="schema-field">url</td>
+              <td class="schema-type">string</td>
+              <td>Canonical URL of this resource, built from the request&#39;s base URL</td>
+            </tr></tbody>
+          </table>
+          </div>
+        </details>
+        <h2>People</h2>
+        <p class="tag-desc">People within the Star Wars universe</p>
+        <div class="endpoint-block sw-panel" data-path="/api/people">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/people?search=luke</span>
+          </div>
+          <div class="endpoint-desc">List all people — Returns every person, or only those whose name matches the search query.</div>
+          <form class="try-form">
+            <input class="input-field try-input" name="search" type="text"
+                 placeholder="search (optional)" value=""
+                 aria-label="Filter by name (case-insensitive contains)">
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <div class="endpoint-block sw-panel" data-path="/api/people/{id}">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/people/{id}</span>
+          </div>
+          <div class="endpoint-desc">Get a person by id <span class="status-note">200 / 404</span></div>
+          <form class="try-form">
+            <input class="input-field try-input" name="id" type="number" min="1"
+                 placeholder="id" value="1"
+                 aria-label="Numeric id of the person">
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <div class="endpoint-block sw-panel" data-path="/api/people/random">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/people/random</span>
+          </div>
+          <div class="endpoint-desc">Get a random person</div>
+          <form class="try-form">
+            
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <details class="schema-details">
+          <summary>People fields</summary>
+          <div class="sw-table-wrap">
+          <table class="schema-table sw-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody><tr>
+              <td class="schema-field">name</td>
+              <td class="schema-type">string</td>
+              <td>Name of this person</td>
+            </tr><tr>
+              <td class="schema-field">height</td>
+              <td class="schema-type">string</td>
+              <td>Height in centimeters, as a string; &quot;unknown&quot; when not recorded</td>
+            </tr><tr>
+              <td class="schema-field">mass</td>
+              <td class="schema-type">string</td>
+              <td>Mass in kilograms, as a string; &quot;unknown&quot; when not recorded</td>
+            </tr><tr>
+              <td class="schema-field">hair_color</td>
+              <td class="schema-type">string</td>
+              <td>Hair color; &quot;n/a&quot; when the person has no hair</td>
+            </tr><tr>
+              <td class="schema-field">skin_color</td>
+              <td class="schema-type">string</td>
+              <td>Skin color</td>
+            </tr><tr>
+              <td class="schema-field">eye_color</td>
+              <td class="schema-type">string</td>
+              <td>Eye color</td>
+            </tr><tr>
+              <td class="schema-field">birth_year</td>
+              <td class="schema-type">string</td>
+              <td>Birth year, relative to the Battle of Yavin (BBY/ABY), e.g. &quot;19BBY&quot;</td>
+            </tr><tr>
+              <td class="schema-field">gender</td>
+              <td class="schema-type">string</td>
+              <td>Gender; &quot;n/a&quot; for droids</td>
+            </tr><tr>
+              <td class="schema-field">homeworld</td>
+              <td class="schema-type">string</td>
+              <td>URL of the planet resource this person was born on</td>
+            </tr><tr>
+              <td class="schema-field">films</td>
+              <td class="schema-type">array of string</td>
+              <td>URLs of the film resources this person appeared in</td>
+            </tr><tr>
+              <td class="schema-field">species</td>
+              <td class="schema-type">array of string</td>
+              <td>URLs of the species resources this person belongs to</td>
+            </tr><tr>
+              <td class="schema-field">starships</td>
+              <td class="schema-type">array of string</td>
+              <td>URLs of the starship resources this person has piloted</td>
+            </tr><tr>
+              <td class="schema-field">created</td>
+              <td class="schema-type">string</td>
+              <td>ISO 8601 timestamp of when this resource was created</td>
+            </tr><tr>
+              <td class="schema-field">edited</td>
+              <td class="schema-type">string</td>
+              <td>ISO 8601 timestamp of when this resource was last edited</td>
+            </tr><tr>
+              <td class="schema-field">url</td>
+              <td class="schema-type">string</td>
+              <td>Canonical URL of this resource, built from the request&#39;s base URL</td>
+            </tr></tbody>
+          </table>
+          </div>
+        </details>
+        <h2>Planets</h2>
+        <p class="tag-desc">Planets in the Star Wars universe</p>
+        <div class="endpoint-block sw-panel" data-path="/api/planets">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/planets?search=tatooine</span>
+          </div>
+          <div class="endpoint-desc">List all planets — Returns every planet, or only those whose name matches the search query.</div>
+          <form class="try-form">
+            <input class="input-field try-input" name="search" type="text"
+                 placeholder="search (optional)" value=""
+                 aria-label="Filter by name (case-insensitive contains)">
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <div class="endpoint-block sw-panel" data-path="/api/planets/{id}">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/planets/{id}</span>
+          </div>
+          <div class="endpoint-desc">Get a planet by id <span class="status-note">200 / 404</span></div>
+          <form class="try-form">
+            <input class="input-field try-input" name="id" type="number" min="1"
+                 placeholder="id" value="1"
+                 aria-label="Numeric id of the planet">
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <div class="endpoint-block sw-panel" data-path="/api/planets/random">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/planets/random</span>
+          </div>
+          <div class="endpoint-desc">Get a random planet</div>
+          <form class="try-form">
+            
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <details class="schema-details">
+          <summary>Planet fields</summary>
+          <div class="sw-table-wrap">
+          <table class="schema-table sw-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody><tr>
+              <td class="schema-field">name</td>
+              <td class="schema-type">string</td>
+              <td>Name of this planet</td>
+            </tr><tr>
+              <td class="schema-field">rotation_period</td>
+              <td class="schema-type">string</td>
+              <td>Rotation period in standard hours, as a string</td>
+            </tr><tr>
+              <td class="schema-field">orbital_period</td>
+              <td class="schema-type">string</td>
+              <td>Orbital period in standard days, as a string</td>
+            </tr><tr>
+              <td class="schema-field">diameter</td>
+              <td class="schema-type">string</td>
+              <td>Diameter in kilometers, as a string</td>
+            </tr><tr>
+              <td class="schema-field">climate</td>
+              <td class="schema-type">string</td>
+              <td>Climate(s), comma-separated</td>
+            </tr><tr>
+              <td class="schema-field">gravity</td>
+              <td class="schema-type">string</td>
+              <td>Gravity, where &quot;1 standard&quot; is Earth-like, e.g. &quot;1 standard&quot;, &quot;2.5 standard&quot;</td>
+            </tr><tr>
+              <td class="schema-field">terrain</td>
+              <td class="schema-type">string</td>
+              <td>Terrain type(s), comma-separated</td>
+            </tr><tr>
+              <td class="schema-field">surface_water</td>
+              <td class="schema-type">string</td>
+              <td>Percentage of the surface covered by water, as a string</td>
+            </tr><tr>
+              <td class="schema-field">population</td>
+              <td class="schema-type">string</td>
+              <td>Average population; &quot;unknown&quot; when not recorded</td>
+            </tr><tr>
+              <td class="schema-field">residents</td>
+              <td class="schema-type">array of string</td>
+              <td>URLs of the people resources that live on this planet</td>
+            </tr><tr>
+              <td class="schema-field">films</td>
+              <td class="schema-type">array of string</td>
+              <td>URLs of the film resources this planet appeared in</td>
+            </tr><tr>
+              <td class="schema-field">created</td>
+              <td class="schema-type">string</td>
+              <td>ISO 8601 timestamp of when this resource was created</td>
+            </tr><tr>
+              <td class="schema-field">edited</td>
+              <td class="schema-type">string</td>
+              <td>ISO 8601 timestamp of when this resource was last edited</td>
+            </tr><tr>
+              <td class="schema-field">url</td>
+              <td class="schema-type">string</td>
+              <td>Canonical URL of this resource, built from the request&#39;s base URL</td>
+            </tr></tbody>
+          </table>
+          </div>
+        </details>
+        <h2>Species</h2>
+        <p class="tag-desc">Species in the Star Wars universe</p>
+        <div class="endpoint-block sw-panel" data-path="/api/species">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/species?search=wookiee</span>
+          </div>
+          <div class="endpoint-desc">List all species — Returns every species, or only those whose name matches the search query.</div>
+          <form class="try-form">
+            <input class="input-field try-input" name="search" type="text"
+                 placeholder="search (optional)" value=""
+                 aria-label="Filter by name (case-insensitive contains)">
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <div class="endpoint-block sw-panel" data-path="/api/species/{id}">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/species/{id}</span>
+          </div>
+          <div class="endpoint-desc">Get a species by id <span class="status-note">200 / 404</span></div>
+          <form class="try-form">
+            <input class="input-field try-input" name="id" type="number" min="1"
+                 placeholder="id" value="1"
+                 aria-label="Numeric id of the species">
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <div class="endpoint-block sw-panel" data-path="/api/species/random">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/species/random</span>
+          </div>
+          <div class="endpoint-desc">Get a random species</div>
+          <form class="try-form">
+            
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <details class="schema-details">
+          <summary>Specie fields</summary>
+          <div class="sw-table-wrap">
+          <table class="schema-table sw-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody><tr>
+              <td class="schema-field">name</td>
+              <td class="schema-type">string</td>
+              <td>Name of this species</td>
+            </tr><tr>
+              <td class="schema-field">classification</td>
+              <td class="schema-type">string</td>
+              <td>Classification, e.g. &quot;mammal&quot;, &quot;reptile&quot;</td>
+            </tr><tr>
+              <td class="schema-field">designation</td>
+              <td class="schema-type">string</td>
+              <td>Designation, e.g. &quot;sentient&quot;</td>
+            </tr><tr>
+              <td class="schema-field">average_height</td>
+              <td class="schema-type">string</td>
+              <td>Average height in centimeters, as a string</td>
+            </tr><tr>
+              <td class="schema-field">skin_colors</td>
+              <td class="schema-type">string</td>
+              <td>Common skin colors, comma-separated; &quot;none&quot; when skinless</td>
+            </tr><tr>
+              <td class="schema-field">hair_colors</td>
+              <td class="schema-type">string</td>
+              <td>Common hair colors, comma-separated; &quot;none&quot; when hairless</td>
+            </tr><tr>
+              <td class="schema-field">eye_colors</td>
+              <td class="schema-type">string</td>
+              <td>Common eye colors, comma-separated</td>
+            </tr><tr>
+              <td class="schema-field">average_lifespan</td>
+              <td class="schema-type">string</td>
+              <td>Average lifespan in standard years, as a string</td>
+            </tr><tr>
+              <td class="schema-field">homeworld</td>
+              <td class="schema-type">string</td>
+              <td>URL of the planet resource this species originates from</td>
+            </tr><tr>
+              <td class="schema-field">language</td>
+              <td class="schema-type">string</td>
+              <td>Language commonly spoken by this species</td>
+            </tr><tr>
+              <td class="schema-field">people</td>
+              <td class="schema-type">array of string</td>
+              <td>URLs of the people resources that belong to this species</td>
+            </tr><tr>
+              <td class="schema-field">films</td>
+              <td class="schema-type">array of string</td>
+              <td>URLs of the film resources this species appeared in</td>
+            </tr><tr>
+              <td class="schema-field">created</td>
+              <td class="schema-type">string</td>
+              <td>ISO 8601 timestamp of when this resource was created</td>
+            </tr><tr>
+              <td class="schema-field">edited</td>
+              <td class="schema-type">string</td>
+              <td>ISO 8601 timestamp of when this resource was last edited</td>
+            </tr><tr>
+              <td class="schema-field">url</td>
+              <td class="schema-type">string</td>
+              <td>Canonical URL of this resource, built from the request&#39;s base URL</td>
+            </tr></tbody>
+          </table>
+          </div>
+        </details>
+        <h2>Starships</h2>
+        <p class="tag-desc">Starships in the Star Wars universe</p>
+        <div class="endpoint-block sw-panel" data-path="/api/starships">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/starships?search=falcon</span>
+          </div>
+          <div class="endpoint-desc">List all starships — Returns every starship, or only those whose name matches the search query.</div>
+          <form class="try-form">
+            <input class="input-field try-input" name="search" type="text"
+                 placeholder="search (optional)" value=""
+                 aria-label="Filter by name (case-insensitive contains)">
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <div class="endpoint-block sw-panel" data-path="/api/starships/{id}">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/starships/{id}</span>
+          </div>
+          <div class="endpoint-desc">Get a starship by id <span class="status-note">200 / 404</span></div>
+          <form class="try-form">
+            <input class="input-field try-input" name="id" type="number" min="1"
+                 placeholder="id" value="2"
+                 aria-label="Numeric id of the starship">
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <div class="endpoint-block sw-panel" data-path="/api/starships/random">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/starships/random</span>
+          </div>
+          <div class="endpoint-desc">Get a random starship</div>
+          <form class="try-form">
+            
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <details class="schema-details">
+          <summary>Starship fields</summary>
+          <div class="sw-table-wrap">
+          <table class="schema-table sw-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody><tr>
+              <td class="schema-field">name</td>
+              <td class="schema-type">string</td>
+              <td>Common name of this starship</td>
+            </tr><tr>
+              <td class="schema-field">model</td>
+              <td class="schema-type">string</td>
+              <td>Model or official name, e.g. &quot;T-65 X-wing&quot;</td>
+            </tr><tr>
+              <td class="schema-field">manufacturer</td>
+              <td class="schema-type">string</td>
+              <td>Manufacturer(s), comma-separated</td>
+            </tr><tr>
+              <td class="schema-field">cost_in_credits</td>
+              <td class="schema-type">string</td>
+              <td>Cost in galactic credits, as a string</td>
+            </tr><tr>
+              <td class="schema-field">length</td>
+              <td class="schema-type">string</td>
+              <td>Length in meters, as a string</td>
+            </tr><tr>
+              <td class="schema-field">max_atmosphering_speed</td>
+              <td class="schema-type">string</td>
+              <td>Maximum speed in atmosphere; &quot;n/a&quot; when incapable of atmospheric flight</td>
+            </tr><tr>
+              <td class="schema-field">crew</td>
+              <td class="schema-type">string</td>
+              <td>Number of personnel needed to run or pilot this starship</td>
+            </tr><tr>
+              <td class="schema-field">passengers</td>
+              <td class="schema-type">string</td>
+              <td>Number of non-essential people this starship can transport</td>
+            </tr><tr>
+              <td class="schema-field">cargo_capacity</td>
+              <td class="schema-type">string</td>
+              <td>Maximum cargo capacity in kilograms, as a string</td>
+            </tr><tr>
+              <td class="schema-field">consumables</td>
+              <td class="schema-type">string</td>
+              <td>Maximum time this starship can provide consumables for its crew</td>
+            </tr><tr>
+              <td class="schema-field">hyperdrive_rating</td>
+              <td class="schema-type">string</td>
+              <td>Hyperdrive rating class</td>
+            </tr><tr>
+              <td class="schema-field">MGLT</td>
+              <td class="schema-type">string</td>
+              <td>Maximum speed in megalights per hour</td>
+            </tr><tr>
+              <td class="schema-field">starship_class</td>
+              <td class="schema-type">string</td>
+              <td>Class of this starship, e.g. &quot;Starfighter&quot;</td>
+            </tr><tr>
+              <td class="schema-field">pilots</td>
+              <td class="schema-type">array of string</td>
+              <td>URLs of the people resources that have piloted this starship</td>
+            </tr><tr>
+              <td class="schema-field">films</td>
+              <td class="schema-type">array of string</td>
+              <td>URLs of the film resources this starship appeared in</td>
+            </tr><tr>
+              <td class="schema-field">created</td>
+              <td class="schema-type">string</td>
+              <td>ISO 8601 timestamp of when this resource was created</td>
+            </tr><tr>
+              <td class="schema-field">edited</td>
+              <td class="schema-type">string</td>
+              <td>ISO 8601 timestamp of when this resource was last edited</td>
+            </tr><tr>
+              <td class="schema-field">url</td>
+              <td class="schema-type">string</td>
+              <td>Canonical URL of this resource, built from the request&#39;s base URL</td>
+            </tr></tbody>
+          </table>
+          </div>
+        </details>
+        <h2>Stats</h2>
+        <p class="tag-desc">Public, anonymous usage counters</p>
+        <div class="endpoint-block sw-panel" data-path="/api/stats">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/stats</span>
+          </div>
+          <div class="endpoint-desc">Request counts per route for the last 24 hours, 7 days or 30 days — Totals per route template (for example /api/people/{id} or /mcp) and per group (rest, mcp, pages, seo, other), a trend per hour or per UTC day, and the same totals for the window right before, for comparison. Counted with no IP address, no User-Agent and no other data about the client. Without parameters: the last 7 days, per day.</div>
+          <form class="try-form">
+            
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <details class="schema-details">
+          <summary>StatsView fields</summary>
+          <div class="sw-table-wrap">
+          <table class="schema-table sw-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody><tr>
+              <td class="schema-field">period</td>
+              <td class="schema-type">string</td>
+              <td></td>
+            </tr><tr>
+              <td class="schema-field">granularity</td>
+              <td class="schema-type">string</td>
+              <td></td>
+            </tr><tr>
+              <td class="schema-field">from</td>
+              <td class="schema-type">string</td>
+              <td></td>
+            </tr><tr>
+              <td class="schema-field">to</td>
+              <td class="schema-type">string</td>
+              <td></td>
+            </tr><tr>
+              <td class="schema-field">days</td>
+              <td class="schema-type">integer</td>
+              <td></td>
+            </tr><tr>
+              <td class="schema-field">countingSince</td>
+              <td class="schema-type">string</td>
+              <td></td>
+            </tr><tr>
+              <td class="schema-field">total</td>
+              <td class="schema-type">integer</td>
+              <td></td>
+            </tr><tr>
+              <td class="schema-field">routes</td>
+              <td class="schema-type">object</td>
+              <td></td>
+            </tr><tr>
+              <td class="schema-field">groups</td>
+              <td class="schema-type">object</td>
+              <td></td>
+            </tr><tr>
+              <td class="schema-field">routeGroups</td>
+              <td class="schema-type">object</td>
+              <td></td>
+            </tr><tr>
+              <td class="schema-field">series</td>
+              <td class="schema-type">array of string</td>
+              <td></td>
+            </tr><tr>
+              <td class="schema-field">previous</td>
+              <td class="schema-type"></td>
+              <td></td>
+            </tr><tr>
+              <td class="schema-field">daily</td>
+              <td class="schema-type">array of string</td>
+              <td></td>
+            </tr><tr>
+              <td class="schema-field">performance</td>
+              <td class="schema-type"></td>
+              <td></td>
+            </tr></tbody>
+          </table>
+          </div>
+        </details>
+        <h2>Vehicles</h2>
+        <p class="tag-desc">Vehicles in the Star Wars universe</p>
+        <div class="endpoint-block sw-panel" data-path="/api/vehicles">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/vehicles?search=speeder</span>
+          </div>
+          <div class="endpoint-desc">List all vehicles — Returns every vehicle, or only those whose name matches the search query.</div>
+          <form class="try-form">
+            <input class="input-field try-input" name="search" type="text"
+                 placeholder="search (optional)" value=""
+                 aria-label="Filter by name (case-insensitive contains)">
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <div class="endpoint-block sw-panel" data-path="/api/vehicles/{id}">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/vehicles/{id}</span>
+          </div>
+          <div class="endpoint-desc">Get a vehicle by id <span class="status-note">200 / 404</span></div>
+          <form class="try-form">
+            <input class="input-field try-input" name="id" type="number" min="1"
+                 placeholder="id" value="4"
+                 aria-label="Numeric id of the vehicle">
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <div class="endpoint-block sw-panel" data-path="/api/vehicles/random">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">/api/vehicles/random</span>
+          </div>
+          <div class="endpoint-desc">Get a random vehicle</div>
+          <form class="try-form">
+            
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        <details class="schema-details">
+          <summary>Vehicle fields</summary>
+          <div class="sw-table-wrap">
+          <table class="schema-table sw-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody><tr>
+              <td class="schema-field">name</td>
+              <td class="schema-type">string</td>
+              <td>Common name of this vehicle</td>
+            </tr><tr>
+              <td class="schema-field">model</td>
+              <td class="schema-type">string</td>
+              <td>Model or official name, e.g. &quot;All-Terrain Attack Transport&quot;</td>
+            </tr><tr>
+              <td class="schema-field">manufacturer</td>
+              <td class="schema-type">string</td>
+              <td>Manufacturer(s), comma-separated</td>
+            </tr><tr>
+              <td class="schema-field">cost_in_credits</td>
+              <td class="schema-type">string</td>
+              <td>Cost in galactic credits, as a string</td>
+            </tr><tr>
+              <td class="schema-field">length</td>
+              <td class="schema-type">string</td>
+              <td>Length in meters, as a string</td>
+            </tr><tr>
+              <td class="schema-field">max_atmosphering_speed</td>
+              <td class="schema-type">string</td>
+              <td>Maximum speed in atmosphere</td>
+            </tr><tr>
+              <td class="schema-field">crew</td>
+              <td class="schema-type">string</td>
+              <td>Number of personnel needed to run or pilot this vehicle</td>
+            </tr><tr>
+              <td class="schema-field">passengers</td>
+              <td class="schema-type">string</td>
+              <td>Number of non-essential people this vehicle can transport</td>
+            </tr><tr>
+              <td class="schema-field">cargo_capacity</td>
+              <td class="schema-type">string</td>
+              <td>Maximum cargo capacity in kilograms, as a string</td>
+            </tr><tr>
+              <td class="schema-field">consumables</td>
+              <td class="schema-type">string</td>
+              <td>Maximum time this vehicle can provide consumables for its crew</td>
+            </tr><tr>
+              <td class="schema-field">vehicle_class</td>
+              <td class="schema-type">string</td>
+              <td>Class of this vehicle, e.g. &quot;Wheeled&quot;</td>
+            </tr><tr>
+              <td class="schema-field">pilots</td>
+              <td class="schema-type">array of string</td>
+              <td>URLs of the people resources that have piloted this vehicle</td>
+            </tr><tr>
+              <td class="schema-field">films</td>
+              <td class="schema-type">array of string</td>
+              <td>URLs of the film resources this vehicle appeared in</td>
+            </tr><tr>
+              <td class="schema-field">created</td>
+              <td class="schema-type">string</td>
+              <td>ISO 8601 timestamp of when this resource was created</td>
+            </tr><tr>
+              <td class="schema-field">edited</td>
+              <td class="schema-type">string</td>
+              <td>ISO 8601 timestamp of when this resource was last edited</td>
+            </tr><tr>
+              <td class="schema-field">url</td>
+              <td class="schema-type">string</td>
+              <td>Canonical URL of this resource, built from the request&#39;s base URL</td>
+            </tr></tbody>
+          </table>
+          </div>
+        </details>
+    </div>
+</main>

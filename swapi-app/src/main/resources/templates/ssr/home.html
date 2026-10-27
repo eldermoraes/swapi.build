@@ -1,0 +1,32 @@
+
+    <section class="sw-hero">
+      <div class="sw-starfield" aria-hidden="true"></div>
+      <p class="sw-greeting">A long time ago in a galaxy far, far away…</p>
+      <h1>The Star Wars API</h1>
+      <p class="sw-sub">All the Star Wars data you've ever wanted. Free, open source, REST + MCP — built with Quarkus and GraalVM.</p>
+      <div class="sw-cta-row">
+        {#pill label="▶ Get started" href="/docs" kind="solid" /}
+        {#pill label="MCP for agents" href="/docs/mcp" kind="ghost" /}
+        {#pill label="WebMCP in the browser" href="/docs/webmcp" kind="ghost" /}
+      </div>
+      <p class="sw-live"></p>
+    </section>
+    <div class="sw-term-wrap">
+      <div class="sw-term" data-term="home">
+        <div class="sw-term-head"><span>GALACTIC TERMINAL</span><span class="sw-term-live">● LIVE</span></div>
+        <div class="sw-term-prompt">
+          <span class="sw-term-prefix" aria-hidden="true">GET /api/</span>
+          <label class="sr-only" for="home-term-input">API endpoint path</label>
+          <input id="home-term-input" type="text"
+                 value="" placeholder="people/1"
+                 autocomplete="off" spellcheck="false" />
+          <button type="button" class="sw-term-exec">EXEC</button>
+        </div>
+        <pre class="sw-term-out" aria-live="polite"></pre>
+        <div class="sw-term-chips" role="group" aria-label="Suggestions">{#for path in view.suggestions}<button type="button" data-path="{path}">{path}</button>{/for}</div>
+      </div>
+    </div>
+    <div class="sw-band">
+      {#sectionLabel text="The resources" /}
+      {#indexRows rows=view.rows /}
+    </div>

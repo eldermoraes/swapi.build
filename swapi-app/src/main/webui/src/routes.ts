@@ -47,6 +47,16 @@ const PAGES: Record<string, Page> = Object.fromEntries(
   }),
 );
 
+/** The pages whose <main> the server draws (ssr in seo/site.json, 2.11.0). */
+const SERVER_RENDERED: ReadonlySet<Page> = new Set(
+  site.pages.filter((page) => page.ssr === true).map((page) => page.page as Page),
+);
+
+/** True when the server draws the <main> of this route (ServerRendering on the server). */
+export function isServerRendered(route: Route): boolean {
+  return SERVER_RENDERED.has(route.page);
+}
+
 /**
  * The page for a location.pathname. Exact, like SeoRoutes on the server, which
  * answers 404 to everything this calls not-found; both read the fixed pages from

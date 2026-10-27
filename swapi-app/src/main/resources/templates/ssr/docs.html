@@ -1,0 +1,47 @@
+
+    <div class="docs sw-inner-prose">
+      <h1 class="sw-page-title">Documentation</h1>
+      <p class="docs-intro">{view.description}</p>
+      <p class="spec-link">
+        OpenAPI {view.openapi} · version {view.version} ·
+        <a href="/openapi.json" download="openapi.json">Download the spec</a> and generate a client:
+        <code>npx @openapitools/openapi-generator-cli generate -i /openapi.json -g typescript-fetch</code>
+      </p>
+      {#for tag in view.tags}
+        <h2>{tag.name}</h2>
+        {#if tag.description}<p class="tag-desc">{tag.description}</p>{/if}
+        {#for op in tag.operations}
+        <div class="endpoint-block sw-panel" data-path="{op.path}">
+          <div class="endpoint-method">
+            <span class="method-badge">GET</span>
+            <span class="endpoint-path">{op.displayPath}</span>
+          </div>
+          <div class="endpoint-desc">{op.description}{#if op.notFound} <span class="status-note">200 / 404</span>{/if}</div>
+          <form class="try-form">
+            {#if op.hasId}<input class="input-field try-input" name="id" type="number" min="1"
+                 placeholder="id" value="{op.idExample}"
+                 aria-label="{op.idLabel}">{/if}{#if op.hasSearch}<input class="input-field try-input" name="search" type="text"
+                 placeholder="search (optional)" value=""
+                 aria-label="{op.searchLabel}">{/if}
+            <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
+          </form>
+          <div class="try-result" aria-live="polite" hidden></div>
+        </div>
+        {/for}
+        {#if tag.hasSchema}
+        <details class="schema-details">
+          <summary>{tag.schemaName} fields</summary>
+          <div class="sw-table-wrap">
+          <table class="schema-table sw-table">
+            <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+            <tbody>{#for field in tag.fields}<tr>
+              <td class="schema-field">{field.name}</td>
+              <td class="schema-type">{field.type}</td>
+              <td>{field.description}</td>
+            </tr>{/for}</tbody>
+          </table>
+          </div>
+        </details>
+        {/if}
+      {/for}
+    </div>

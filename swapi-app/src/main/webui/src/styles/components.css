@@ -95,13 +95,20 @@
 }
 
 /* Live request count under the actions: discreet, the number is data (cyan).
-   No display rule here, so the [hidden] attribute keeps it out until it loads. */
+   It keeps one line of height from the first paint and stays invisible while
+   empty, so filling it (or not, on a failure) moves nothing below (2.11.0). */
 .sw-hero .sw-live {
   margin: 1.4rem 0 0;
+  min-height: 1.5em;
+  line-height: 1.5;
   color: var(--sw-text-dim);
   font-family: var(--sw-font-mono);
   font-size: 0.75rem;
   letter-spacing: 0.04em;
+}
+
+.sw-hero .sw-live:empty {
+  visibility: hidden;
 }
 
 .sw-hero .sw-live-count {

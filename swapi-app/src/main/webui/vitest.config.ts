@@ -9,10 +9,17 @@ export default defineConfig({
   },
   // Files outside the Vite root, which Vite refuses by default ("Denied ID"):
   // seo/site.json (src/site.ts), and for seo-golden.test.ts the data files and
-  // the golden cases the server also checks (SeoGoldenTest).
+  // the golden cases the server also checks (SeoGoldenTest), and the <main> the
+  // server draws for the server-rendered pages (SsrFixturesTest).
   server: {
     fs: {
-      allow: ['.', '../resources/seo', '../resources/data', '../../test/resources/seo'],
+      allow: [
+        '.',
+        '../resources/seo',
+        '../resources/data',
+        '../../test/resources/seo',
+        '../../test/resources/ssr',
+      ],
     },
   },
 });

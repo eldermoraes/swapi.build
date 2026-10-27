@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import homeMain from '../../../../test/resources/ssr/home.html?raw';
+import pillFixture from '../../../../test/resources/ssr/pill.html?raw';
 
 vi.mock('../api', () => ({
   fetchEndpoint: vi.fn().mockResolvedValue({ data: { name: 'Luke Skywalker' }, status: 200 }),
   ApiError: class ApiError extends Error {},
 }));
 
-import { pill, sectionLabel, terminalMarkup, initTerminal, indexRows } from './components';
+import { pill, initTerminal } from './components';
 import { fetchEndpoint } from '../api';
 
 beforeEach(() => {
@@ -18,39 +20,21 @@ describe('pill', () => {
     expect(pill('Get started', '/docs')).toContain('sw-pill--solid');
     expect(pill('MCP', '/docs/mcp', 'ghost')).toContain('sw-pill--ghost');
   });
-});
 
-describe('sectionLabel', () => {
-  it('renders an uppercase-ready heading', () => {
-    expect(sectionLabel('The resources')).toContain('sw-section-label');
+  // The server draws the same pill with the Qute tag (templates/tags/pill.html;
+  // the fixture comes from SsrFixturesTest).
+  it('is the same markup the server tag draws', () => {
+    const squash = (html: string) => html.replace(/\s+/g, '');
+    expect(squash(pill('Get started', '/docs'))).toBe(squash(pillFixture));
   });
 });
 
-describe('indexRows', () => {
-  it('renders one row per resource with href and endpoint', () => {
-    const html = indexRows([
-      { title: 'People', endpoint: '/api/people', href: '/resource/people' },
-    ]);
-    document.body.innerHTML = html;
-    const row = document.querySelector('a.sw-row')!;
-    expect(row.getAttribute('href')).toBe('/resource/people');
-    expect(row.textContent).toContain('People');
-    expect(row.textContent).toContain('/api/people');
-  });
-});
-
+// The terminal the server drew on the home (fixture from SsrFixturesTest).
 describe('terminal', () => {
-  const opts = { idPrefix: 'home', suggestions: ['people/1', 'planets/1'] };
-
-  it('renders prompt, EXEC button and chips', () => {
-    document.body.innerHTML = terminalMarkup(opts);
-    expect(document.querySelector('.sw-term-prompt input')).toBeTruthy();
-    expect(document.querySelectorAll('.sw-term-chips button')).toHaveLength(2);
-  });
-
   it('chip click fills input, calls the API and renders output', async () => {
-    document.body.innerHTML = terminalMarkup(opts);
-    initTerminal(document.body, opts);
+    document.body.innerHTML = homeMain;
+    initTerminal(document.body, 'home');
+    expect(document.querySelectorAll('.sw-term-chips button')).toHaveLength(4);
     (document.querySelector('.sw-term-chips button') as HTMLButtonElement).click();
     await vi.waitFor(() => {
       expect(fetchEndpoint).toHaveBeenCalledWith('people/1');
@@ -60,5 +44,13 @@ describe('terminal', () => {
     expect((document.querySelector('.sw-term-prompt input') as HTMLInputElement).value).toBe(
       'people/1',
     );
+  });
+
+  it('EXEC runs the typed path', async () => {
+    document.body.innerHTML = homeMain;
+    initTerminal(document.body, 'home');
+    (document.querySelector('.sw-term-prompt input') as HTMLInputElement).value = 'films/2';
+    (document.querySelector('.sw-term-exec') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(fetchEndpoint).toHaveBeenCalledWith('films/2'));
   });
 });

@@ -9,8 +9,11 @@
 #                                           X-Forwarded-Host / Forwarded poisoning probes, the
 #                                           record addresses (2.10.0+: films indexable with their
 #                                           own canonical and title, 20 sitemap URLs, no lastmod),
-#                                           X-Robots-Tag noindex on /api only, the trailing-slash
-#                                           301, and the Caddy headers (HSTS, no Server)
+#                                           X-Robots-Tag noindex on /api only, the server-rendered
+#                                           content (2.11.0+: the <main> of /, /docs, /docs/mcp
+#                                           and /about with its marker and text, the lean
+#                                           JSON-LD), the trailing-slash 301, and the Caddy
+#                                           headers (HSTS, no Server)
 #        verify-deploy.sh redirect <from-host> <to-host>
 #                                          (a name that only redirects, today www.swapi.build ->
 #                                           swapi.build): without following redirects, GET /,
@@ -19,7 +22,8 @@
 #                                           GET /resource/films/1 and POST /mcp on
 #                                           https://<from-host> must each answer 308 with
 #                                           Location exactly https://<to-host> + the same path
-#                                           and query
+#                                           and query; and (2.11.0+) /docs/mcp followed once to
+#                                           <to-host> must give its text without JavaScript
 #
 # The `preview` and `prod` modes probed the former Vercel deployments and were
 # removed with them.
@@ -40,6 +44,10 @@ BASE="${SCHEME}://${HOST}"
 case "$MODE" in origin|redirect) ;; *) echo "invalid mode: $MODE"; echo "$USAGE"; exit 2 ;; esac
 
 CURL=(curl -s --max-time 90)
+
+# main_text and main_open_tag: the <main> the server draws (2.11.0+).
+# shellcheck source=lib/main-text.sh
+. "$(dirname "$0")/lib/main-text.sh"
 
 FAILURES=0
 pass() { printf 'PASS  %s\n' "$1"; }
@@ -79,6 +87,31 @@ if [ "$MODE" = "redirect" ]; then
   redirect_probe POST "/mcp" -X POST \
     -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
     -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+  # follow_probe <path> <phrase> (2.11.0+): the road of an agent that gets the www
+  # name and follows the 308 without JavaScript. Reads the Location without -L,
+  # fetches it once (https swapped for $SCHEME, which is https outside the tests)
+  # and wants 200 text/html whose <main> has the phrase and at least 200
+  # characters. A Location off https://<to-host> is never followed.
+  follow_probe() {
+    local target="$1" phrase="$2" location page meta text
+    location=$("${CURL[@]}" -o /dev/null -w '%header{location}' "${FROM_BASE}${target}")
+    case "$location" in
+      "https://${TO}/"*) ;;
+      *) fail "follow $target" "Location on https://${TO}/" "${location:-none}"; return ;;
+    esac
+    page=$("${CURL[@]}" -H 'Accept: text/html' -w '\n%{http_code} %{content_type}' \
+      "${SCHEME}://${location#https://}")
+    meta="${page##*$'\n'}"
+    text=$(printf '%s\n' "${page%$'\n'*}" | main_text)
+    if [[ "$meta" == "200 text/html"* ]] && [[ "$text" == *"$phrase"* ]] && [ "${#text}" -ge 200 ]; then
+      pass "follow $target -> $location: 200 text/html, ${#text} characters of <main> with the phrase"
+    else
+      fail "follow $target" "200 text/html, <main> with \"$phrase\" and >= 200 characters" \
+        "$meta, ${#text} characters"
+    fi
+  }
+  follow_probe "/docs/mcp" "claude mcp add --transport http swapi-build https://${TO}/mcp"
 
   echo
   if [ "$FAILURES" -eq 0 ]; then
@@ -399,6 +432,66 @@ cc=$("${CURL[@]}" -o /dev/null -w '%header{cache-control}' "$BASE/api/people/1")
   && pass "/api/people/1 Cache-Control: $cc" \
   || fail "/api/people/1 Cache-Control" "public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400" "${cc:-missing}"
 
+# --- Server-rendered content (2.11.0+) --------------------------------------------
+# The <main> of the four fixed pages is drawn by the server (Qute), for whoever
+# does not run JavaScript. Each page: 200 text/html, its data-ssr-page marker on
+# the opening tag, its phrase in the text and at least 200 characters of text
+# (main_text cuts at the first </main>: the footer never counts). /docs/mcp
+# carries the request host, so its phrase proves the host is the right one. Any
+# FAIL after a deploy = immediate rollback (docs/DEPLOY.md, "5. Rollback").
+ssr_probe() {
+  local p="$1" page="$2" phrase="$3" doc meta open text
+  doc=$("${CURL[@]}" -H 'Accept: text/html' -w '\n%{http_code} %{content_type}' "$BASE$p")
+  meta="${doc##*$'\n'}"
+  doc="${doc%$'\n'*}"
+  open=$(printf '%s\n' "$doc" | main_open_tag)
+  text=$(printf '%s\n' "$doc" | main_text)
+  if [[ "$meta" == "200 text/html"* ]] && [[ "$open" == *"data-ssr-page=\"$page\""* ]] \
+     && [[ "$text" == *"$phrase"* ]] && [ "${#text}" -ge 200 ]; then
+    pass "$p drawn on the server: data-ssr-page=\"$page\", \"$phrase\", ${#text} characters"
+  else
+    fail "$p server-rendered" "200 text/html, data-ssr-page=\"$page\", \"$phrase\", >= 200 characters" \
+      "$meta, ${open:-no <main>}, ${#text} characters"
+  fi
+}
+ssr_probe / home 'The Star Wars API'
+ssr_probe /docs docs '/api/people/{id}'
+ssr_probe /docs/mcp mcp "claude mcp add --transport http swapi-build $BASE/mcp"
+ssr_probe /about about 'Why build another one?'
+# The 404 draws nothing.
+n=$("${CURL[@]}" -H 'Accept: text/html' "$BASE/not-a-real-page" | grep -c 'data-ssr-')
+[ "$n" = "0" ] && pass "/not-a-real-page has no data-ssr- marker" \
+  || fail "/not-a-real-page marker" "no data-ssr-" "$n line(s)"
+cc=$("${CURL[@]}" -o /dev/null -w '%header{cache-control}' -H 'Accept: text/html' "$BASE/docs/mcp")
+[ "$cc" = "public, max-age=0, must-revalidate, s-maxage=300" ] && pass "/docs/mcp Cache-Control: $cc" \
+  || fail "/docs/mcp Cache-Control" "public, max-age=0, must-revalidate, s-maxage=300" "${cc:-missing}"
+# The texts of the Vercel era are gone (Decision 1 of slice E), and the five
+# guides read without JavaScript: the Codex one sits in an inactive panel.
+mcp_doc=$("${CURL[@]}" -H 'Accept: text/html' "$BASE/docs/mcp")
+mcp_text=$(printf '%s\n' "$mcp_doc" | main_text)
+if [[ "$mcp_text" != *"scales to zero"* ]] && [[ "$mcp_text" != *"different instance"* ]]; then
+  pass "/docs/mcp says neither \"scales to zero\" nor \"different instance\""
+else
+  fail "/docs/mcp Vercel-era texts" "neither \"scales to zero\" nor \"different instance\"" "present"
+fi
+[[ "$mcp_text" == *"codex mcp add swapi-build --url $BASE/mcp"* ]] \
+  && pass "/docs/mcp carries the Codex guide in the HTML (five panels readable without JavaScript)" \
+  || fail "/docs/mcp Codex guide" "codex mcp add swapi-build --url $BASE/mcp in <main>" "missing"
+# JSON-LD (2.11.0+), read inside its <script>.
+jsonld() {
+  "${CURL[@]}" -H 'Accept: text/html' "$BASE$1" | tr '\n' ' ' \
+    | sed -n 's|.*<script type="application/ld+json">\(.*\)</script>.*|\1|p' | sed 's|</script>.*||'
+}
+ld_home=$(jsonld /)
+missing=""
+for want in '"alternateName"' '"@type":"Person"' '"@type":"Dataset"'; do
+  printf '%s' "$ld_home" | grep -qF "$want" || missing="$missing $want"
+done
+[ -z "$missing" ] && pass "home JSON-LD: alternateName, Person and Dataset" \
+  || fail "home JSON-LD" '"alternateName", "@type":"Person", "@type":"Dataset"' "missing:$missing"
+jsonld /docs/mcp | grep -qF '"@type":"BreadcrumbList"' && pass "/docs/mcp JSON-LD: BreadcrumbList" \
+  || fail "/docs/mcp JSON-LD" '"@type":"BreadcrumbList"' "missing"
+
 # --- Cold start (informational, never fails) ---------------------------------
 t=$("${CURL[@]}" -o /dev/null -w '%{time_total}' "$BASE/api/people/1")
 echo "INFO  first measured request: ${t}s (floor; the instance may already be warm)"
@@ -556,6 +649,11 @@ nf_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/not-a-real-p
 nf_clean=$("${CURL[@]}" "$BASE/not-a-real-page?poison=$$" | grep -c evil.example)
 [ "$nf_poison" = "0" ] && [ "$nf_clean" = "0" ] && pass "poisoning 404 document X-Forwarded-Host: 0 occurrences" \
   || fail "poisoning 404 document X-Forwarded-Host" "0 and 0" "$nf_poison and $nf_clean (see runbook)"
+# 2.11.0+: the <main> of /docs/mcp carries the request host (the endpoint).
+mcp_poison=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE/docs/mcp?poison=$$" | grep -c evil.example)
+mcp_clean=$("${CURL[@]}" "$BASE/docs/mcp?poison=$$" | grep -c evil.example)
+[ "$mcp_poison" = "0" ] && [ "$mcp_clean" = "0" ] && pass "poisoning /docs/mcp X-Forwarded-Host: 0 occurrences" \
+  || fail "poisoning /docs/mcp X-Forwarded-Host" "0 and 0" "$mcp_poison and $mcp_clean (see runbook)"
 
 # --- What Caddy itself must add or remove -----------------------------------------
 # RFC 7239 Forwarded is not honoured by the app (allow-forwarded is off); prove it

@@ -160,7 +160,9 @@ first and breaks login.
 
 Only for a release that changes the set of indexable URLs (a new type of record
 address marked `indexable` in `seo/site.json`, a new page, a URL that now
-redirects), and only after every probe line read `PASS`:
+redirects) or what a crawler without JavaScript reads on an indexable URL
+(2.11.0 drew the four fixed pages on the server; 2.12.0 does the same for the
+record addresses), and only after every probe line read `PASS`:
 
 1. IndexNow (Bing and the other participants; Google does not take part), with
    the new or changed URLs and the sitemap. The key is the one
@@ -173,9 +175,20 @@ redirects), and only after every probe line read `PASS`:
      -d '{"host":"swapi.build","key":"a5b77f3621994d6d59f6e5f3d85055a5","keyLocation":"https://swapi.build/a5b77f3621994d6d59f6e5f3d85055a5.txt","urlList":["https://swapi.build/resource/films/1","https://swapi.build/resource/films/2","https://swapi.build/resource/films/3","https://swapi.build/resource/films/4","https://swapi.build/resource/films/5","https://swapi.build/resource/films/6","https://swapi.build/sitemap.xml"]}'
    ```
 
+   Example from 2.11.0 (the four pages whose content is now in the HTML):
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST https://api.indexnow.org/indexnow \
+     -H 'Content-Type: application/json; charset=utf-8' \
+     -d '{"host":"swapi.build","key":"a5b77f3621994d6d59f6e5f3d85055a5","keyLocation":"https://swapi.build/a5b77f3621994d6d59f6e5f3d85055a5.txt","urlList":["https://swapi.build/","https://swapi.build/docs","https://swapi.build/docs/mcp","https://swapi.build/about","https://swapi.build/sitemap.xml"]}'
+   ```
+
    Expect `200` or `202`.
 2. Search Console (maintainer): resubmit `sitemap.xml` and inspect one of the
    new URLs as the baseline for the coverage reading that gates the next batch.
+   For a release that changed what a crawler reads, use "Test live URL" on one
+   changed page (for 2.11.0, `/docs/mcp`) and check the text of `<main>` in the
+   rendered HTML before requesting indexing.
 
 ## Troubleshooting
 

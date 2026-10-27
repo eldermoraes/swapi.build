@@ -1,11 +1,11 @@
 import './style.css';
-import { renderHome } from './pages/home';
+import { bindHome } from './pages/home';
 import { ResourceExplorer } from './resource-actions';
 import { registerWebMcp } from './webmcp';
 import { renderWebMcp, updateWebMcpStatus } from './pages/webmcp';
-import { renderDocumentation } from './pages/documentation';
-import { renderAbout } from './pages/about';
-import { renderMcp } from './pages/mcp';
+import { bindDocumentation } from './pages/documentation';
+import { bindMcp } from './pages/mcp';
+import { adoptServerMain, loadServerMain, renderUnavailable, showLoadFailure } from './server-main';
 import { renderPrivacy } from './pages/privacy';
 import { renderTerms } from './pages/terms';
 import { renderStats } from './pages/stats';
@@ -14,7 +14,7 @@ import { isServerPath } from './spa-links';
 import { cancelPending } from './api';
 import { applySeoMetadata, spokenTitle } from './seo';
 import { activeNavHref } from './nav';
-import { getRoute, takeServerStatus, type Page, type Route } from './routes';
+import { getRoute, isServerRendered, takeServerStatus, type Page, type Route } from './routes';
 
 // No analytics or performance beacons in the frontend: the only measurement
 // script, the Cloudflare Web Analytics beacon, is injected by the server
@@ -76,10 +76,20 @@ function writeHead(
 
 const container = document.getElementById('main-content')!;
 const pageLifecycle = new AbortController();
+// The fetch of the document of a server-rendered page; a new navigation, or an
+// action of the explorer on the page still shown, aborts it.
+let documentLoad: AbortController | null = null;
+
+function abortDocumentLoad(): void {
+  documentLoad?.abort();
+  documentLoad = null;
+}
+
 const explorer = new ResourceExplorer(
   container,
   (path, entity) => {
     cancelPending();
+    abortDocumentLoad();
     const generation = ++navigationGeneration;
     if (window.location.pathname !== path) history.pushState(null, '', path);
     updateActiveNav(getRoute(path).page);
@@ -94,18 +104,112 @@ const explorer = new ResourceExplorer(
     });
   },
   () => {
+    abortDocumentLoad();
     navigationGeneration++;
   },
 );
 const webmcp = registerWebMcp(explorer);
 void webmcp.ready.then(() => updateWebMcpStatus(container, webmcp.status));
 
-async function navigate() {
+/** Binds the behaviours of a page whose <main> the server drew; /about has none. */
+function bindPage(page: Page): void {
+  switch (page) {
+    case 'home':
+      // The live request count fills in on its own; the page does not wait for it.
+      void bindHome(container);
+      break;
+    case 'docs':
+      bindDocumentation(container);
+      break;
+    case 'mcp':
+      bindMcp(container);
+      break;
+  }
+}
+
+/**
+ * How a navigation started. A link click carries the full URL it left (path,
+ * query and fragment), so a failed fetch can put the address back; Back and
+ * Forward ('history') never have their history rewritten.
+ */
+type NavigationSource = { via: 'start' } | { via: 'history' } | { via: 'link'; from: string };
+
+/**
+ * A page whose <main> the server draws (2.11.0, slice E1). The first load adopts
+ * it as it is: no request, no redraw, no head write, and neither scroll nor
+ * focus, so #fragment and #:~:text= work. Without the marker (the server failed
+ * to draw it) a static error, never a request or a reload. A later navigation
+ * fetches the document and writes the head once, after the swap.
+ */
+async function showServerPage(
+  path: string,
+  route: Route,
+  first: boolean,
+  generation: number,
+  source: NavigationSource,
+) {
+  if (first) {
+    if (adoptServerMain(container, route)) {
+      bindPage(route.page);
+      announce(spokenTitle(document.title));
+    } else {
+      renderUnavailable(container, path);
+    }
+    return;
+  }
+
+  const controller = new AbortController();
+  documentLoad = controller;
+  container.setAttribute('aria-busy', 'true');
+  const result = await loadServerMain(container, path, route, {
+    signal: controller.signal,
+    isCurrent: () => generation === navigationGeneration,
+    search: window.location.search,
+  });
+  if (documentLoad === controller) documentLoad = null;
+  if (generation !== navigationGeneration) return;
+  container.removeAttribute('aria-busy');
+
+  let title: string;
+  switch (result) {
+    case 'ok':
+      title = writeHead(path);
+      bindPage(route.page);
+      break;
+    case 'not-found':
+      renderNotFound(container, path);
+      title = writeHead(path, { notFound: true });
+      break;
+    case 'unavailable':
+      renderUnavailable(container, path);
+      title = writeHead(path);
+      break;
+    case 'error':
+      // The content and the head stay those of the page that was there. After a
+      // link the address goes back to the full URL it left; after Back or
+      // Forward the history is left alone (rewriting it would lose an entry).
+      showLoadFailure(container, path);
+      if (source.via === 'link') history.replaceState(null, '', source.from);
+      updateActiveNav(getRoute(headPath).page);
+      return;
+    default:
+      // 'reload' (a full load is on its way) or 'aborted' (a newer navigation).
+      return;
+  }
+  window.scrollTo(0, 0);
+  container.focus({ preventScroll: true });
+  announce(spokenTitle(title));
+}
+
+async function navigate(source: NavigationSource) {
   cancelPending();
   explorer.interrupt();
+  abortDocumentLoad();
+  container.removeAttribute('aria-busy');
   const generation = ++navigationGeneration;
 
   const path = window.location.pathname;
+  const first = firstNavigation;
   // The route is resolved before the head is touched, and the head is written
   // once: on a server 404 the client never shows "People #9999" with the list's
   // canonical while it waits for a fetch that would fail. A record address
@@ -113,27 +217,19 @@ async function navigate() {
   const route = resolveRoute(path);
   updateActiveNav(route.page);
 
+  if (isServerRendered(route)) {
+    await showServerPage(path, route, first, generation, source);
+    return;
+  }
+
   const title =
     route.page === 'resource-detail'
       ? document.title
       : writeHead(path, { notFound: route.page === 'not-found' });
 
   switch (route.page) {
-    case 'home':
-      // The live request count fills in on its own; the page does not wait for it.
-      void renderHome(container);
-      break;
-    case 'docs':
-      await renderDocumentation(container, () => generation === navigationGeneration);
-      break;
     case 'webmcp':
       renderWebMcp(container, webmcp.status);
-      break;
-    case 'mcp':
-      renderMcp(container);
-      break;
-    case 'about':
-      renderAbout(container);
       break;
     case 'privacy':
       renderPrivacy(container);
@@ -218,16 +314,19 @@ document.addEventListener(
       return;
 
     e.preventDefault();
+    const from = window.location.pathname + window.location.search + window.location.hash;
     if (href !== window.location.pathname + window.location.search) {
       history.pushState(null, '', href);
     }
-    void navigate();
+    void navigate({ via: 'link', from });
   },
   { signal: pageLifecycle.signal },
 );
 
-window.addEventListener('popstate', navigate, { signal: pageLifecycle.signal });
-navigate();
+window.addEventListener('popstate', () => void navigate({ via: 'history' }), {
+  signal: pageLifecycle.signal,
+});
+navigate({ via: 'start' });
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {

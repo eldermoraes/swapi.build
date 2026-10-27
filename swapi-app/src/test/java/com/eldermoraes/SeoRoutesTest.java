@@ -65,6 +65,16 @@ class SeoRoutesTest {
         Assertions.assertFalse(body.contains("<resource>"), body);
     }
 
+    // Changes on purpose in 2.11.0: /docs and /docs/mcp come with their content
+    // in the HTML, so the file no longer warns that they need JavaScript.
+    @Test
+    void llmsTxtNoLongerSaysTheDocsNeedJavaScript() {
+        String body = given().when().get("/llms.txt").then().statusCode(200).extract().body().asString();
+        Assertions.assertFalse(body.contains("needs JavaScript"), body);
+        Assertions.assertTrue(body.contains("/docs): endpoints with live examples"), body);
+        Assertions.assertTrue(body.contains("/docs/mcp): setup for Claude Code"), body);
+    }
+
     // Regression of diagnosis 3 in the SEO/AEO study: /llms.txt fell into the SPA
     // shell (200 text/html, index,follow).
     @Test

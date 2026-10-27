@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { recordValues, renderTemplate, site } from './site';
-import { getRoute } from './routes';
+import { getRoute, isServerRendered } from './routes';
 import { RESOURCES } from './constants';
+import constantsSource from './constants.ts?raw';
 
 // seo/site.json is the one source of page metadata (2.10.0), read by the server
 // (SeoSiteFile.java) and here. The rules of the file itself are checked on the
@@ -18,6 +19,25 @@ describe('site.json on the client', () => {
     expect(site.resources.map((resource) => resource.type).sort()).toEqual(
       RESOURCES.map((resource) => resource.key).sort(),
     );
+  });
+
+  // Slice E1 (2.11.0): the server draws the <main> of these four, and only these.
+  it('isServerRendered is true for home, docs, mcp and about only', () => {
+    const rendered = site.pages
+      .filter((page) => isServerRendered(getRoute(page.path)))
+      .map((page) => page.page);
+    expect(rendered).toEqual(['home', 'docs', 'mcp', 'about']);
+    expect(isServerRendered({ page: 'resource-detail', type: 'films', id: '1' })).toBe(false);
+    expect(isServerRendered({ page: 'resource-list', type: 'films' })).toBe(false);
+    expect(isServerRendered({ page: 'not-found' })).toBe(false);
+  });
+
+  // One copy of the type names: the label in site.json, not a title in constants.ts.
+  it('takes the explorer titles from resources[].label', () => {
+    expect(RESOURCES.map((resource) => resource.title)).toEqual(
+      site.resources.map((resource) => resource.label),
+    );
+    expect(constantsSource).not.toMatch(/title:\s*'/);
   });
 
   it('marks only films as indexable (the first batch)', () => {

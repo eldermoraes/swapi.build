@@ -19,7 +19,18 @@ import {
   formatMs,
   latencyRows,
   latencyPath,
+  GROUPS,
 } from './stats';
+
+// 2.11.0: an in-site navigation to a server-rendered page fetches its document,
+// so "pages" counts it too; the hint says so once (changes on purpose).
+describe('the pages group hint', () => {
+  it('says in-site navigations count since 2.11.0', () => {
+    expect(GROUPS.find((g) => g.id === 'pages')!.hint).toBe(
+      'this site: full loads and in-site navigations since 2.11.0',
+    );
+  });
+});
 
 function view(period: '24h' | '7d' | '30d'): StatsView {
   const hourly = period === '24h';

@@ -16,6 +16,49 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-10-27
+
+### Added
+
+- The home, `/docs`, `/docs/mcp` and `/about` come with their content in the
+  HTML, drawn on the server (Qute): a reader that does not run JavaScript
+  (GPTBot, ClaudeBot, PerplexityBot, agents that `fetch`) gets the whole page,
+  and the site adopts that content without drawing it again.
+- JSON-LD: `WebSite` with `alternateName`, a `Person` (the author), a
+  `BreadcrumbList` on every page but the home and on every listing, and a
+  `Dataset` on the home.
+
+### Changed
+
+- The endpoint shown on `/docs/mcp` comes from the request host.
+- `llms.txt` no longer says that `/docs` and `/docs/mcp` need JavaScript.
+- A navigation inside the site to one of these four pages fetches the document,
+  and the one to `/docs` no longer fetches `/openapi.json`. **The `pages` group
+  of `/stats` now adds up full loads and in-site navigations** (the group's
+  text on `/stats` says so).
+- The live count line of the home reserves its space, so it no longer pushes
+  the page down when it arrives; if the count does not come, the line stays
+  empty in place.
+- `WebSite` in the JSON-LD describes the site with the home description on
+  every document.
+- `/docs/mcp` no longer says the server "scales to zero" nor mentions a
+  "different instance" (texts from the Vercel days), and its five guides are
+  readable without JavaScript.
+- The "Try it" buttons send nothing without JavaScript.
+- Until the web fonts arrive, the text is drawn with local fallback faces
+  scaled to their widths and metrics (`Arial` for Inter and Pathway Gothic One,
+  `Courier New` for JetBrains Mono), so the font swap no longer moves the page
+  (phone, 360 px: home 0.0000, `/docs` 0.0012, `/about` 0.0000, `/docs/mcp`
+  0.0485). Nothing changes once the web fonts load.
+
+### Known issues
+
+- `npm run test:browser` (`scripts/verify-webmcp.cjs:27`) fails on current
+  Chrome before any check runs: it passes the tool arguments to
+  `document.modelContext.executeTool` as a JSON string, and Chrome now wants an
+  object. It predates 2.11.0 (the same failure against 2.10.0); with an object
+  the script passes against both versions.
+
 ## [2.10.0] - 2026-10-27
 
 ### Added
@@ -697,7 +740,7 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.10.0...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.11.0...HEAD
 [2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
@@ -740,3 +783,5 @@ snapshot version is not a release. -->
 [2.9.1]: https://github.com/eldermoraes/swapi.build/compare/v2.9.0...v2.9.1
 
 [2.10.0]: https://github.com/eldermoraes/swapi.build/compare/v2.9.1...v2.10.0
+
+[2.11.0]: https://github.com/eldermoraes/swapi.build/compare/v2.10.0...v2.11.0
