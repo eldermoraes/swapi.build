@@ -13,9 +13,11 @@ name: Native binary and deploy
 #   sha256 input, redeploy a Release that already has its binary: test and
 #   build are skipped and the operator supplies the hash from the original
 #   run's summary, so swapi-update still checks two sources.
-# - pull_request touching this file: runs the suite, the build, the GLIBC
-#   check and the native smoke without uploading or deploying anything, so a
-#   change to the pipeline is proven before merge.
+# - pull_request touching this file, scripts/native-smoke.sh or
+#   swapi-app/pom.xml (dependency changes, version bumps): runs the suite, the
+#   build, the GLIBC check and the native smoke without uploading or deploying
+#   anything, so a change to the pipeline, to the smoke or to what goes into
+#   the native image is proven before merge.
 #
 # Why the deploy is a job here (needs: build) and not a workflow_run of its
 # own: it gets the hash straight from the build job's output, in the same run,
@@ -46,6 +48,8 @@ on:
   pull_request:
     paths:
       - .github/workflows/native-binary.yml
+      - scripts/native-smoke.sh
+      - swapi-app/pom.xml
 
 permissions:
   contents: read

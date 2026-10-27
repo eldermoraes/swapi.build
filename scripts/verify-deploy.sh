@@ -658,6 +658,51 @@ else
   fail "POST /mcp/messages/*" "404 + body citing /mcp" "$code $(echo "$edge" | head -c 120)"
 fi
 
+# --- MCP 2.12.1: listen and subscribe answered without state; extension 2.0.3 --
+# One stateless request: <method> <params without _meta, or ''> [Mcp-Name] [max seconds].
+STATELESS_META='"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"verify-deploy","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}'
+mcp_stateless() {
+  local method="$1" params="$2" name="${3:-}" max="${4:-90}" extra=()
+  [ -n "$name" ] && extra=(-H "Mcp-Name: $name")
+  curl -s --max-time "$max" -X POST "$BASE/mcp" \
+    -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+    -H "Mcp-Method: $method" -H 'MCP-Protocol-Version: 2026-07-28' ${extra[@]+"${extra[@]}"} \
+    -d '{"jsonrpc":"2.0","id":1,"method":"'"$method"'","params":{'"$params${params:+,}$STATELESS_META"'}}'
+}
+# 2.12.0 left this stream open with no limit; the curl must end on its own.
+resp=$(mcp_stateless subscriptions/listen '"notifications":{"toolsListChanged":true}' '' 5); rc=$?
+if [ "$rc" = "0" ] && printf '%s' "$resp" | grep -qF '"code":-32601' \
+   && printf '%s' "$resp" | grep -qF 'subscriptions/listen'; then
+  pass "MCP subscriptions/listen answered at once: -32601"
+else
+  fail "MCP subscriptions/listen" "curl ends within 5 s, -32601 citing subscriptions/listen" \
+    "curl exit $rc, $(printf '%s' "$resp" | head -c 160)"
+fi
+resp=$(mcp_stateless resources/subscribe '"uri":"swapi://people/1"')
+printf '%s' "$resp" | grep -qF '"code":-32601' && pass "MCP stateless resources/subscribe -> -32601" \
+  || fail "MCP stateless resources/subscribe" '"code":-32601' "$(printf '%s' "$resp" | head -c 160)"
+# The state of 2.12.1 (no resources yet); 2.13.0 turns these two around.
+resp=$(mcp_stateless resources/list '')
+if printf '%s' "$resp" | grep -qF '"resources":[]' && printf '%s' "$resp" | grep -qF '"jsonrpc":"2.0"'; then
+  pass "MCP resources/list: an empty list"
+else
+  fail "MCP resources/list" '"resources":[] in a JSON-RPC answer' "$(printf '%s' "$resp" | head -c 160)"
+fi
+resp=$(mcp_stateless resources/read '"uri":"swapi://films"' 'swapi://films')
+if printf '%s' "$resp" | grep -qF '"code":-32602' && printf '%s' "$resp" | grep -qF 'swapi://films'; then
+  pass "MCP resources/read swapi://films -> -32602 (not a resource yet)"
+else
+  fail "MCP resources/read swapi://films" '"code":-32602 citing swapi://films' "$(printf '%s' "$resp" | head -c 160)"
+fi
+# Extension 2.0.3 (PR #1037): the serverInfo of server/discover is in _meta.
+resp=$(mcp_stateless server/discover '')
+if printf '%s' "$resp" | grep -qF 'io.modelcontextprotocol/serverInfo' && printf '%s' "$resp" | grep -qF 'swapi.build'; then
+  pass "MCP server/discover: serverInfo in _meta"
+else
+  fail "MCP server/discover serverInfo" 'io.modelcontextprotocol/serverInfo with swapi.build' \
+    "$(printf '%s' "$resp" | head -c 160)"
+fi
+
 # --- CORS / cache poisoning via Origin --------------------------------------
 vary=$("${CURL[@]}" -I -H 'Origin: https://evil.example' "$BASE/api/people/1" | tr -d '\r' | grep -i '^vary')
 echo "$vary" | grep -qi 'origin' && pass "Vary contains Origin ($vary)" \

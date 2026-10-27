@@ -193,6 +193,14 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
 - **MCP foreign session and edges**: a session id that never existed is still
   served (200); `GET /mcp` is 405; `GET /mcp/sse` is 404 (legacy transport
   rejected); `POST /mcp/messages/*` is 404 with a JSON body citing `/mcp`.
+- **MCP listen, subscribe and extension 2.0.3 (2.12.1+)**: a stateless
+  `subscriptions/listen` under `curl --max-time 5` ends on its own with
+  `-32601` citing `subscriptions/listen` (up to 2.12.0 it stayed open with no
+  limit); a stateless `resources/subscribe` answers `-32601`; `resources/list`
+  is `"resources":[]` and `resources/read swapi://films` is `-32602` citing the
+  URI (the state before 2.13.0, which turns these two around);
+  `server/discover` carries `io.modelcontextprotocol/serverInfo` with
+  `swapi.build` in `_meta` (extension 2.0.3).
 - **CORS and `Vary: Origin`**: CORS echoes the request `Origin`, so cacheable
   responses (`/api/*`, the SPA HTML and, from 2.9.1, the SEO files `robots.txt`,
   `sitemap.xml` and `llms.txt`) must carry `Vary: Origin`, and a
@@ -246,6 +254,7 @@ applied there and verified with the probe on 2026-10-26 (18:25 BRT).
 | Symptom | Cause / fix |
 |---|---|
 | 404 `Mcp session not found` on a stateful MCP call | `quarkus.mcp.server.http.streamable.auto-init=true` is off in the running version. It serves an unknown session id with a throwaway session (introduced for Vercel's lack of session affinity; on the single host it keeps clients working across restarts). |
+| A `subscriptions/listen` on `/mcp` stays open (an SSE stream that never ends) | Must not happen from 2.12.1 on: `McpTransportFilter` answers it at once with `-32601`, and the listen probe reads `FAIL` otherwise. The running version is 2.12.0 or older, or the filter stopped reading the body (it does so before the extension's route: `McpListenLimitTest`). Roll back (see [5. Rollback](#5-rollback)) or redeploy 2.12.1+. |
 | 202 responses from the API | Legacy quirk retired 2026-08-01 — current builds return 200; a 202 means a very old binary is live. |
 | The OpenAPI version probe fails right after a deploy | The host still runs the previous version: `swapi-update` failed, or the probe ran against a tag other than the deployed one. Read the `deploy` job log; on the host, `readlink /opt/swapi/current`. |
 | A file from `public/` or an asset answers 404 from 2.9.1 on | Its path has no dot in the last segment and is not under `/assets/`, so `SeoRoutes` treats it as a page and, not knowing it, answers the not-found document. Every new file in `public/` needs an extension. |
