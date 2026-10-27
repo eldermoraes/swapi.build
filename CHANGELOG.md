@@ -16,6 +16,27 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.9.1] - 2026-10-27
+
+### Fixed
+
+- Pages that do not exist answer 404 with a "Page not found" page and
+  `noindex`. Before, they answered 200 with the home page (a soft 404 for
+  search engines), and paths with a dot came back `index,follow`.
+- Ids that do not exist, or are not in canonical form, in
+  `/resource/<type>/<id>` answer 404 (for example `/resource/people/9999` and
+  `/resource/people/%31`).
+- Assets that do not exist answer 404 instead of the HTML of the home page.
+- `/index.html` redirects (301) to `/`.
+- Quinoa's SPA routing is off, and with it the double count in `/stats`: the
+  count of `/`, the latency of `/`, `pages` and the total drop after this
+  version, because scanners inflated them; `other` stays the same.
+- `Vary: Origin` on `robots.txt`, `sitemap.xml` and `llms.txt`.
+
+### Changed
+
+- The HTML `s-maxage` goes from 31536000 to 300.
+
 ## [2.9.0] - 2026-10-26
 
 ### Added
@@ -647,7 +668,7 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.9.0...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.9.1...HEAD
 [2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
@@ -686,3 +707,5 @@ snapshot version is not a release. -->
 [2.8.2]: https://github.com/eldermoraes/swapi.build/compare/v2.8.1...v2.8.2
 
 [2.9.0]: https://github.com/eldermoraes/swapi.build/compare/v2.8.2...v2.9.0
+
+[2.9.1]: https://github.com/eldermoraes/swapi.build/compare/v2.9.0...v2.9.1
