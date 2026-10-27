@@ -13,9 +13,9 @@ name: Native binary and deploy
 #   sha256 input, redeploy a Release that already has its binary: test and
 #   build are skipped and the operator supplies the hash from the original
 #   run's summary, so swapi-update still checks two sources.
-# - pull_request touching this file: runs the suite, the build and the GLIBC
-#   check without uploading or deploying anything, so a change to the pipeline
-#   is proven before merge.
+# - pull_request touching this file: runs the suite, the build, the GLIBC
+#   check and the native smoke without uploading or deploying anything, so a
+#   change to the pipeline is proven before merge.
 #
 # Why the deploy is a job here (needs: build) and not a workflow_run of its
 # own: it gets the hash straight from the build job's output, in the same run,
@@ -173,6 +173,26 @@ jobs:
             cat application.sha256
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # 2.11.0+: nobody ran the binary before this, and swapi-update restarts the
+      # host before it knows the new version answers (docs/DEPLOY.md). Started
+      # here on the runner (glibc 2.39 >= the 2.35 it needs), it must serve
+      # /api/people/1, /openapi.json and the four server-rendered pages
+      # (scripts/native-smoke.sh). A failure stops the job: nothing is attached
+      # and the deploy never begins. Runs on pull requests too, like the build.
+      - name: Native smoke
+        run: |
+          PORT=8099 ./dist/application > "$RUNNER_TEMP/native-smoke.log" 2>&1 &
+          app=$!
+          status=0
+          ./scripts/native-smoke.sh http://127.0.0.1:8099 | tee -a "$GITHUB_STEP_SUMMARY" || status=1
+          kill "$app" 2>/dev/null || true
+          wait "$app" 2>/dev/null || true
+          if [ "$status" -ne 0 ]; then
+            echo "--- application log ---"
+            tail -n 50 "$RUNNER_TEMP/native-smoke.log"
+          fi
+          exit "$status"
 
       - name: Attach to the Release
         if: github.event_name != 'pull_request'
