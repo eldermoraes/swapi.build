@@ -73,21 +73,26 @@ Full setup guides: **[swapi.build/docs/mcp](https://swapi.build/docs/mcp)**
 
 | Tool | Arguments | Returns |
 |------|-----------|---------|
-| `sw_list` | `resource` | All entities of a resource |
-| `sw_get` | `resource`, `id` | One entity by id |
+| `sw_list` | `resource`, optional `fields` | All entities of a resource |
+| `sw_get` | `resource`, `id`, optional `expand` | One entity by id |
 | `sw_random` | `resource` | A random entity |
-| `sw_search` | `resource`, `query` | Name/title substring match |
+| `sw_search` | `resource`, `query`, optional `fields` | Name/title substring match |
 
 `resource` is one of `PEOPLE`, `FILMS`, `PLANETS`, `SPECIES`, `STARSHIPS`, `VEHICLES`.
 Ids are the record ids from each entity's `url` field (for `FILMS`, `1` = A New Hope).
+`expand` names relations to embed in the same call (`["homeworld", "species"]`, or `["*"]`);
+`fields` projects each entity (`["name"]` gives a compact index; `url` always stays).
+
+Since 2.13.0 the records are also MCP resources: `swapi://people` (an index) and
+`swapi://people/1` (the `sw_get` text), for the six types, plus the templates
+`swapi://<type>/{id}`. The server prompt `character_profile` takes a character name.
 
 **Caching:** Quarkiverse MCP Server 2.0.0 emits the required `ttlMs: 0` and
 `cacheScope: "public"` fields on stateless discovery and tool-list responses.
 Zero TTL means immediately stale; no positive freshness period is configured.
 Its [cache hints](https://github.com/quarkiverse/quarkus-mcp-server/blob/2.0.0/docs/modules/ROOT/pages/release-notes.adoc)
 apply to discovery, list methods and `resources/read`, **not `tools/call`**.
-The Star Wars data here is exposed through tools, so tool-result caching is not
-enabled, including for `sw_random`. REST/edge caching is a separate mechanism.
+Tool-result caching is not enabled, including for `sw_random`. REST/edge caching is a separate mechanism.
 
 <details>
 <summary><strong>Claude Code</strong></summary>
@@ -178,8 +183,9 @@ Or Bob panel → MCP tab → **Edit Global MCP**. Bob detects the tools automati
 ## WebMCP in the browser (experimental)
 
 The website exposes `sw_list`, `sw_get`, `sw_search` and `sw_random` through
-WebMCP. Names and arguments match the remote MCP tools, including uppercase
-resource names. Each browser tool updates the visible explorer and returns
+WebMCP. Names and required arguments match the remote MCP tools, including
+uppercase resource names; the optional `expand` and `fields` arguments exist only
+on the remote server. Each browser tool updates the visible explorer and returns
 complete records in a JSON result with `ok`, `data`, `resource` and `path`.
 The browser result envelope differs from the remote MCP transport.
 

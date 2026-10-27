@@ -66,6 +66,17 @@ class ServerJsonVersionTest {
         }
     }
 
+    // 2.13.0 (slice F1): the description names the six resource types and
+    // still fits the 100 characters of the 2025-12-11 schema.
+    @Test
+    void descriptionFitsTheRegistryLimit() {
+        String description = serverJson().getString("description", "");
+        assertTrue(description.length() <= 100, description.length() + " characters: " + description);
+        for (String type : List.of("people", "films", "planets", "species", "starships", "vehicles")) {
+            assertTrue(description.contains(type), () -> "description lacks '" + type + "': " + description);
+        }
+    }
+
     /**
      * The registry shows these icons, so each must be a file this repo serves on
      * the production host (webui/public/), in a type the schema allows. The PNG

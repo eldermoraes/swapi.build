@@ -22,6 +22,17 @@ it('registers the four MCP operations and executes them through the real explore
     'sw_random',
     'sw_search',
   ]);
+  // 2.13.0 (slice F1): expand and fields are remote-only; the browser
+  // schemas keep their properties and keep refusing any other.
+  for (const tool of tools) {
+    const schema = tool.inputSchema as {
+      properties: Record<string, unknown>;
+      additionalProperties: boolean;
+    };
+    expect(Object.keys(schema.properties)).not.toContain('expand');
+    expect(Object.keys(schema.properties)).not.toContain('fields');
+    expect(schema.additionalProperties).toBe(false);
+  }
   vi.stubGlobal(
     'fetch',
     vi

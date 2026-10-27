@@ -26,16 +26,39 @@
       <table class="tools-table sw-table">
         <thead><tr><th>Tool</th><th>Arguments</th><th>Returns</th></tr></thead>
         <tbody>
-          <tr><td><code>sw_list</code></td><td><code>resource</code></td><td>All entities of a resource</td></tr>
-          <tr><td><code>sw_get</code></td><td><code>resource</code>, <code>id</code></td><td>One entity by id</td></tr>
+          <tr><td><code>sw_list</code></td><td><code>resource</code>, optional <code>fields</code></td><td>All entities of a resource</td></tr>
+          <tr><td><code>sw_get</code></td><td><code>resource</code>, <code>id</code>, optional <code>expand</code></td><td>One entity by id</td></tr>
           <tr><td><code>sw_random</code></td><td><code>resource</code></td><td>A random entity</td></tr>
-          <tr><td><code>sw_search</code></td><td><code>resource</code>, <code>query</code></td><td>Name/title substring match</td></tr>
+          <tr><td><code>sw_search</code></td><td><code>resource</code>, <code>query</code>, optional <code>fields</code></td><td>Name/title substring match</td></tr>
         </tbody>
       </table>
       </div>
       <p class="guide-note"><code>resource</code> is one of <code>PEOPLE</code>, <code>FILMS</code>, <code>PLANETS</code>,
       <code>SPECIES</code>, <code>STARSHIPS</code>, <code>VEHICLES</code>. Ids are the record ids from each
       entity's <code>url</code> field (for <code>FILMS</code>, <code>1</code> = A New Hope).</p>
+      <p class="guide-note"><code>expand</code> names the relations to embed in the same call, such as
+      <code>["homeworld", "species"]</code>, or <code>["*"]</code> for all of them (one level deep; up to 8
+      names). <code>fields</code> keeps only the named fields of each entity, such as <code>["name"]</code> for a
+      compact index; <code>url</code> always stays (up to 24 names). Without them, the answers are the full records.</p>
+    </section>
+
+    <section class="mcp-resources">
+      <h2>Resources</h2>
+      <p>The same records are MCP resources, for clients that attach data instead of calling a tool:
+      <code>swapi://people</code> is an index of every person (id, name and URI), and
+      <code>swapi://people/1</code> is Luke Skywalker, with the same text as <code>sw_get</code>. The pattern is
+      <code>swapi://&lt;type&gt;</code> and <code>swapi://&lt;type&gt;/&lt;id&gt;</code> for the six types, also as
+      resource templates.</p>
+      <p>In Claude Code, type <code>@</code> and pick <code>swapi-build:swapi://people/1</code> to attach a record
+      to your message.</p>
+    </section>
+
+    <section class="mcp-server-prompt">
+      <h2>Server prompt</h2>
+      <p><code>character_profile</code> takes a character's name and asks the agent to build a short profile with the
+      tools: <code>sw_search</code>, then <code>sw_get</code> with <code>expand</code> for homeworld, species and films.
+      In Claude Code it is the command <code>/mcp__swapi-build__character_profile</code>, e.g.
+      <code>/mcp__swapi-build__character_profile Darth Vader</code>.</p>
     </section>
 
     <section class="mcp-setup">
@@ -153,7 +176,7 @@ url = &quot;https://preview.example/mcp&quot;</pre>
 
     <section class="mcp-prompts">
       <h2>Try these prompts</h2>
-      <div class="prompt-card sw-panel">Using swapi-build, list every film Luke Skywalker appears in.</div><div class="prompt-card sw-panel">Pick a random starship from swapi-build and compare its specs with the Millennium Falcon.</div><div class="prompt-card sw-panel">Search swapi-build for planets matching &quot;Tatooine&quot; and summarize their climate and population.</div>
+      <div class="prompt-card sw-panel">Using swapi-build, list every film Luke Skywalker appears in.</div><div class="prompt-card sw-panel">Who is Luke Skywalker? Include his homeworld and species.</div><div class="prompt-card sw-panel">Pick a random starship from swapi-build and compare its specs with the Millennium Falcon.</div><div class="prompt-card sw-panel">Search swapi-build for planets matching &quot;Tatooine&quot; and summarize their climate and population.</div>
     </section>
 
     <section class="mcp-trouble" id="troubleshooting">

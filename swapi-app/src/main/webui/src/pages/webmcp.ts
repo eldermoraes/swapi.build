@@ -36,7 +36,7 @@ export function renderWebMcp(container: HTMLElement, status: RegistrationStatus)
         </tbody>
       </table></div>
       <div class="webmcp-notes"><p><strong>Resources.</strong> Use <code>PEOPLE</code>, <code>FILMS</code>, <code>PLANETS</code>, <code>SPECIES</code>, <code>STARSHIPS</code> or <code>VEHICLES</code>. </p><p><strong>Record IDs.</strong> IDs come from record URLs: <code>FILMS</code> ID <code>1</code> is A New Hope, not episode I. </p><p><strong>Search.</strong> Search matches name fragments (titles for films), ignores case and accepts an empty string to match all records.</p>
-      <p><strong>Response.</strong> Names and arguments match the remote MCP tools. WebMCP additionally changes this page and returns a JSON string with <code>ok</code>, complete records in <code>data</code>, <code>resource</code>, <code>path</code> and either <code>count</code> or <code>id</code>. Its response envelope is specific to this browser integration.</p></div>
+      <p><strong>Response.</strong> Names and required arguments match the remote MCP tools; the optional <code>expand</code> and <code>fields</code> arguments exist only on the remote server. WebMCP additionally changes this page and returns a JSON string with <code>ok</code>, complete records in <code>data</code>, <code>resource</code>, <code>path</code> and either <code>count</code> or <code>id</code>. Its response envelope is specific to this browser integration.</p></div>
       <h2>Try a demonstration</h2>
       <div class="webmcp-copy"><ol>
         <li>Open this site in the configured browser and use the inspector to discover the four tools. Manual calls do not require a model API key.</li>
