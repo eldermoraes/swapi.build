@@ -85,6 +85,20 @@ class RecordFieldsTest {
         assertEquals("75", RecordFields.attributes("starships").get(10).value().apply(starship));
     }
 
+    // 2.13.0 (slice F1): single decides whether the MCP expand of a relation is
+    // one record (or null) or an array; it is declared, never read from the data.
+    @Test
+    void onlyHomeworldIsSingle() {
+        for (String type : KnownEntities.TYPES) {
+            for (RecordFields.Relation relation : RecordFields.relations(type)) {
+                assertEquals("homeworld".equals(relation.key()), relation.single(), type + "." + relation.key());
+            }
+        }
+        assertEquals(2, KnownEntities.TYPES.stream()
+                .flatMap(type -> RecordFields.relations(type).stream())
+                .filter(RecordFields.Relation::single).count(), "people.homeworld and species.homeworld");
+    }
+
     @Test
     void anUnknownTypeIsAnError() {
         assertThrows(IllegalArgumentException.class, () -> RecordFields.attributes("droids"));

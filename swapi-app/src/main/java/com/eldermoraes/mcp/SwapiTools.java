@@ -1,12 +1,15 @@
 package com.eldermoraes.mcp;
 
 import com.eldermoraes.RequestBaseUrl;
+import com.eldermoraes.SWObject;
 import com.eldermoraes.film.FilmService;
 import com.eldermoraes.people.PeopleService;
 import com.eldermoraes.planet.PlanetService;
+import com.eldermoraes.seo.ssr.RecordFields;
 import com.eldermoraes.specie.SpecieService;
 import com.eldermoraes.starship.StarshipService;
 import com.eldermoraes.vehicle.VehicleService;
+import io.quarkiverse.mcp.server.MetaField;
 import io.quarkiverse.mcp.server.Tool;
 import io.quarkiverse.mcp.server.ToolArg;
 import io.quarkiverse.mcp.server.ToolCallException;
@@ -16,17 +19,40 @@ import jakarta.inject.Inject;
 import jakarta.json.bind.Jsonb;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Supplier;
 
 @ApplicationScoped
 public class SwapiTools {
 
-    public enum SwResource { PEOPLE, FILMS, PLANETS, SPECIES, STARSHIPS, VEHICLES }
+    public enum SwResource {
+        PEOPLE, FILMS, PLANETS, SPECIES, STARSHIPS, VEHICLES;
+
+        /** The type as in /api/{type}: people, films, ... */
+        public String type() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+    }
 
     // Shared by the four tools. The error is the extension's argument conversion
     // ("Invalid argument [resource] - unable to convert value"), a tool error.
     private static final String RESOURCE_ARG = "Resource type: PEOPLE, FILMS, PLANETS, SPECIES, STARSHIPS or "
             + "VEHICLES. Any other value returns a tool error.";
+
+    // 2.13.0: the optional fields of sw_list and sw_search.
+    private static final String FIELDS_ARG = "Optional. Field names to keep in each entity (url is always kept), "
+            + "e.g. [\"name\"] (FILMS: [\"title\"]). Up to 24 names; an unknown name returns a tool error listing "
+            + "the valid ones. Omit for full entities.";
+
+    // Claude Code writes a tool result over about 50 000 characters to a file and
+    // hands the model only the path; this raises that limit for the three tools
+    // whose answer can pass it (sw_get with expand ["*"] on a film: about 52 KB).
+    private static final String MAX_RESULT_PREFIX = "anthropic/";
+    private static final String MAX_RESULT_NAME = "maxResultSizeChars";
+    private static final String MAX_RESULT_VALUE = "100000";
 
     @Inject PeopleService peopleService;
     @Inject FilmService filmService;
@@ -35,6 +61,7 @@ public class SwapiTools {
     @Inject StarshipService starshipService;
     @Inject VehicleService vehicleService;
     @Inject Jsonb jsonb;
+    @Inject RecordExpansion expansion;
 
     @ConfigProperty(name = "swapi.public-base-url")
     Optional<String> publicBaseUrl;
@@ -61,8 +88,43 @@ public class SwapiTools {
         }
     }
 
-    private void applyBaseUrl() {
-        RequestBaseUrl.set(resolveBaseUrl());
+    /**
+     * Runs body with RequestBaseUrl set to this request's base and puts back
+     * whatever the thread had before, also when body throws (the pattern of
+     * RecordViews). Until 2.12.1 the tools set it and never restored it, so a
+     * worker thread kept the last caller's host. Tools, resources, expand and
+     * fields all read the entity getters inside this block.
+     */
+    <T> T withBaseUrl(Supplier<T> body) {
+        String base = resolveBaseUrl();
+        String previous = RequestBaseUrl.get();
+        RequestBaseUrl.set(base);
+        try {
+            return body.get();
+        } finally {
+            if (previous == null) {
+                RequestBaseUrl.clear();
+            } else {
+                RequestBaseUrl.set(previous);
+            }
+        }
+    }
+
+    /** The sw_get text of a record, or null when it does not exist. Call inside withBaseUrl. */
+    String recordText(SwResource resource, int id) {
+        SWObject entity = record(resource, id);
+        return entity == null ? null : jsonb.toJson(entity);
+    }
+
+    private SWObject record(SwResource resource, int id) {
+        return switch (resource) {
+            case PEOPLE -> peopleService.getPeopleById(id);
+            case FILMS -> filmService.getFilmById(id);
+            case PLANETS -> planetService.getPlanetById(id);
+            case SPECIES -> specieService.getSpecieById(id);
+            case STARSHIPS -> starshipService.getStarshipById(id);
+            case VEHICLES -> vehicleService.getVehicleById(id);
+        };
     }
 
     @Tool(description = "Lists every entity of one Star Wars resource type as a JSON array "
@@ -71,16 +133,17 @@ public class SwapiTools {
           annotations = @Tool.Annotations(title = "List Star Wars resources",
                   readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
     public String sw_list(
-            @ToolArg(description = RESOURCE_ARG) SwResource resource) {
-        applyBaseUrl();
-        return jsonb.toJson(switch (resource) {
+            @ToolArg(description = RESOURCE_ARG) SwResource resource,
+            @ToolArg(description = FIELDS_ARG, required = false) List<String> fields) {
+        Set<String> keep = expansion.fields(resource.type(), fields);
+        return withBaseUrl(() -> expansion.project(jsonb.toJson(switch (resource) {
             case PEOPLE -> peopleService.getAllPeople();
             case FILMS -> filmService.getAllFilms();
             case PLANETS -> planetService.getAllPlanets();
             case SPECIES -> specieService.getAllSpecies();
             case STARSHIPS -> starshipService.getAllStarships();
             case VEHICLES -> vehicleService.getAllVehicles();
-        });
+        }), keep));
     }
 
     @Tool(description = "Gets one Star Wars entity by numeric record id and returns it as a JSON "
@@ -92,21 +155,20 @@ public class SwapiTools {
     public String sw_get(
             @ToolArg(description = RESOURCE_ARG) SwResource resource,
             @ToolArg(description = "Numeric record id: the last segment of the entity's url field "
-                    + "(1 in .../api/people/1).") int id) {
-        applyBaseUrl();
-        Object result = switch (resource) {
-            case PEOPLE -> peopleService.getPeopleById(id);
-            case FILMS -> filmService.getFilmById(id);
-            case PLANETS -> planetService.getPlanetById(id);
-            case SPECIES -> specieService.getSpecieById(id);
-            case STARSHIPS -> starshipService.getStarshipById(id);
-            case VEHICLES -> vehicleService.getVehicleById(id);
-        };
-        if (result == null) {
-            throw new ToolCallException("No " + resource.name().toLowerCase()
-                    + " found with id " + id);
-        }
-        return jsonb.toJson(result);
+                    + "(1 in .../api/people/1).") int id,
+            @ToolArg(description = "Optional. Relations to embed, one level deep, under a final \"expanded\" "
+                    + "key: PEOPLE homeworld, films, species, starships; FILMS characters, planets, starships, "
+                    + "vehicles, species; PLANETS residents, films; SPECIES homeworld, people, films; STARSHIPS "
+                    + "and VEHICLES pilots, films; or [\"*\"] alone for all. Up to 8 names; an unknown name "
+                    + "returns a tool error.", required = false) List<String> expand) {
+        List<RecordFields.Relation> relations = expansion.relations(resource.type(), expand);
+        return withBaseUrl(() -> {
+            SWObject result = record(resource, id);
+            if (result == null) {
+                throw new ToolCallException("No " + resource.type() + " found with id " + id);
+            }
+            return expansion.expand(resource.type(), result, jsonb.toJson(result), relations);
+        });
     }
 
     @Tool(description = "Returns one random Star Wars entity of the given resource type as a "
@@ -116,34 +178,35 @@ public class SwapiTools {
                   readOnlyHint = true, destructiveHint = false, openWorldHint = false))
     public String sw_random(
             @ToolArg(description = RESOURCE_ARG) SwResource resource) {
-        applyBaseUrl();
-        return jsonb.toJson(switch (resource) {
+        return withBaseUrl(() -> jsonb.toJson(switch (resource) {
             case PEOPLE -> peopleService.getRandomPeople();
             case FILMS -> filmService.getRandomFilm();
             case PLANETS -> planetService.getRandomPlanet();
             case SPECIES -> specieService.getRandomSpecie();
             case STARSHIPS -> starshipService.getRandomStarship();
             case VEHICLES -> vehicleService.getRandomVehicle();
-        });
+        }));
     }
 
     @Tool(description = "Start here. Finds Star Wars entities by name (title for FILMS) with a "
             + "case-insensitive substring match: 'sky' finds Luke, Anakin and Shmi Skywalker. Returns "
             + "a JSON array of full entities; an empty array [] means no match. The id to pass to "
-            + "sw_get is the last segment of each entity's url field. Data covers Episodes I-VI only.",
+            + "sw_get is the last segment of each entity's url field. "
+            + "Data covers Episodes I-VI only.",
           annotations = @Tool.Annotations(title = "Search Star Wars resources",
                   readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
     public String sw_search(
             @ToolArg(description = RESOURCE_ARG) SwResource resource,
-            @ToolArg(description = "Name or title fragment, case-insensitive (e.g. 'falcon', 'hope').") String query) {
-        applyBaseUrl();
-        return jsonb.toJson(switch (resource) {
+            @ToolArg(description = "Name or title fragment, case-insensitive (e.g. 'falcon', 'hope').") String query,
+            @ToolArg(description = FIELDS_ARG, required = false) List<String> fields) {
+        Set<String> keep = expansion.fields(resource.type(), fields);
+        return withBaseUrl(() -> expansion.project(jsonb.toJson(switch (resource) {
             case PEOPLE -> peopleService.getPeopleByName(query);
             case FILMS -> filmService.getFilmByTitle(query);
             case PLANETS -> planetService.getPlanetByName(query);
             case SPECIES -> specieService.getSpecieByName(query);
             case STARSHIPS -> starshipService.getStarshipByName(query);
             case VEHICLES -> vehicleService.getVehicleByName(query);
-        });
+        }), keep));
     }
 }
