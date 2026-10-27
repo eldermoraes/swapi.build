@@ -156,6 +156,27 @@ Key rotation: generate a new key, replace (never add alongside) the apex TXT
 record `v=MCPv1; k=ed25519; p=...` on Cloudflare — a stale record is tried
 first and breaks login.
 
+## 11. Search engines
+
+Only for a release that changes the set of indexable URLs (a new type of record
+address marked `indexable` in `seo/site.json`, a new page, a URL that now
+redirects), and only after every probe line read `PASS`:
+
+1. IndexNow (Bing and the other participants; Google does not take part), with
+   the new or changed URLs and the sitemap. The key is the one
+   `swapi-app/src/main/webui/public/*.txt`, whose body is the key itself.
+   Example from 2.10.0 (the six films):
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST https://api.indexnow.org/indexnow \
+     -H 'Content-Type: application/json; charset=utf-8' \
+     -d '{"host":"swapi.build","key":"a5b77f3621994d6d59f6e5f3d85055a5","keyLocation":"https://swapi.build/a5b77f3621994d6d59f6e5f3d85055a5.txt","urlList":["https://swapi.build/resource/films/1","https://swapi.build/resource/films/2","https://swapi.build/resource/films/3","https://swapi.build/resource/films/4","https://swapi.build/resource/films/5","https://swapi.build/resource/films/6","https://swapi.build/sitemap.xml"]}'
+   ```
+
+   Expect `200` or `202`.
+2. Search Console (maintainer): resubmit `sitemap.xml` and inspect one of the
+   new URLs as the baseline for the coverage reading that gates the next batch.
+
 ## Troubleshooting
 
 | Symptom | Cause / fix |

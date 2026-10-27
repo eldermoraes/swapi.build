@@ -99,8 +99,11 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   one of each; every `<loc>` of `sitemap.xml` answers `200 text/html` with its
   `rel="canonical"` equal to the `loc`; the highest id of each type
   (`/resource/people/83`, `films/6`, `planets/1`, `species/1`, `starships/2`,
-  `vehicles/4`) and `/docs/` answer `200`; `HEAD /` answers `200`;
+  `vehicles/4`) answer `200`; `HEAD /` answers `200`;
   `/index.html` answers `301` with `Location` exactly `/` (and keeps the query);
+  from 2.10.0, `/docs/` answers `301` with `Location` exactly `/docs`, and
+  `/resource/films/1/?probe=<pid>` answers `301` to `/resource/films/1?probe=<pid>`
+  (a trailing slash on a page goes to the bare address, query kept);
   `/` carries `Cache-Control: public, max-age=0, must-revalidate, s-maxage=300`.
   Any `FAIL` here after a deploy is an immediate rollback (see
   [5. Rollback](#5-rollback)).
@@ -117,6 +120,24 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   is Vert.x's default, `<html><body><h1>Resource not found</h1></body></html>`,
   so the probe does not check for "no HTML": it checks that none of the shell
   marks is there (`id="app"`, `id="main-content"`, `swapi:status`, `<title>`).
+- **Record addresses (2.10.0+)**: indexing is a rule per type in
+  `swapi-app/src/main/resources/seo/site.json` (`indexable`), released one type
+  per version; films is the first batch. `/resource/films/1` to `/6` answer
+  `200 text/html` with `content="index,follow"` and a canonical equal to their
+  own address, and `/resource/films/1` has the exact title
+  `A New Hope — Star Wars film JSON | swapi.build`: that title exists only in
+  `site.json`, so it proves the file reached the native binary (without it the
+  app does not start at all). Control: `/resource/people/1` stays
+  `noindex,follow` with the canonical `/resource/people`. `sitemap.xml` has
+  exactly 20 `<loc>` (the 14 pages and lists plus the six films), no record of
+  another type and no `<lastmod>` (a date that never changes is noise; a date
+  that always changes is a lie).
+- **Robots header (2.10.0+)**: `/api/people/1` and `/api/films/9` (a 404)
+  answer `X-Robots-Tag: noindex`: the page ranks, the JSON does not. `/`,
+  `/resource/films/1`, `/openapi.json`, `robots.txt`, `sitemap.xml` and
+  `llms.txt` have no `X-Robots-Tag` at all: on a page it would deindex the
+  site. `/api/people/1` keeps exactly
+  `Cache-Control: public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400`.
 - **Cold start**: the time of one request, informational only.
 - **MCP stateless**: a `tools/call` of `sw_get` with the 2026-07-28 headers and
   `_meta` returns `isError: false` and URLs on the host. `server/discover` and
@@ -155,8 +176,8 @@ its body.
 `scripts/verify-deploy.sh redirect www.swapi.build swapi.build`, run by the
 `deploy` job right after the `origin` probes and by hand after any change to
 the `Caddyfile`, sends `GET /`, `GET /api/people/1?format=json`,
-`GET /sitemap.xml`, `GET /llms.txt`, `GET /index.html`, `GET /not-a-real-page`
-and `POST /mcp` to `https://www.swapi.build` without
+`GET /sitemap.xml`, `GET /llms.txt`, `GET /index.html`, `GET /not-a-real-page`,
+`GET /resource/films/1` (2.10.0+) and `POST /mcp` to `https://www.swapi.build` without
 following redirects. Each must answer `308` with `Location` exactly
 `https://swapi.build` + the same path and query. Every line must read `PASS`.
 `scripts/verify-deploy-redirect.test.sh` (CI) runs the same mode against a
@@ -174,7 +195,8 @@ applied there and verified with the probe on 2026-10-26 (18:25 BRT).
 | 202 responses from the API | Legacy quirk retired 2026-08-01 — current builds return 200; a 202 means a very old binary is live. |
 | The OpenAPI version probe fails right after a deploy | The host still runs the previous version: `swapi-update` failed, or the probe ran against a tag other than the deployed one. Read the `deploy` job log; on the host, `readlink /opt/swapi/current`. |
 | A file from `public/` or an asset answers 404 from 2.9.1 on | Its path has no dot in the last segment and is not under `/assets/`, so `SeoRoutes` treats it as a page and, not knowing it, answers the not-found document. Every new file in `public/` needs an extension. |
-| A page of the site answers 404 from 2.9.1 on | The route is missing from `SeoMetadataRegistry` (the server) or from `routes.ts` (the client); both must list it until fatia D. Quinoa's SPA routing stays off: turning it back on brings back the soft 404s and the double count in `/stats`. |
+| A page of the site answers 404 from 2.9.1 on | The route is missing from `swapi-app/src/main/resources/seo/site.json`, the one source the server and the site both read (2.10.0+). Quinoa's SPA routing stays off: turning it back on brings back the soft 404s and the double count in `/stats`. |
+| The app does not start after a release that touched `seo/site.json` (2.10.0+) | The file is invalid (the log names the key and the reason, for example a placeholder that is not a field of its type) or it is missing from `quarkus.native.resources.includes` in `application.properties` (the log names `seo/site.json`). The app refuses to start rather than serve pages without metadata; `swapi-update` reports "is not answering" and keeps the previous version. |
 
 ## WebMCP verification (2.5.0+)
 
@@ -881,6 +903,19 @@ From 2.9.1: any `FAIL` on a known route (the sitemap pages, the highest ids,
 **immediate rollback**, not a fix forward, and `mcp-publisher publish` does not
 run. The `301` of `/index.html` carries `max-age=300`, so no browser keeps it
 more than five minutes after a rollback.
+
+From 2.10.0 the same rule also covers the record addresses (the title,
+`index,follow` and canonical of the films) and an `X-Robots-Tag` present on the
+HTML: any of those `FAIL`s is an immediate rollback. The only new `FAIL` that
+admits a fix forward is an `X-Robots-Tag` **missing** on `/api` (the JSON stays
+indexable as in 2.9.1, with no new harm).
+
+A rollback from 2.10.0 to 2.9.1 puts the films back to `noindex,follow` with the
+canonical of their list and the sitemap back to 14 URLs (search engines drop
+them on the next crawl; nothing is lost but the batch); `/docs/` answers `200`
+again (its `301` carries `max-age=300`). The stats snapshot is compatible both
+ways. The MCP Registry keeps 2.10.0 as `isLatest`, with no practical effect
+(its `server.json` changes only the `version`).
 
 A rollback from 2.9.1 to 2.9.0 brings back the soft 404s, the `index,follow`
 on dotted paths and the double count in `/stats`. The stats snapshot is

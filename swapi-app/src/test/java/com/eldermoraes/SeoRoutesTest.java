@@ -207,8 +207,8 @@ class SeoRoutesTest {
                         containsString("\"@type\":\"SoftwareApplication\",\"name\":\"swapi.build\"")));
     }
 
-    // The not-found title is a constant (NOT_FOUND_TITLE) that the parity test on
-    // the frontend (seo-parity.test.ts) compares with seo.ts.
+    // The not-found title comes from seo/site.json, which the client reads too
+    // (golden.json checks both sides).
     @Test
     void unknownDocumentRouteHasTheNotFoundTitle() {
         given().accept("text/html").when().get("/nao-existe").then()
