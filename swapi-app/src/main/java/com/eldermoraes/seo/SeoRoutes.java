@@ -68,6 +68,11 @@ public class SeoRoutes {
             default -> {
                 String page = withoutTrailingSlash(rawPath(rc));
                 if (isBackend(path)) {
+                    // /api keeps its own 404 policy (edge-cacheable, CacheControlFilter);
+                    // an unknown /mcp/... path is a framework 404 like a missing file.
+                    if (path.startsWith("/mcp/")) {
+                        noCacheOn404(rc);
+                    }
                     rc.next();
                 } else if (metadata.isKnownDocumentPath(page)) {
                     document(rc, page);

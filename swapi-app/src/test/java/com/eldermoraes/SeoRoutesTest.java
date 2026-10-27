@@ -428,6 +428,19 @@ class SeoRoutesTest {
                 "a 404 must never carry the year-long immutable policy of the assets");
     }
 
+    // Regression found in the prod-mode rehearsal of 2.9.1: /mcp/foo passed on as
+    // backend and its framework 404 left with no Cache-Control at all, against "every
+    // 404 of the app leaves with no-cache". The /api 404s keep their edge policy
+    // (CacheHeadersTest.notFoundIsCacheableAtTheEdge).
+    @Test
+    void mcpSubpathNotFoundIsNoCache() {
+        String path = "/mcp/foo";
+        io.restassured.response.Response response = given().accept("text/html").when().get(path);
+        Assertions.assertEquals(404, response.statusCode());
+        assertNotTheShell(path, response.body().asString());
+        Assertions.assertEquals(java.util.List.of("no-cache"), response.headers().getValues("Cache-Control"));
+    }
+
     @Test
     void knownRoutesStay200() {
         for (String path : new String[] {"/", "/docs", "/docs/", "/resource/people", "/resource/people/1",
