@@ -50,11 +50,57 @@ describe('SEO metadata', () => {
     expect(spokenTitle('Usage stats | swapi.build')).toBe('Usage stats');
   });
 
-  it('marks unknown document paths noindex and canonicalizes them to home', () => {
-    const meta = getSeoMetadata('/not-a-real-page?x=1#frag');
-    expect(meta.title).toBe('SWAPI alternative: free Star Wars API and MCP server | swapi.build');
-    expect(meta.canonicalPath).toBe('/');
-    expect(meta.robots).toBe('noindex,follow');
+  // 2.9.1: the server answers these with 404, so the client says the same thing.
+  it('gives unknown paths and invalid ids the not-found metadata, without a canonical', () => {
+    for (const path of [
+      '/not-a-real-page?x=1#frag',
+      '/docs/nope',
+      '/resource/people/01',
+      '/resource/droids/1',
+    ]) {
+      const meta = getSeoMetadata(path);
+      expect(meta.title).toBe('Page not found | swapi.build');
+      expect(meta.canonicalPath).toBeNull();
+      expect(meta.robots).toBe('noindex');
+    }
+  });
+
+  it('on a 404 sets title, description and robots only, and drops canonical and og:url', () => {
+    document.head.innerHTML = `
+      <title>old</title>
+      <meta name="description" content="old">
+      <link rel="canonical" href="${origin}/docs">
+      <meta property="og:url" content="${origin}/docs">
+    `;
+    const meta = applySeoMetadata('/nao-existe', origin);
+
+    expect(meta.title).toBe('Page not found | swapi.build');
+    expect(document.title).toBe('Page not found | swapi.build');
+    expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex');
+    expect(document.querySelector('meta[name="description"]')?.getAttribute('content')).toContain(
+      'does not exist',
+    );
+    expect(document.querySelector('link[rel="canonical"]')).toBeNull();
+    expect(document.querySelector('meta[property^="og:"]')).toBeNull();
+    expect(document.querySelector('meta[name^="twitter:"]')).toBeNull();
+
+    applySeoMetadata('/docs', origin);
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(
+      `${origin}/docs`,
+    );
+    expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe(
+      `${origin}/docs`,
+    );
+    expect(document.querySelector('meta[property="og:title"]')).not.toBeNull();
+  });
+
+  // A detail whose entity does not exist (the server marked it, or the API said
+  // 404) looks valid to the client: the caller says so.
+  it('applies the not-found metadata when the caller says the page is a 404', () => {
+    const meta = applySeoMetadata('/resource/people/9999', origin, { notFound: true });
+    expect(meta.title).toBe('Page not found | swapi.build');
+    expect(document.title).toBe('Page not found | swapi.build');
+    expect(document.querySelector('link[rel="canonical"]')).toBeNull();
   });
 
   it('applies document title, canonical, social cards, description and robots tags', () => {

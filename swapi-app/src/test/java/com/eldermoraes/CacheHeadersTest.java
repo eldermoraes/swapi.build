@@ -215,22 +215,66 @@ class CacheHeadersTest {
         }
     }
 
-    // Unknown paths are unique by definition (scanners), so caching them buys nothing
-    // and a catch-all regex is exactly the thing that could swallow /api or /_vercel.
-    // The filter is an explicit, anchored list: anything else stays untouched.
+    // A 404 page never goes to a shared cache (2.9.1): the path may start to exist in
+    // a release, and nothing in front of the origin is invalidated by a deploy. Exactly
+    // one value: no-cache.
     @Test
     void unknownPathDoesNotGetTheSpaHtmlPolicy() {
-        String cacheControl = given()
+        List<String> values = given()
                 .accept("text/html")
         .when()
                 .get("/does-not-exist")
         .then()
-                .statusCode(200)
-                .extract().header("Cache-Control");
+                .statusCode(404)
+                .extract().headers().getValues("Cache-Control");
 
-        Assertions.assertTrue(
-                cacheControl == null || !cacheControl.contains("s-maxage"),
-                "/does-not-exist must not be cached at the edge, but got: " + cacheControl);
+        Assertions.assertEquals(List.of("no-cache"), values, "/does-not-exist: " + values);
+    }
+
+    // These paths ARE matched by the spa filter (/resource/[^/]+...), which stamps the
+    // HTML policy before routing; the 404 must replace it, not add to it.
+    @Test
+    void notFoundEntityOverridesTheSpaHtmlPolicy() {
+        for (String path : List.of("/resource/people/9999", "/resource/droids")) {
+            List<String> values = given()
+                    .accept("text/html")
+            .when()
+                    .get(path)
+            .then()
+                    .statusCode(404)
+                    .extract().headers().getValues("Cache-Control");
+
+            Assertions.assertEquals(List.of("no-cache"), values, path + ": " + values);
+        }
+    }
+
+    // CORS echoes the Origin on robots.txt, sitemap.xml and llms.txt too, and they
+    // carry s-maxage=86400.
+    @Test
+    void seoFilesVaryByOrigin() {
+        for (String path : List.of("/robots.txt", "/sitemap.xml", "/llms.txt")) {
+            given()
+                    .header("Origin", "https://app.example")
+            .when()
+                    .get(path)
+            .then()
+                    .statusCode(200)
+                    .header("Vary", containsString("Origin"));
+        }
+    }
+
+    // The 301 keeps max-age=300: after a rollback no browser holds it for longer.
+    @Test
+    void indexHtmlRedirectHasTheSeoPolicy() {
+        given()
+                .redirects().follow(false)
+                .header("Origin", "https://app.example")
+        .when()
+                .get("/index.html")
+        .then()
+                .statusCode(301)
+                .header("Cache-Control", equalTo("public, max-age=300, s-maxage=86400"))
+                .header("Vary", containsString("Origin"));
     }
 
     // quarkus.http.filter runs before routing, so without the methods=GET,HEAD

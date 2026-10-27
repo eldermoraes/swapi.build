@@ -3,6 +3,7 @@ package com.eldermoraes.seo;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -40,6 +41,23 @@ class WebAnalyticsBeaconTest {
     void nonDocumentsDoNot(String path) {
         given().when().get(path).then()
                 .statusCode(200)
+                .body(not(containsString("cloudflareinsights")));
+    }
+
+    // The 404 page is a document (2.9.1): Web Analytics shows the visits to it.
+    @Test
+    void notFoundDocumentCarriesTheBeacon() {
+        given().accept("text/html").when().get("/not-a-real-page").then()
+                .statusCode(404)
+                .body(containsString("<script defer src=\"https://static.cloudflareinsights.com/beacon.min.js\" "
+                        + "data-cf-beacon='{\"token\": \"" + TOKEN + "\"}'></script>\n  </body>"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/index.html"})
+    void redirectsDoNot(String path) {
+        given().redirects().follow(false).when().get(path).then()
+                .statusCode(301)
                 .body(not(containsString("cloudflareinsights")));
     }
 }

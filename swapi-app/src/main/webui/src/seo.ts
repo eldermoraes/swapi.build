@@ -1,12 +1,17 @@
 import { getResourceMeta, RESOURCES } from './constants';
+import { CANONICAL_ID } from './routes';
 
 export interface SeoMetadata {
   path: string;
-  canonicalPath: string;
+  /** Null on the 404 page, which has no canonical. */
+  canonicalPath: string | null;
   title: string;
   description: string;
-  robots: 'index,follow' | 'noindex,follow';
+  robots: 'index,follow' | 'noindex,follow' | 'noindex';
 }
+
+/** A page that exists: it always has a canonical. */
+export type PageSeoMetadata = SeoMetadata & { canonicalPath: string };
 
 // Mirrored by hand in SeoMetadataRegistry.java until the single metadata file of
 // slice D; seo-parity.test.ts compares the two. Intent words first, the brand
@@ -17,8 +22,12 @@ const HOME_DESCRIPTION =
   'Free SWAPI alternative: Star Wars REST JSON API and remote MCP server with people, films, planets, species, starships and vehicles (Episodes I–VI). No API key.';
 const OG_IMAGE_PATH = '/og-image.png';
 const OG_IMAGE_ALT = 'swapi.build — Star Wars API and MCP server in a Holonet terminal style';
+// NOT_FOUND_TITLE and NOT_FOUND_DESCRIPTION in SeoMetadataRegistry.java.
+const NOT_FOUND_TITLE = `Page not found${BRAND_SUFFIX}`;
+const NOT_FOUND_DESCRIPTION =
+  'This page does not exist on swapi.build. Browse the Star Wars API, its docs or the MCP server instead.';
 
-export const PUBLIC_SEO_ROUTES: SeoMetadata[] = [
+export const PUBLIC_SEO_ROUTES: PageSeoMetadata[] = [
   route('/', HOME_TITLE, HOME_DESCRIPTION),
   route(
     '/docs',
@@ -77,23 +86,36 @@ export function getSeoMetadata(rawPath: string): SeoMetadata {
   const resourceDetail = resourceDetailMetadata(path);
   if (resourceDetail) return resourceDetail;
 
-  return {
-    path,
-    canonicalPath: '/',
-    title: HOME_TITLE,
-    description: HOME_DESCRIPTION,
-    robots: 'noindex,follow',
-  };
+  return notFoundMetadata(path);
 }
 
-export function applySeoMetadata(rawPath: string, origin: string): SeoMetadata {
-  const meta = getSeoMetadata(rawPath);
-  const canonical = absoluteUrl(origin, meta.canonicalPath);
-  const image = absoluteUrl(origin, OG_IMAGE_PATH);
+/**
+ * Rewrites the head for a navigation. `notFound` is for a path that looks like a
+ * page but is a 404 (the server marked it, or the API has no such id). On a 404
+ * only the title, the description and robots are written; the canonical and
+ * og:url are removed and no Open Graph or Twitter Card tag is written, as on the
+ * server. The next navigation to a page recreates what is missing.
+ */
+export function applySeoMetadata(
+  rawPath: string,
+  origin: string,
+  options: { notFound?: boolean } = {},
+): SeoMetadata {
+  const meta = options.notFound
+    ? notFoundMetadata(normalizePath(rawPath))
+    : getSeoMetadata(rawPath);
 
   document.title = meta.title;
   setMetaName('description', meta.description);
   setMetaName('robots', meta.robots);
+  if (meta.canonicalPath === null) {
+    document.querySelector('link[rel="canonical"]')?.remove();
+    document.querySelector('meta[property="og:url"]')?.remove();
+    return meta;
+  }
+
+  const canonical = absoluteUrl(origin, meta.canonicalPath);
+  const image = absoluteUrl(origin, OG_IMAGE_PATH);
   setCanonical(canonical);
 
   setMetaProperty('og:type', 'website');
@@ -125,15 +147,27 @@ function recordNoun(key: string): string {
   return key === 'people' || key === 'species' ? key : key.replace(/s$/, '');
 }
 
-function route(path: string, title: string, description: string): SeoMetadata {
+function route(path: string, title: string, description: string): PageSeoMetadata {
   return { path, canonicalPath: path, title, description, robots: 'index,follow' };
 }
 
+function notFoundMetadata(path: string): SeoMetadata {
+  return {
+    path,
+    canonicalPath: null,
+    title: NOT_FOUND_TITLE,
+    description: NOT_FOUND_DESCRIPTION,
+    robots: 'noindex',
+  };
+}
+
+/** Only one of the six types with a canonical id, like getRoute (routes.ts). */
 function resourceDetailMetadata(path: string): SeoMetadata | undefined {
   const parts = path.split('/').filter(Boolean);
   if (parts.length !== 3 || parts[0] !== 'resource') return undefined;
+  if (!RESOURCES.some((resource) => resource.key === parts[1])) return undefined;
+  if (!CANONICAL_ID.test(parts[2])) return undefined;
   const meta = getResourceMeta(parts[1]);
-  if (!RESOURCES.some((resource) => resource.key === meta.key)) return undefined;
   return {
     path,
     canonicalPath: `/resource/${meta.key}`,

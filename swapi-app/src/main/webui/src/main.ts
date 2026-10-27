@@ -9,10 +9,12 @@ import { renderMcp } from './pages/mcp';
 import { renderPrivacy } from './pages/privacy';
 import { renderTerms } from './pages/terms';
 import { renderStats } from './pages/stats';
+import { renderNotFound } from './pages/not-found';
 import { isServerPath } from './spa-links';
 import { cancelPending } from './api';
 import { applySeoMetadata, spokenTitle } from './seo';
 import { activeNavHref } from './nav';
+import { getRoute, takeServerStatus, type Page, type Route } from './routes';
 
 // No analytics or performance beacons in the frontend: the only measurement
 // script, the Cloudflare Web Analytics beacon, is injected by the server
@@ -36,30 +38,24 @@ function announce(message: string) {
   });
 }
 
-function getRoute(): { page: string; type?: string; id?: string } {
-  const path = window.location.pathname;
-  const parts = path.split('/').filter(Boolean);
-
-  if (parts.length === 0) return { page: 'home' };
-  if (parts[0] === 'docs' && parts[1] === 'webmcp') return { page: 'webmcp' };
-  if (parts[0] === 'docs' && parts[1] === 'mcp') return { page: 'mcp' };
-  if (parts[0] === 'docs') return { page: 'docs' };
-  if (parts[0] === 'about') return { page: 'about' };
-  if (parts[0] === 'privacy') return { page: 'privacy' };
-  if (parts[0] === 'terms') return { page: 'terms' };
-  if (parts[0] === 'stats' && parts.length === 1) return { page: 'stats' };
-  if (parts[0] === 'resource' && parts.length === 2)
-    return { page: 'resource-list', type: parts[1] };
-  if (parts[0] === 'resource' && parts.length === 3)
-    return { page: 'resource-detail', type: parts[1], id: parts[2] };
-  return { page: 'home' };
-}
-
-function updateActiveNav() {
-  const active = activeNavHref(getRoute().page);
+function updateActiveNav(page: Page) {
+  const active = activeNavHref(page);
   document.querySelectorAll('.nav-link').forEach((link) => {
     link.classList.toggle('active', active !== null && link.getAttribute('href') === active);
   });
+}
+
+// The first navigation reads the 404 marker the server put in the head; later
+// navigations decide on the client (the marker is removed when read).
+let firstNavigation = true;
+
+function resolveRoute(path: string): Route {
+  const route = getRoute(path);
+  if (firstNavigation) {
+    firstNavigation = false;
+    if (takeServerStatus(document) === 404) return { page: 'not-found' };
+  }
+  return route;
 }
 
 const container = document.getElementById('main-content')!;
@@ -70,7 +66,7 @@ const explorer = new ResourceExplorer(
     cancelPending();
     const generation = ++navigationGeneration;
     if (window.location.pathname !== path) history.pushState(null, '', path);
-    updateActiveNav();
+    updateActiveNav(getRoute(path).page);
     const title = applySeoMetadata(path, window.location.origin).title;
     requestAnimationFrame(() => {
       if (generation !== navigationGeneration) return;
@@ -91,11 +87,16 @@ async function navigate() {
   explorer.interrupt();
   const generation = ++navigationGeneration;
 
-  const route = getRoute();
   const path = window.location.pathname;
-  updateActiveNav();
+  // The route is resolved before the head is touched, and the head is written
+  // once: on a server 404 the client never shows "People #9999" with the list's
+  // canonical while it waits for a fetch that would fail.
+  const route = resolveRoute(path);
+  updateActiveNav(route.page);
 
-  const title = applySeoMetadata(path, window.location.origin).title;
+  const title = applySeoMetadata(path, window.location.origin, {
+    notFound: route.page === 'not-found',
+  }).title;
 
   switch (route.page) {
     case 'home':
@@ -138,6 +139,17 @@ async function navigate() {
         },
         { human: true },
       );
+      // An id that does not exist, reached by a client-side navigation: the
+      // not-found page and head, like the server's 404.
+      if (generation === navigationGeneration && !result.ok && result.error.code === 'NOT_FOUND') {
+        renderNotFound(container, path);
+        const notFoundTitle = applySeoMetadata(path, window.location.origin, {
+          notFound: true,
+        }).title;
+        container.focus({ preventScroll: true });
+        announce(spokenTitle(notFoundTitle));
+        return;
+      }
       if (generation === navigationGeneration && !result.ok) {
         heading.textContent = 'Resource unavailable';
         if (!container.querySelector('[role="alert"]')) {
@@ -150,8 +162,9 @@ async function navigate() {
       }
       return;
     }
-    default:
-      void renderHome(container);
+    case 'not-found':
+      renderNotFound(container, path);
+      break;
   }
 
   // An async render can finish after another navigation: do not steal the new page's focus/announcement

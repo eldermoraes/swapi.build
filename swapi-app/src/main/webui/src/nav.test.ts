@@ -34,4 +34,8 @@ describe('main navigation', () => {
     expect(activeNavHref('privacy')).toBeNull();
     expect(activeNavHref('resource-list')).toBeNull();
   });
+
+  it('leaves no item active on the not-found page', () => {
+    expect(activeNavHref('not-found')).toBeNull();
+  });
 });

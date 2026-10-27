@@ -160,6 +160,8 @@ class SeoRoutesTest {
                         not(containsString("All the Star Wars data you've ever wanted: People"))));
     }
 
+    // 2.9.1: an unknown page is a real 404 (it was 200 with the home page, a soft
+    // 404), noindex, with no canonical and no URL built from the request host.
     @Test
     void unknownDocumentRouteIsNoindex() {
         given()
@@ -169,12 +171,13 @@ class SeoRoutesTest {
         .when()
                 .get("/not-a-real-page")
         .then()
-                .statusCode(200)
+                .statusCode(404)
                 .contentType(containsString("text/html"))
                 .body(allOf(
-                        containsString("<meta name=\"robots\" content=\"noindex,follow\""),
-                        containsString("<link rel=\"canonical\" href=\"https://preview.example/\""),
-                        not(containsString("https://preview.example/not-a-real-page"))));
+                        containsString("<meta name=\"robots\" content=\"noindex\" />"),
+                        containsString("<meta name=\"swapi:status\" content=\"404\" />"),
+                        not(containsString("rel=\"canonical\"")),
+                        not(containsString("preview.example"))));
     }
 
     @Test
@@ -187,14 +190,13 @@ class SeoRoutesTest {
                         containsString("\"@type\":\"SoftwareApplication\",\"name\":\"swapi.build\"")));
     }
 
-    // The fallback and the detail titles are built by concatenation, so the
-    // parity test on the frontend (seo-parity.test.ts) pins the same literals.
+    // The not-found title is a constant (NOT_FOUND_TITLE) that the parity test on
+    // the frontend (seo-parity.test.ts) compares with seo.ts.
     @Test
-    void unknownDocumentRouteHasTheHomeTitle() {
+    void unknownDocumentRouteHasTheNotFoundTitle() {
         given().accept("text/html").when().get("/nao-existe").then()
-                .statusCode(200)
-                .body(containsString(
-                        "<title>SWAPI alternative: free Star Wars API and MCP server | swapi.build</title>"));
+                .statusCode(404)
+                .body(containsString("<title>Page not found | swapi.build</title>"));
     }
 
     // The singular noun is the modifier: "film records", not "films records".
@@ -261,12 +263,12 @@ class SeoRoutesTest {
                         containsString("<link rel=\"canonical\" href=\"https://preview.example/resource/people\"")));
     }
 
-    // Unknown paths are NOT matched by the SPA cache filter, so they keep the
-    // Accept-based behaviour untouched: SeoRoutes steps aside and nothing
-    // downstream claims the path.
+    // The Accept header decides nothing (2.9.1): an unknown path is the same 404
+    // document for every client. Before, the test answered 404 here only because
+    // the suite runs without Quinoa; production rerouted the path to the home page.
     @Test
-    void unknownPathWithoutAnHtmlAcceptIsUnchanged() {
-        given()
+    void unknownPathIs404WhateverTheAccept() {
+        String json = given()
                 .accept("application/json")
                 .header("X-Forwarded-Proto", "https")
                 .header("X-Forwarded-Host", "preview.example")
@@ -274,16 +276,27 @@ class SeoRoutesTest {
                 .get("/not-a-real-page")
         .then()
                 .statusCode(404)
-                .body(not(containsString("rel=\"canonical\"")));
+                .contentType(containsString("text/html"))
+                .body(not(containsString("rel=\"canonical\"")))
+                .extract().body().asString();
+        String html = given()
+                .accept("text/html")
+                .header("X-Forwarded-Proto", "https")
+                .header("X-Forwarded-Host", "preview.example")
+        .when()
+                .get("/not-a-real-page")
+        .then()
+                .statusCode(404)
+                .extract().body().asString();
+
+        Assertions.assertEquals(html, json, "the 404 document must not depend on the Accept header");
     }
 
-    // The id segment of a detail route is reflected into the title and the description.
-    // Now that the HTML is stored at the edge, a reflection regression would be a CACHED
-    // XSS — poisoned once, then served to everyone for the whole deployment. Two layers
-    // keep the id inert today, and this pins the outer one: rc.normalizedPath() does NOT
-    // percent-decode, so the id reaches the SEO block still encoded. If anyone ever
-    // decodes it, seoBlock's html() escaping becomes the only guard and this test is what
-    // notices — the literal tag must never appear in the body.
+    // The id segment of a detail route is reflected into the title and the description
+    // of the cacheable HTML, so a reflection regression would be a CACHED XSS. Since
+    // 2.9.1 only a canonical id of an entity that exists reaches the title
+    // (KnownEntities): this id is not canonical, so it is a 404, and the 404 document
+    // reflects nothing of the path, encoded or not.
     @Test
     void resourceDetailIdIsReflectedInertlyIntoTheCachedHtml() {
         String body = given()
@@ -292,16 +305,150 @@ class SeoRoutesTest {
         .when()
                 .get("/resource/people/%3Cscript%3Ealert(1)%3C%2Fscript%3E")
         .then()
-                .statusCode(200)
+                .statusCode(404)
                 .contentType(containsString("text/html"))
                 .extract().body().asString();
 
         Assertions.assertFalse(body.contains("<script>alert(1)</script>"),
-                "the id must never reach the cached HTML as a live tag");
-        Assertions.assertTrue(
-                body.contains("<title>People #%3Cscript%3Ealert(1)%3C%2Fscript%3E | swapi.build</title>"),
-                "the id must be reflected percent-encoded (inert), but the title was: "
-                        + body.substring(body.indexOf("<title>"), body.indexOf("</title>") + 8));
+                "the id must never reach the HTML as a live tag");
+        Assertions.assertFalse(body.contains("%3Cscript"),
+                "the 404 document must not reflect the path at all");
+    }
+
+    // --- 404 and variants (2.9.1) --------------------------------------------
+
+    // The marks of the SPA shell: a framework 404 must carry none of them (the
+    // Vert.x default 404 is itself a tiny HTML page, so "no <html" would be wrong).
+    private static void assertNotTheShell(String path, String body) {
+        for (String mark : new String[] {"id=\"app\"", "id=\"main-content\"", "swapi:status", "<title>"}) {
+            Assertions.assertFalse(body.contains(mark), path + " must not answer the SPA shell (" + mark + ")");
+        }
+    }
+
+    private static void assertNotFoundDocument(String path) {
+        String body = given()
+                .accept("text/html")
+                .urlEncodingEnabled(false)
+        .when()
+                .get(path)
+        .then()
+                .statusCode(404)
+                .contentType(containsString("text/html"))
+                .extract().body().asString();
+        Assertions.assertTrue(body.contains("<meta name=\"robots\" content=\"noindex\" />"), path + ": " + body);
+        Assertions.assertTrue(body.contains("<meta name=\"swapi:status\" content=\"404\" />"), path);
+        Assertions.assertTrue(body.contains("<title>Page not found | swapi.build</title>"), path);
+        Assertions.assertFalse(body.contains("rel=\"canonical\""), path);
+        Assertions.assertFalse(body.contains("og:"), path);
+        Assertions.assertFalse(body.contains("twitter:"), path);
+        Assertions.assertFalse(body.contains("application/ld+json"), path);
+    }
+
+    // %31 is "1" percent-encoded: Vert.x's normalizedPath() decodes it, the browser's
+    // location.pathname does not. Page paths are read raw, so server and client
+    // agree that these are not pages.
+    @Test
+    void nonexistentEntityIs404Noindex() {
+        for (String path : new String[] {"/resource/people/9999", "/resource/people/17", "/resource/starships/1",
+                "/resource/people/01", "/resource/people/%31", "/resource/peop%6Ce/1"}) {
+            assertNotFoundDocument(path);
+        }
+    }
+
+    @Test
+    void trailingSlashStays200() {
+        for (String path : new String[] {"/resource/people/", "/resource/people/1/"}) {
+            given().accept("text/html").when().get(path).then()
+                    .statusCode(200)
+                    .body(containsString("<link rel=\"canonical\""));
+        }
+    }
+
+    @Test
+    void unknownResourceTypeIs404() {
+        for (String path : new String[] {"/resource/droids", "/resource/droids/1", "/resource/foo.json",
+                "/resource/people/1/x"}) {
+            assertNotFoundDocument(path);
+        }
+    }
+
+    @Test
+    void wellKnownIsFrameworkNotFound() {
+        String path = "/.well-known/oauth-protected-resource";
+        String body = given().when().get(path).then().statusCode(404).extract().body().asString();
+        assertNotTheShell(path, body);
+    }
+
+    @Test
+    void subpathsOfKnownPagesAre404() {
+        for (String path : new String[] {"/docs/nope", "/about/x", "/stats/x", "/openapi.json/x", "/doc%73"}) {
+            assertNotFoundDocument(path);
+        }
+    }
+
+    // /apix used to pass through as backend (startsWith("/api")).
+    @Test
+    void apiLookalikeIs404Document() {
+        assertNotFoundDocument("/apix");
+    }
+
+    @Test
+    void indexHtmlRedirectsHome() {
+        given().redirects().follow(false).when().get("/index.html").then()
+                .statusCode(301)
+                .header("Location", "/");
+        given().redirects().follow(false).when().get("/index.html?x=1").then()
+                .statusCode(301)
+                .header("Location", "/?x=1");
+        given().redirects().follow(false).when().head("/index.html").then()
+                .statusCode(301)
+                .header("Location", "/");
+    }
+
+    // Guard: in the suite this is a 404 already (no Quinoa); in production the
+    // config (QuinoaConfigTest) is what keeps it from being rerouted to the home.
+    @Test
+    void dottedUnknownPathIsNotTheShell() {
+        for (String path : new String[] {"/foo.json", "/.well-known/mcp.json"}) {
+            String body = given().accept("text/html").when().get(path).then()
+                    .statusCode(404)
+                    .extract().body().asString();
+            Assertions.assertFalse(body.contains("index,follow"), path);
+            assertNotTheShell(path, body);
+        }
+    }
+
+    @Test
+    void missingAssetIsNotTheShell() {
+        String path = "/assets/does-not-exist.js";
+        io.restassured.response.Response response = given().when().get(path);
+        Assertions.assertEquals(404, response.statusCode());
+        assertNotTheShell(path, response.body().asString());
+        Assertions.assertEquals(java.util.List.of("no-cache"), response.headers().getValues("Cache-Control"),
+                "a 404 must never carry the year-long immutable policy of the assets");
+    }
+
+    @Test
+    void knownRoutesStay200() {
+        for (String path : new String[] {"/", "/docs", "/docs/", "/resource/people", "/resource/people/1",
+                "/resource/films/6", "/resource/people/83", "/resource/starships/2", "/resource/vehicles/4"}) {
+            given().accept("text/html").when().get(path).then()
+                    .statusCode(200)
+                    .body(containsString("<link rel=\"canonical\""));
+        }
+    }
+
+    @Test
+    void notFoundCarriesNoHostDerivedUrl() {
+        given()
+                .accept("text/html")
+                .header("X-Forwarded-Proto", "https")
+                .header("X-Forwarded-Host", "evil.example")
+        .when()
+                .get("/not-a-real-page")
+        .then()
+                .statusCode(404)
+                .body(not(containsString("evil.example")));
     }
 
     // The other layer: a path carrying the raw characters is rejected by the HTTP layer
