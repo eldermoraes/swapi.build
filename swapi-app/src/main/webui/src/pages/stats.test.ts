@@ -32,13 +32,15 @@ describe('the pages group hint', () => {
   });
 });
 
-// 2.12.1: the group counts every JSON-RPC call on /mcp, the lists a client
-// reads when it connects included; a subscriptions/listen is answered at once
-// and no longer sits in the latency as a call of minutes.
+// 2.12.1: the group counts HTTP requests to /mcp (RouteCountingFilter), not
+// JSON-RPC calls: one per POST, so a batch counts once; the lists a client
+// reads when it connects are POSTs too; GET (405) and DELETE (204) count;
+// OPTIONS and HEAD do not. A subscriptions/listen is answered at once and no
+// longer sits in the latency as a call of minutes.
 describe('the MCP group hint', () => {
-  it('says every JSON-RPC call counts, the connection lists included', () => {
+  it('says it counts HTTP requests: one per POST, a batch once, GET and DELETE too', () => {
     expect(GROUPS.find((g) => g.id === 'mcp')!.hint).toBe(
-      '/mcp: every JSON-RPC call, including the lists a client reads when it connects',
+      '/mcp: every request, one per POST (a batch counts once, the lists a client reads when it connects included), plus GET and DELETE',
     );
   });
 });
