@@ -126,6 +126,21 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   `Mcp-Method` header. `quarkus.http.limits.max-body-size=256K` bounds the
   double decode on the event loop. `McpListenLimitTest` guards it; never let a
   POST to `/mcp` open a stream that waits for notifications.
+- **MCP surface (2.13.0+).** Four tools; `sw_get` takes an optional `expand`
+  (relation names or `*` alone, at most 8, one level deep) and `sw_list` /
+  `sw_search` an optional `fields` (at most 24, `url` always kept), both in
+  `RecordExpansion`, over the JSON-B text. Without them the text is the 2.12.1
+  one byte for byte: `McpGoldenTest` (goldens in `golden-2.12.1/`) guards it;
+  never change the text of a call without the new arguments. Resources
+  (`SwapiResources`): six indexes `swapi://<type>` and one concrete resource
+  per record `swapi://<type>/<id>`, registered at startup so `resources/list`
+  (one page, `quarkus.mcp.server.resources.page-size=300`) feeds the `@`
+  picker of Claude Code, plus six templates that take only the canonical id.
+  One prompt, `character_profile` (`SwapiPrompts`). Every tool and resource
+  read sets and restores `RequestBaseUrl` through `SwapiTools.withBaseUrl`.
+  Structured output (`outputSchema` / `structuredContent`) is postponed on
+  purpose: after a rollback, a TypeScript SDK session that kept the schema
+  rejects every answer until it reconnects.
 - **Public base URL is discovered per request** (REST via `UriInfo`, MCP via
   `HttpServerRequest`, honoring `X-Forwarded-*`). `swapi.public-base-url` is an
   optional override only — never reintroduce a hardcoded domain default. When

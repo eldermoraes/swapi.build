@@ -45,8 +45,10 @@ import java.util.Optional;
  *   2025-11-25): the extension appends one subscriber per request to a list
  *   per URI that is never cleaned when the session dies, and auto-init gives
  *   every request a new session. Answered without keeping anything, with or
- *   without Mcp-Session-Id, but only when the extension would have handled
- *   them (supported protocol version, Accept); otherwise its 400 stands. The stateless era
+ *   without Mcp-Session-Id: {} for a registered resource (2.13.0+, the records
+ *   of SwapiResources), -32002 for any other URI, as the extension answers.
+ *   Only when the extension would have handled them (supported protocol
+ *   version, Accept); otherwise its 400 stands. The stateless era
  *   goes on to the extension, which already refuses them with -32601 without
  *   keeping anything.
  *

@@ -705,12 +705,22 @@ else
     fail "MCP session listen (no Mcp-Method)" "curl ends within 5 s, -32601 with id 42" \
       "curl exit $rc, $(printf '%s' "$resp" | head -c 160)"
   fi
-  resp=$(mcp_session '{"jsonrpc":"2.0","id":43,"method":"resources/subscribe","params":{"uri":"swapi://people/1"}}' 5); rc=$?
+  # 2.13.0: swapi://people/1 is a resource, so the unknown URI is a record
+  # that does not exist; the known one is accepted, still without state.
+  resp=$(mcp_session '{"jsonrpc":"2.0","id":43,"method":"resources/subscribe","params":{"uri":"swapi://people/9999"}}' 5); rc=$?
   if [ "$rc" = "0" ] && printf '%s' "$resp" | grep -qF '"code":-32002' \
-     && printf '%s' "$resp" | grep -qF 'swapi://people/1'; then
-    pass "MCP session resources/subscribe -> -32002, nothing recorded"
+     && printf '%s' "$resp" | grep -qF 'swapi://people/9999'; then
+    pass "MCP session resources/subscribe unknown URI -> -32002, nothing recorded"
   else
-    fail "MCP session resources/subscribe" "-32002 citing swapi://people/1 within 5 s" \
+    fail "MCP session resources/subscribe unknown URI" "-32002 citing swapi://people/9999 within 5 s" \
+      "curl exit $rc, $(printf '%s' "$resp" | head -c 160)"
+  fi
+  resp=$(mcp_session '{"jsonrpc":"2.0","id":44,"method":"resources/subscribe","params":{"uri":"swapi://people/1"}}' 5); rc=$?
+  if [ "$rc" = "0" ] && printf '%s' "$resp" | grep -qF '"result":{}' \
+     && printf '%s' "$resp" | grep -qF '"id":44'; then
+    pass "MCP session resources/subscribe known URI -> {} at once"
+  else
+    fail "MCP session resources/subscribe known URI" '"result":{} with id 44 within 5 s' \
       "curl exit $rc, $(printf '%s' "$resp" | head -c 160)"
   fi
 fi
@@ -719,18 +729,18 @@ code=$(head -c 300000 /dev/zero | tr '\0' 'y' | curl -s --max-time 20 -o /dev/nu
   -X POST "$BASE/mcp" -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' --data-binary @-)
 [ "$code" = "413" ] && pass "MCP body over 256K -> 413" || fail "MCP body over 256K" "413" "$code"
-# The state of 2.12.1 (no resources yet); 2.13.0 turns these two around.
+# 2.13.0 turned these two around (2.12.1: an empty list and -32602).
 resp=$(mcp_stateless resources/list '')
-if printf '%s' "$resp" | grep -qF '"resources":[]' && printf '%s' "$resp" | grep -qF '"jsonrpc":"2.0"'; then
-  pass "MCP resources/list: an empty list"
+if printf '%s' "$resp" | grep -qF '"uri":"swapi://people/1"' && printf '%s' "$resp" | grep -qF '"uri":"swapi://vehicles"'; then
+  pass "MCP resources/list: the records and the indexes"
 else
-  fail "MCP resources/list" '"resources":[] in a JSON-RPC answer' "$(printf '%s' "$resp" | head -c 160)"
+  fail "MCP resources/list" 'swapi://people/1 and swapi://vehicles' "$(printf '%s' "$resp" | head -c 160)"
 fi
 resp=$(mcp_stateless resources/read '"uri":"swapi://films"' 'swapi://films')
-if printf '%s' "$resp" | grep -qF '"code":-32602' && printf '%s' "$resp" | grep -qF 'swapi://films'; then
-  pass "MCP resources/read swapi://films -> -32602 (not a resource yet)"
+if printf '%s' "$resp" | grep -qF 'A New Hope' && printf '%s' "$resp" | grep -qF '"uri":"swapi://films"'; then
+  pass "MCP resources/read swapi://films: the index"
 else
-  fail "MCP resources/read swapi://films" '"code":-32602 citing swapi://films' "$(printf '%s' "$resp" | head -c 160)"
+  fail "MCP resources/read swapi://films" 'A New Hope in the swapi://films contents' "$(printf '%s' "$resp" | head -c 160)"
 fi
 # Extension 2.0.3 (PR #1037): the serverInfo of server/discover is in _meta.
 resp=$(mcp_stateless server/discover '')
@@ -739,6 +749,83 @@ if printf '%s' "$resp" | grep -qF 'io.modelcontextprotocol/serverInfo' && printf
 else
   fail "MCP server/discover serverInfo" 'io.modelcontextprotocol/serverInfo with swapi.build' \
     "$(printf '%s' "$resp" | head -c 160)"
+fi
+
+# --- MCP 2.13.0: expand, fields, resources and the prompt -----------------------
+# 2.13.0: resources and prompts are capabilities too.
+if printf '%s' "$resp" | grep -qF '"resources":' && printf '%s' "$resp" | grep -qF '"prompts":'; then
+  pass "MCP server/discover: resources and prompts capabilities"
+else
+  fail "MCP server/discover capabilities" '"resources" and "prompts"' "$(printf '%s' "$resp" | head -c 160)"
+fi
+# The new arguments are optional: the four required lists stay as in 2.12.1.
+resp=$(mcp_stateless tools/list '')
+n_required_resource=$(printf '%s' "$resp" | grep -oF '"required":["resource"]' | wc -l | tr -d ' ')
+if printf '%s' "$resp" | grep -qF '"expand"' && printf '%s' "$resp" | grep -qF '"fields"' \
+   && printf '%s' "$resp" | grep -qF 'anthropic/maxResultSizeChars' \
+   && printf '%s' "$resp" | grep -qF '"required":["resource","id"]' \
+   && printf '%s' "$resp" | grep -qF '"required":["resource","query"]' \
+   && [ "$n_required_resource" = "2" ]; then
+  pass "MCP tools/list: expand, fields, maxResultSizeChars; required unchanged"
+else
+  fail "MCP tools/list 2.13.0" 'expand, fields, anthropic/maxResultSizeChars and the 2.12.1 required lists' \
+    "required [resource] x$n_required_resource, $(printf '%s' "$resp" | head -c 160)"
+fi
+sw_get() {
+  mcp_stateless tools/call '"name":"sw_get","arguments":{"resource":"PEOPLE","id":1'"${1:+,$1}"'}' sw_get
+}
+resp=$(sw_get '"expand":["homeworld"]')
+if printf '%s' "$resp" | grep -qF 'Luke Skywalker' && printf '%s' "$resp" | grep -qF 'Tatooine' \
+   && printf '%s' "$resp" | grep -qF 'expanded'; then
+  pass "MCP sw_get expand [homeworld]: Tatooine in the same call"
+else
+  fail "MCP sw_get expand" 'Luke Skywalker, Tatooine and expanded' "$(printf '%s' "$resp" | head -c 160)"
+fi
+resp=$(sw_get '')
+if printf '%s' "$resp" | grep -qF 'Luke Skywalker' && ! printf '%s' "$resp" | grep -qF 'expanded'; then
+  pass "MCP sw_get without expand: the 2.12.1 record"
+else
+  fail "MCP sw_get without expand" 'Luke Skywalker and no expanded' "$(printf '%s' "$resp" | head -c 160)"
+fi
+resp=$(sw_get '"expand":["nope"]')
+if printf '%s' "$resp" | grep -qF '"isError":true' && printf '%s' "$resp" | grep -qF 'homeworld'; then
+  pass "MCP sw_get expand [nope]: tool error listing the valid names"
+else
+  fail "MCP sw_get expand [nope]" '"isError":true listing homeworld' "$(printf '%s' "$resp" | head -c 160)"
+fi
+resp=$(mcp_stateless tools/call '"name":"sw_list","arguments":{"resource":"PEOPLE","fields":["name"]}' sw_list)
+size=$(printf '%s' "$resp" | wc -c | tr -d ' ')
+if [ "$size" -lt 10000 ] && printf '%s' "$resp" | grep -qF 'Luke Skywalker' \
+   && ! printf '%s' "$resp" | grep -qF 'hair_color'; then
+  pass "MCP sw_list PEOPLE fields [name]: $size bytes"
+else
+  fail "MCP sw_list fields" 'under 10000 bytes, Luke Skywalker, no hair_color' "$size bytes, $(printf '%s' "$resp" | head -c 120)"
+fi
+resp=$(mcp_stateless resources/templates/list '')
+n=$(printf '%s' "$resp" | grep -oF '{id}' | wc -l | tr -d ' ')
+[ "$n" = "6" ] && pass "MCP resources/templates/list: six {id} templates" \
+  || fail "MCP resources/templates/list" "6 {id}" "$n, $(printf '%s' "$resp" | head -c 120)"
+# The -32602 pair: the same request shape, a record that exists and one that does not.
+resp=$(mcp_stateless resources/read '"uri":"swapi://people/1"' 'swapi://people/1')
+if printf '%s' "$resp" | grep -qF 'Luke Skywalker' && printf '%s' "$resp" | grep -qF "$BASE/api/planets/1"; then
+  pass "MCP resources/read swapi://people/1: the record, URLs on the host"
+else
+  fail "MCP resources/read swapi://people/1" "Luke Skywalker and $BASE/api/planets/1" "$(printf '%s' "$resp" | head -c 160)"
+fi
+resp=$(mcp_stateless resources/read '"uri":"swapi://people/9999"' 'swapi://people/9999')
+if printf '%s' "$resp" | grep -qF '"code":-32602' && ! printf '%s' "$resp" | grep -qF 'Luke Skywalker'; then
+  pass "MCP resources/read swapi://people/9999 -> -32602"
+else
+  fail "MCP resources/read swapi://people/9999" '"code":-32602 and no record' "$(printf '%s' "$resp" | head -c 160)"
+fi
+resp=$(mcp_stateless prompts/list '')
+printf '%s' "$resp" | grep -qF '"name":"character_profile"' && pass "MCP prompts/list: character_profile" \
+  || fail "MCP prompts/list" 'character_profile' "$(printf '%s' "$resp" | head -c 160)"
+resp=$(mcp_stateless prompts/get '"name":"character_profile","arguments":{"name":"Darth Vader"}' character_profile)
+if printf '%s' "$resp" | grep -qF 'sw_search' && printf '%s' "$resp" | grep -qF 'Darth Vader'; then
+  pass "MCP prompts/get character_profile Darth Vader"
+else
+  fail "MCP prompts/get character_profile" 'sw_search and Darth Vader' "$(printf '%s' "$resp" | head -c 160)"
 fi
 
 # --- CORS / cache poisoning via Origin --------------------------------------
@@ -798,6 +885,24 @@ for p in /resource/films/1 /resource/people/1; do
   r_clean=$("${CURL[@]}" "$BASE$p?poison=$$" | grep -c evil.example)
   [ "$r_poison" = "0" ] && [ "$r_clean" = "0" ] && pass "poisoning $p X-Forwarded-Host: 0 occurrences" \
     || fail "poisoning $p X-Forwarded-Host" "0 and 0" "$r_poison and $r_clean (see runbook)"
+done
+# 2.13.0: MCP, on a tool call and on a resource read; in the same answer, the
+# record with the URLs of $BASE and no trace of the spoofed host.
+for probe in "tools/call|sw_get|\"name\":\"sw_get\",\"arguments\":{\"resource\":\"PEOPLE\",\"id\":1}" \
+             "resources/read|swapi://people/1|\"uri\":\"swapi://people/1\""; do
+  method=${probe%%|*}; rest=${probe#*|}; name=${rest%%|*}; params=${rest#*|}
+  resp=$(curl -s --max-time 90 -X POST "$BASE/mcp" \
+    -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+    -H 'X-Forwarded-Host: evil.example' \
+    -H "Mcp-Method: $method" -H "Mcp-Name: $name" -H 'MCP-Protocol-Version: 2026-07-28' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"'"$method"'","params":{'"$params,$STATELESS_META"'}}')
+  if printf '%s' "$resp" | grep -qF 'Luke Skywalker' && printf '%s' "$resp" | grep -qF "$BASE/api/planets/1" \
+     && ! printf '%s' "$resp" | grep -qF 'evil.example'; then
+    pass "poisoning MCP $method X-Forwarded-Host: the record on $BASE, 0 occurrences"
+  else
+    fail "poisoning MCP $method X-Forwarded-Host" "Luke Skywalker, $BASE/api/planets/1, no evil.example" \
+      "$(printf '%s' "$resp" | head -c 160) (see runbook)"
+  fi
 done
 
 # --- What Caddy itself must add or remove -----------------------------------------

@@ -198,13 +198,27 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   `-32601` citing `subscriptions/listen` (up to 2.12.0 it stayed open with no
   limit); a session listen with the method only in the body (no `Mcp-Method`)
   ends the same way (the body `method` wins over the header; neither opens a
-  stream); a `resources/subscribe` with `Mcp-Session-Id` answers `-32002`
-  without recording a subscriber; a stateless `resources/subscribe` answers
-  `-32601`; a body over 256K is `413`; `resources/list`
-  is `"resources":[]` and `resources/read swapi://films` is `-32602` citing the
-  URI (the state before 2.13.0, which turns these two around);
-  `server/discover` carries `io.modelcontextprotocol/serverInfo` with
-  `swapi.build` in `_meta` (extension 2.0.3).
+  stream); a `resources/subscribe` with `Mcp-Session-Id` answers `-32002` for
+  `swapi://people/9999` and `{}` for `swapi://people/1` (2.13.0+), neither
+  recording a subscriber; a stateless `resources/subscribe` answers
+  `-32601`; a body over 256K is `413`; `server/discover` carries
+  `io.modelcontextprotocol/serverInfo` with `swapi.build` in `_meta`
+  (extension 2.0.3).
+- **MCP surface (2.13.0+)**: `server/discover` advertises `resources` and
+  `prompts`; `tools/list` has `expand`, `fields` and
+  `anthropic/maxResultSizeChars`, with the `required` lists of 2.12.1;
+  `sw_get PEOPLE 1` with `expand ["homeworld"]` has Tatooine and `expanded`,
+  without `expand` no `expanded`, with `expand ["nope"]` a tool error listing
+  `homeworld`; `sw_list PEOPLE` with `fields ["name"]` is under 10000 bytes,
+  without `hair_color`; `resources/list` has `swapi://people/1` and
+  `swapi://vehicles` (2.12.1: empty); `resources/templates/list` has six
+  `{id}`; `resources/read swapi://films` has A New Hope (2.12.1: `-32602`);
+  `resources/read swapi://people/1` has Luke Skywalker and `$BASE/api/planets/1`
+  while `swapi://people/9999` is `-32602` (the pair, same request shape);
+  `prompts/list` has `character_profile` and `prompts/get` with `Darth Vader`
+  names `sw_search`. Poisoning: `tools/call sw_get` and
+  `resources/read swapi://people/1` with `X-Forwarded-Host: evil.example` carry
+  the record on `$BASE` and no `evil.example` (only behind Caddy).
 - **CORS and `Vary: Origin`**: CORS echoes the request `Origin`, so cacheable
   responses (`/api/*`, the SPA HTML and, from 2.9.1, the SEO files `robots.txt`,
   `sitemap.xml` and `llms.txt`) must carry `Vary: Origin`, and a

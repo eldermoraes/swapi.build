@@ -16,6 +16,57 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-10-28
+
+Without the new arguments, every tool answer is the 2.12.1 text byte for byte
+(`McpGoldenTest`, goldens recorded on 2.12.1).
+
+### Added
+
+- `sw_get` takes an optional `expand`: relation names (`["homeworld",
+  "species"]`) or `["*"]` alone. The related records come in the same call, as
+  `"expanded":{...}` appended to the unchanged record, one level deep, in the
+  order of the relations; a single relation (homeworld) is an object, the
+  others arrays as long as their URLs, and a URL that points to no record is
+  `null` in its position. At most 8 names of up to 40 characters; `[]` is the
+  same as absent, duplicates count once; an unknown name, or `*` mixed with
+  names, is a tool error that lists the valid names.
+- `sw_list` and `sw_search` take an optional `fields`: each entity keeps only
+  the named fields, in the record's key order, and always its `url`. At most
+  24 names; an unknown one is a tool error that lists the valid fields of the
+  type. `sw_list PEOPLE` with `fields ["name"]` is about 5 KB instead of 38 KB.
+- MCP resources: six indexes, `swapi://people` ... `swapi://vehicles` (id,
+  name, URI and URL of every record), and one resource per record,
+  `swapi://people/1` and so on (260), whose text is the `sw_get` text. They
+  come in `resources/list` (one page), which is what the `@` picker of Claude
+  Code shows. Six templates, `swapi://<type>/{id}`, for clients that read by
+  template; only the canonical id (digits, no leading zero) is a record, any
+  other is not found (`-32602` stateless, `-32002` in a session).
+- MCP prompt `character_profile` (argument `name`, up to 80 characters after
+  trimming, no control characters): a user message that builds a short
+  profile with `sw_search` and `sw_get` with `expand`. In Claude Code:
+  `/mcp__swapi-build__character_profile`.
+- `_meta["anthropic/maxResultSizeChars"] = 100000` on `sw_list`, `sw_get` and
+  `sw_search`: Claude Code saves a tool result over about 50 000 characters to
+  a file, and `sw_get` with `expand ["*"]` on a film passes that.
+
+### Changed
+
+- The MCP instructions and the tool descriptions name `expand` and `fields`;
+  the `required` arguments of the four tools are unchanged.
+- The server capabilities advertise `resources` and `prompts`.
+  Subscribe and list-changed produce no traffic: the transport filter answers
+  the listen and the session subscribe (a subscribe to a known URI is `{}`,
+  still without state), and the list never changes.
+- `/docs/mcp`: the arguments, a Resources section, a Server prompt section and
+  a new example prompt. `llms.txt` names the new arguments, the resources and
+  the prompt. The `server.json` description lists the six types. `/docs/webmcp`
+  and the README say that `expand` and `fields` exist only on the remote
+  server; the browser tools are unchanged.
+- `/stats`: the MCP group also counts the `resources/list`,
+  `resources/templates/list` and `prompts/list` that clients read when they
+  connect (no new route nor group; the snapshot stays compatible).
+
 ## [2.12.1] - 2026-10-27
 
 ### Fixed
@@ -849,7 +900,7 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.12.1...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.13.0...HEAD
 [2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
@@ -898,3 +949,5 @@ snapshot version is not a release. -->
 [2.12.0]: https://github.com/eldermoraes/swapi.build/compare/v2.11.0...v2.12.0
 
 [2.12.1]: https://github.com/eldermoraes/swapi.build/compare/v2.12.0...v2.12.1
+
+[2.13.0]: https://github.com/eldermoraes/swapi.build/compare/v2.12.1...v2.13.0
