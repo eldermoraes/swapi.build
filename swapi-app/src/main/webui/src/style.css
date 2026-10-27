@@ -371,6 +371,22 @@
   line-height: 1.7;
 }
 
+/* Every panel arrives visible, so the guide reads without JavaScript; the
+   inline script of index.html puts `js` on <html> before the first paint, and
+   only then do the inactive panels and the per-panel titles (the tab already
+   names the panel) hide (2.11.0). */
+.js .tab-panel[data-inactive],
+.js .tab-panel-title {
+  display: none;
+}
+
+.sw-load-failure {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--sw-gold);
+  color: var(--sw-text-sub);
+}
+
 .tab-panel code {
   background: var(--sw-term-bg);
   border: 1px solid var(--sw-term-border);

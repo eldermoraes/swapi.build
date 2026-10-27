@@ -1,164 +1,17 @@
-import { fetchOpenApiSpec } from '../api';
 import { highlightJson } from '../json-highlight';
 import { escapeHtml } from '../utils';
-import type { OpenApiOperation, OpenApiSchemaObj, OpenApiSpec } from '../types';
 
-const SCHEMA_REF_PREFIX = '#/components/schemas/';
-
-// main.ts routes only `/docs` to this page (`/docs/mcp` is another) — used to
-// abort the paint when the user navigated away during the spec fetch.
-function isDocsRoute(): boolean {
-  const parts = window.location.pathname.split('/').filter(Boolean);
-  return parts.length === 1 && parts[0] === 'docs';
-}
-
-// Display order: Root first, the rest in the order declared in the spec
-function orderedTags(spec: OpenApiSpec): string[] {
-  const declared = (spec.tags ?? []).map((t) => t.name);
-  const seen = new Set<string>();
-  for (const item of Object.values(spec.paths)) {
-    for (const tag of item.get?.tags ?? []) seen.add(tag);
-  }
-  const ordered = declared.filter((t) => seen.has(t));
-  for (const t of seen) if (!ordered.includes(t)) ordered.push(t);
-  return ordered.includes('Root') ? ['Root', ...ordered.filter((t) => t !== 'Root')] : ordered;
-}
-
-function operationsByTag(spec: OpenApiSpec, tag: string): { path: string; op: OpenApiOperation }[] {
-  return Object.entries(spec.paths)
-    .filter(([, item]) => item.get?.tags?.includes(tag))
-    .map(([path, item]) => ({ path, op: item.get! }))
-    .sort((a, b) => a.path.localeCompare(b.path));
-}
-
-// The schema name comes from the spec itself: first $ref of the tag's responses
-// (directly on the by-id operations, inside `items` on the list ones).
-function schemaNameForTag(operations: { op: OpenApiOperation }[]): string | undefined {
-  for (const { op } of operations) {
-    for (const response of Object.values(op.responses)) {
-      for (const media of Object.values(response.content ?? {})) {
-        const ref = media.schema?.$ref ?? media.schema?.items?.$ref;
-        if (ref?.startsWith(SCHEMA_REF_PREFIX)) return ref.slice(SCHEMA_REF_PREFIX.length);
-      }
-    }
-  }
-  return undefined;
-}
-
-function endpointBlock(path: string, op: OpenApiOperation): string {
-  const search = op.parameters?.find((p) => p.in === 'query' && p.name === 'search');
-  const idParam = op.parameters?.find((p) => p.in === 'path' && p.name === 'id');
-  const displayPath = search ? `${path}?search=${search.example ?? 'value'}` : path;
-  const desc = [op.summary, op.description]
-    .filter(Boolean)
-    .map((s) => escapeHtml(s!))
-    .join(' — ');
-  const has404 = Boolean(op.responses['404']);
-
-  const inputs = [
-    idParam
-      ? `<input class="input-field try-input" name="id" type="number" min="1"
-           placeholder="id" value="${escapeHtml(String(idParam.example ?? '1'))}"
-           aria-label="${escapeHtml(idParam.description ?? 'id')}">`
-      : '',
-    search
-      ? `<input class="input-field try-input" name="search" type="text"
-           placeholder="search (optional)" value=""
-           aria-label="${escapeHtml(search.description ?? 'search')}">`
-      : '',
-  ].join('');
-
-  return `
-    <div class="endpoint-block sw-panel" data-path="${escapeHtml(path)}">
-      <div class="endpoint-method">
-        <span class="method-badge">GET</span>
-        <span class="endpoint-path">${escapeHtml(displayPath)}</span>
-      </div>
-      <div class="endpoint-desc">${desc}${has404 ? ' <span class="status-note">200 / 404</span>' : ''}</div>
-      <form class="try-form">
-        ${inputs}
-        <button type="submit" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
-      </form>
-      <div class="try-result" aria-live="polite" hidden></div>
-    </div>`;
-}
-
-function schemaTable(name: string, schema: OpenApiSchemaObj): string {
-  const rows = Object.entries(schema.properties ?? {})
-    .map(([field, prop]) => {
-      const type =
-        prop.type === 'array' ? `array of ${prop.items?.type ?? 'string'}` : (prop.type ?? '');
-      return `<tr>
-        <td class="schema-field">${escapeHtml(field)}</td>
-        <td class="schema-type">${escapeHtml(type)}</td>
-        <td>${escapeHtml(prop.description ?? '')}</td>
-      </tr>`;
-    })
-    .join('');
-  return `
-    <details class="schema-details">
-      <summary>${escapeHtml(name)} fields</summary>
-      <div class="sw-table-wrap">
-      <table class="schema-table sw-table">
-        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      </div>
-    </details>`;
-}
-
-export async function renderDocumentation(
-  container: HTMLElement,
-  isCurrent: () => boolean = () => true,
-): Promise<void> {
-  container.innerHTML = `<div class="docs sw-inner-prose"><h1 class="sw-page-title">Documentation</h1><p class="docs-intro">Loading API specification…</p></div>`;
-
-  let spec: OpenApiSpec;
-  try {
-    spec = await fetchOpenApiSpec();
-    if (!isCurrent()) return;
-  } catch {
-    if (!isCurrent()) return;
-    if (!isDocsRoute()) return; // navigated during the fetch: do not overwrite the new page
-    container.innerHTML = `
-      <div class="docs sw-inner-prose">
-        <h1 class="sw-page-title">Documentation</h1>
-        <p class="docs-intro">Could not load the API specification right now.
-        The raw spec is available at
-        <a href="/openapi.json" target="_blank" rel="noopener noreferrer">/openapi.json</a>.</p>
-      </div>`;
-    return;
-  }
-
-  if (!isDocsRoute()) return; // navigated during the fetch: do not overwrite the new page
-
-  const tagDescriptions = new Map((spec.tags ?? []).map((t) => [t.name, t.description ?? '']));
-  const sections = orderedTags(spec)
-    .map((tag) => {
-      const operations = operationsByTag(spec, tag);
-      const schemaName = schemaNameForTag(operations);
-      const schema = schemaName ? spec.components?.schemas?.[schemaName] : undefined;
-      return `
-        <h2>${escapeHtml(tag)}</h2>
-        ${tagDescriptions.get(tag) ? `<p class="tag-desc">${escapeHtml(tagDescriptions.get(tag)!)}</p>` : ''}
-        ${operations.map(({ path, op }) => endpointBlock(path, op)).join('')}
-        ${schema && schemaName ? schemaTable(schemaName, schema) : ''}`;
-    })
-    .join('');
-
-  container.innerHTML = `
-    <div class="docs sw-inner-prose">
-      <h1 class="sw-page-title">Documentation</h1>
-      <p class="docs-intro">${escapeHtml(spec.info.description ?? '')}</p>
-      <p class="spec-link">
-        OpenAPI ${escapeHtml(spec.openapi)} · version ${escapeHtml(spec.info.version)} ·
-        <a href="/openapi.json" download="openapi.json">Download the spec</a> and generate a client:
-        <code>npx @openapitools/openapi-generator-cli generate -i /openapi.json -g typescript-fetch</code>
-      </p>
-      ${sections}
-    </div>`;
-
+/**
+ * The /docs page comes drawn by the server from the OpenAPI document (2.11.0,
+ * OpenApiDocs.java and templates/ssr/docs.html). The "Try it" buttons arrive as
+ * `type="button"`, so without JavaScript a form never submits to `/docs?…`;
+ * the client turns them into submit buttons and binds the request.
+ */
+export function bindDocumentation(container: HTMLElement): void {
   container.querySelectorAll<HTMLFormElement>('.try-form').forEach((form) => {
+    form.querySelectorAll<HTMLButtonElement>('button.try-button').forEach((button) => {
+      button.type = 'submit';
+    });
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const block = form.closest<HTMLElement>('.endpoint-block')!;

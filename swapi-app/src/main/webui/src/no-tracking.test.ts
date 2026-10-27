@@ -58,4 +58,13 @@ describe('no tracking', () => {
     expect(scriptSources.length).toBeGreaterThan(0);
     expect(scriptSources.filter((src) => /^(https?:)?\/\//i.test(src))).toEqual([]);
   });
+
+  // 2.11.0: one inline script, the one that puts the `js` class on <html> before
+  // the first paint (the tabs of /docs/mcp hide their inactive panels under it).
+  it('the only inline script of index.html is the one that sets the js class', () => {
+    const inline = [
+      ...indexHtml.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi),
+    ].map((m) => m[1].trim());
+    expect(inline).toEqual(["document.documentElement.classList.add('js')"]);
+  });
 });

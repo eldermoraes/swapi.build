@@ -43,9 +43,12 @@ public class SwapiTools {
     // moment of the tool call (the HTTP transport activates the CDI request context).
     @Inject HttpServerRequest request;
 
-    // The services build URLs as baseUrl + path; REST discovers it via UriInfo per
-    // request. Here the explicit config wins (operational escape hatch); without it,
-    // the domain comes from the request itself - no hardcoded domain in the binary.
+    // The services build URLs as baseUrl + path. swapi.public-base-url is the base of
+    // the API (https://host/api, one meaning since 2.11.0; PublicSiteUrlResolver reads
+    // it the same way). Here the explicit config wins (operational escape hatch);
+    // without it, the domain comes from the request itself - no hardcoded domain in the
+    // binary. The REST API does not read the property at all: it builds its URLs from
+    // UriInfo per request (BaseUrlFilter).
     private String resolveBaseUrl() {
         if (publicBaseUrl.isPresent()) {
             return publicBaseUrl.get();

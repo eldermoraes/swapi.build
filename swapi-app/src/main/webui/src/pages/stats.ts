@@ -84,7 +84,12 @@ export const VIEWS: { id: View; label: string }[] = [
 export const GROUPS: { id: GroupId; label: string; hint: string }[] = [
   { id: 'rest', label: 'REST API', hint: '/api and /openapi.json' },
   { id: 'mcp', label: 'MCP', hint: '/mcp' },
-  { id: 'pages', label: 'Pages and docs', hint: 'this site' },
+  // 2.11.0: an in-site navigation to a server-rendered page fetches its document.
+  {
+    id: 'pages',
+    label: 'Pages and docs',
+    hint: 'this site: full loads and in-site navigations since 2.11.0',
+  },
   { id: 'seo', label: 'SEO', hint: 'robots.txt, sitemap.xml and llms.txt' },
   { id: 'other', label: 'Other', hint: 'unknown paths' },
 ];
