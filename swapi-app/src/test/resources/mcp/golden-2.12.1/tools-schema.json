@@ -1,0 +1,28 @@
+{
+  "sw_get" : {
+    "required" : [ "resource", "id" ],
+    "types" : {
+      "id" : "integer",
+      "resource" : "string"
+    }
+  },
+  "sw_list" : {
+    "required" : [ "resource" ],
+    "types" : {
+      "resource" : "string"
+    }
+  },
+  "sw_random" : {
+    "required" : [ "resource" ],
+    "types" : {
+      "resource" : "string"
+    }
+  },
+  "sw_search" : {
+    "required" : [ "resource", "query" ],
+    "types" : {
+      "query" : "string",
+      "resource" : "string"
+    }
+  }
+}
