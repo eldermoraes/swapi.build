@@ -127,9 +127,11 @@ public class SwapiTools {
         };
     }
 
+    @MetaField(prefix = MAX_RESULT_PREFIX, name = MAX_RESULT_NAME, type = MetaField.Type.INT, value = MAX_RESULT_VALUE)
     @Tool(description = "Lists every entity of one Star Wars resource type as a JSON array "
             + "(Episodes I-VI data). Responses are large (all 82 PEOPLE, about 38 KB); to find a "
-            + "single entity, prefer sw_search, then sw_get.",
+            + "single entity, prefer sw_search, then sw_get; for a compact index pass fields, e.g. "
+            + "[\"name\"] (about 5 KB).",
           annotations = @Tool.Annotations(title = "List Star Wars resources",
                   readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
     public String sw_list(
@@ -146,10 +148,13 @@ public class SwapiTools {
         }), keep));
     }
 
+    @MetaField(prefix = MAX_RESULT_PREFIX, name = MAX_RESULT_NAME, type = MetaField.Type.INT, value = MAX_RESULT_VALUE)
     @Tool(description = "Gets one Star Wars entity by numeric record id and returns it as a JSON "
             + "object. Take the id from the end of an entity's url field (from sw_search, sw_list or "
             + "a relation URL). Ids are record ids, not episode numbers: FILMS id 1 is A New Hope "
-            + "(Episode IV). An unknown id returns a tool error, e.g. 'No films found with id 99'.",
+            + "(Episode IV). An unknown id returns a tool error, e.g. 'No films found with id 99'. "
+            + "Pass expand to get related records in the same call, e.g. [\"homeworld\", \"species\"]; "
+            + "name only the relations you need; * on a film can pass 50 KB.",
           annotations = @Tool.Annotations(title = "Get Star Wars entity by id",
                   readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))
     public String sw_get(
@@ -188,10 +193,11 @@ public class SwapiTools {
         }));
     }
 
+    @MetaField(prefix = MAX_RESULT_PREFIX, name = MAX_RESULT_NAME, type = MetaField.Type.INT, value = MAX_RESULT_VALUE)
     @Tool(description = "Start here. Finds Star Wars entities by name (title for FILMS) with a "
             + "case-insensitive substring match: 'sky' finds Luke, Anakin and Shmi Skywalker. Returns "
-            + "a JSON array of full entities; an empty array [] means no match. The id to pass to "
-            + "sw_get is the last segment of each entity's url field. "
+            + "a JSON array of full entities; an empty array [] means no match; pass fields to shorten "
+            + "each entity. The id to pass to sw_get is the last segment of each entity's url field. "
             + "Data covers Episodes I-VI only.",
           annotations = @Tool.Annotations(title = "Search Star Wars resources",
                   readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = false))

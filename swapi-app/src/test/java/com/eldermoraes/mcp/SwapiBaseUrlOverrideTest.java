@@ -28,6 +28,9 @@ public class SwapiBaseUrlOverrideTest {
     @Inject
     SwapiTools tools;
 
+    @Inject
+    SwapiResources resources;
+
     // 2.13.0 (slice F1): withBaseUrl sets the base for the call and puts back
     // whatever the thread had before, on success and on a tool error. This
     // profile fixes swapi.public-base-url, so a direct call needs no request.
@@ -42,6 +45,13 @@ public class SwapiBaseUrlOverrideTest {
             assertEquals("previous", RequestBaseUrl.get());
             assertThrows(ToolCallException.class, () -> tools.sw_get(SwapiTools.SwResource.PEOPLE, 99999, null));
             assertEquals("previous", RequestBaseUrl.get(), "the error path restores too");
+            assertTrue(resources.peopleRecord("1").text().contains("https://config-wins.example/api/people/1"));
+            assertEquals("previous", RequestBaseUrl.get());
+            assertTrue(resources.index(SwapiTools.SwResource.FILMS)
+                    .contains("\"url\":\"https://config-wins.example/api/films/1\""));
+            assertEquals("previous", RequestBaseUrl.get());
+            assertNull(resources.peopleRecord("9999"));
+            assertEquals("previous", RequestBaseUrl.get(), "a record that does not exist restores too");
             assertThrows(ToolCallException.class,
                     () -> tools.sw_get(SwapiTools.SwResource.PEOPLE, 1, List.of("nope")));
             assertEquals("previous", RequestBaseUrl.get());

@@ -30,4 +30,26 @@ public class SwapiBaseUrlDiscoveryTest {
             client.disconnect();
         }
     }
+
+    // 2.13.0 (slice F1): a resource read follows the request host like the tools.
+    @Test
+    public void resourceUrlsUseTheRequestHost() {
+        var client = McpAssured.newConnectedStreamableClient();
+        try {
+            for (String uri : java.util.List.of("swapi://people/1", "swapi://people")) {
+                client.when()
+                        .resourcesRead(uri)
+                        .withAssert(r -> {
+                            String json = r.contents().get(0).asText().text();
+                            assertTrue(json.contains("http://localhost:8081/api/people/1"),
+                                    "expected URL derived from the request host, got: " + json);
+                            assertFalse(json.contains("swapi.build/api"), json);
+                        })
+                        .send()
+                        .thenAssertResults();
+            }
+        } finally {
+            client.disconnect();
+        }
+    }
 }
