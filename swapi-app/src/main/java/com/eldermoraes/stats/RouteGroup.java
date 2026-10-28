@@ -11,7 +11,11 @@ public enum RouteGroup {
     MCP("mcp"),
     /** The SPA pages: home, docs, resource browser, about, legal, stats. */
     PAGES("pages"),
-    /** What crawlers fetch: {@code robots.txt}, {@code sitemap.xml} and {@code llms.txt}. */
+    /**
+     * What crawlers and agents fetch: {@code robots.txt}, {@code sitemap.xml},
+     * {@code llms.txt}, {@code llms-full.txt} and the Markdown copies (every
+     * template ending in {@code .md}, 2.14.0).
+     */
     SEO("seo"),
     /** Everything {@link RouteNormalizer} could not place. */
     OTHER("other");
@@ -38,7 +42,8 @@ public enum RouteGroup {
         if (route.equals("/mcp")) {
             return MCP;
         }
-        if (route.equals("/robots.txt") || route.equals("/sitemap.xml") || route.equals("/llms.txt")) {
+        if (route.equals("/robots.txt") || route.equals("/sitemap.xml") || route.equals("/llms.txt")
+                || route.equals("/llms-full.txt") || route.endsWith(".md")) {
             return SEO;
         }
         if (route.startsWith("/")) {

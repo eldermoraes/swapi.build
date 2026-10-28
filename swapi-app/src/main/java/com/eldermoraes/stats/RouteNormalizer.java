@@ -25,7 +25,9 @@ public final class RouteNormalizer {
 
     private static final Set<String> FIXED = Set.of(
             "/", "/api", "/api/stats", "/mcp", "/openapi.json", "/robots.txt", "/sitemap.xml",
-            "/llms.txt", "/docs", "/docs/mcp", "/docs/webmcp", "/about", "/privacy", "/terms", "/stats");
+            "/llms.txt", "/docs", "/docs/mcp", "/docs/webmcp", "/about", "/privacy", "/terms", "/stats",
+            // 2.14.0 (slice G1): /llms-full.txt and the Markdown copies of the fixed pages.
+            "/llms-full.txt", "/index.html.md", "/docs.md", "/docs/mcp.md", "/about.md");
 
     private RouteNormalizer() {
     }
@@ -61,6 +63,11 @@ public final class RouteNormalizer {
             if (parts.length == 4 && !parts[3].isEmpty()) {
                 if ("api".equals(parts[1]) && "random".equals(parts[3])) {
                     return Optional.of(base + "/random");
+                }
+                // 2.14.0: the Markdown copy of a record page is its own template,
+                // never counted as the record page itself.
+                if ("resource".equals(parts[1]) && parts[3].endsWith(".md") && parts[3].length() > 3) {
+                    return Optional.of(base + "/{id}.md");
                 }
                 return Optional.of(base + "/{id}");
             }

@@ -1,5 +1,6 @@
 package com.eldermoraes.seo;
 
+import com.eldermoraes.seo.md.MarkdownCopies;
 import com.eldermoraes.seo.ssr.ServerRendering;
 import io.quarkus.vertx.web.RouteFilter;
 import io.vertx.core.buffer.Buffer;
@@ -21,6 +22,8 @@ import java.util.regex.Pattern;
 public class SeoRoutes {
 
     private static final String CACHE_CONTROL = "public, max-age=300, s-maxage=86400";
+    /** RFC 7763. */
+    private static final String MARKDOWN = "text/markdown; charset=utf-8";
     private static final String OG_IMAGE = "/og-image.png";
     private static final String OG_IMAGE_ALT = "swapi.build — Star Wars API and MCP server in a Holonet terminal style";
     private static final Pattern EXISTING_SEO_TAG = Pattern.compile(
@@ -35,14 +38,19 @@ public class SeoRoutes {
     @Inject WebAnalytics analytics;
     @Inject ServerRendering rendering;
     @Inject KnownEntities known;
+    @Inject MarkdownCopies copies;
 
     /**
      * The router of the site (2.9.1; Quinoa's SPA routing is off, QuinoaConfigTest).
      * In this order, for GET and HEAD, and never by the Accept header:
      * <ol>
-     * <li>the SEO files (robots.txt, sitemap.xml, llms.txt, og-image.png);</li>
+     * <li>the SEO files (robots.txt, sitemap.xml, llms.txt, llms-full.txt, og-image.png);</li>
      * <li>/index.html: 301 to /, with the query string;</li>
      * <li>the backend (/api, /mcp, /openapi.json): passed on;</li>
+     * <li>the Markdown copy of a page whose {@code <main>} the server draws (2.14.0,
+     * MarkdownCopies.pageOfCopy, on the raw path): exactly /index.html.md for the
+     * home, or the page's path plus .md; 200 text/markdown, or 503 when its
+     * render is empty or fails;</li>
      * <li>a page that exists, asked with a trailing slash: 301 to the bare path
      * (2.10.0), relative, with the query string;</li>
      * <li>a page that exists: 200 with its document, which carries the {@code <main>}
@@ -70,12 +78,14 @@ public class SeoRoutes {
             case "/robots.txt" -> robots(rc);
             case "/sitemap.xml" -> sitemap(rc);
             case "/llms.txt" -> llms(rc);
+            case MarkdownCopies.LLMS_FULL -> llmsFull(rc);
             case OG_IMAGE -> ogImage(rc);
             case "/index.html" -> redirectHome(rc);
             default -> {
                 String raw = rawPath(rc);
                 String page = withoutTrailingSlash(raw);
                 Optional<String> bare;
+                Optional<String> copyOf;
                 if (isBackend(path)) {
                     // /api keeps its own 404 policy (edge-cacheable, CacheControlFilter);
                     // an unknown /mcp/... path is a framework 404 like a missing file.
@@ -83,6 +93,8 @@ public class SeoRoutes {
                         noCacheOn404(rc);
                     }
                     rc.next();
+                } else if ((copyOf = copies.pageOfCopy(raw)).isPresent()) {
+                    markdownCopy(rc, copyOf.get());
                 } else if ((bare = barePage(raw)).isPresent()) {
                     redirect(rc, bare.get());
                 } else if (metadata.isKnownDocumentPath(page)) {
@@ -179,60 +191,65 @@ public class SeoRoutes {
         text(rc, "text/plain; charset=utf-8", body);
     }
 
-    /**
-     * llmstxt.org file for agents. Since 2.11.0 /docs and /docs/mcp come with
-     * their content in the HTML (ServerRendering), and the file still carries the
-     * essentials itself (how to connect, the list format, the id trap): an agent
-     * that reads only this file gets them in one short request, without parsing a
-     * page. Only {base} is replaced, with the root of this request; {resource},
-     * {id} and {text} are literal URL parameters.
-     */
-    private static final String LLMS_TXT = """
-            # swapi.build
-
-            > Free, read-only Star Wars API (a SWAPI alternative) with a REST JSON interface and a
-            > remote MCP server (Streamable HTTP). Data covers the six films of Episodes I-VI:
-            > people, films, planets, species, starships and vehicles. No API key, no sign-up.
-
-            - Connect: `claude mcp add --transport http swapi-build {base}/mcp`; any other MCP client:
-              Streamable HTTP URL `{base}/mcp`, no auth. Tools: sw_search, sw_get, sw_list, sw_random;
-              sw_get takes an optional `expand` (related records in the same call, e.g. ["homeworld"]),
-              sw_list and sw_search an optional `fields` (e.g. ["name"] for a compact index).
-            - MCP resources: `swapi://people` (index) and `swapi://people/1` (one record), the same for
-              films, planets, species, starships and vehicles. MCP prompt: `character_profile` (a name).
-            - REST: `{base}/api/{resource}`, `{base}/api/{resource}/{id}`, `{base}/api/{resource}/random`
-              and `{base}/api/{resource}?search={text}`; resources: people, films, planets, species,
-              starships, vehicles.
-            - Lists and searches return a plain JSON array of entities (no count/next/results
-              pagination, unlike swapi.dev).
-            - Ids are record ids, not episode numbers: `{base}/api/films/1` is A New Hope (Episode IV).
-            - Successful GETs return 200 with JSON; an unknown id returns 404.
-            - Relations (homeworld, films, characters...) are absolute URLs on the same API.
-
-            ## Docs
-
-            - [OpenAPI contract]({base}/openapi.json): machine-readable, always matches the deployed version
-            - [REST documentation]({base}/docs): endpoints with live examples
-            - [MCP server guide]({base}/docs/mcp): setup for Claude Code, Claude Desktop, OpenAI Codex, GitHub Copilot and IBM Bob
-            - [WebMCP guide]({base}/docs/webmcp): experimental browser tools
-
-            ## Examples
-
-            - [Luke Skywalker]({base}/api/people/1)
-            - [A New Hope]({base}/api/films/1)
-            - [Search people by name]({base}/api/people?search=sky)
-
-            ## Optional
-
-            - [About]({base}/about)
-            - [Usage stats]({base}/stats), also as JSON at {base}/api/stats
-            - [Source code](https://github.com/eldermoraes/swapi.build) (Apache 2.0)
-            """;
-
+    /** llmstxt.org file for agents; the text is in LlmsTxt. */
     private void llms(RoutingContext rc) {
-        String root = urls.absoluteUrl(rc, "/");
-        String base = root.endsWith("/") ? root.substring(0, root.length() - 1) : root;
-        text(rc, "text/plain; charset=utf-8", LLMS_TXT.replace("{base}", base));
+        text(rc, "text/plain; charset=utf-8", LlmsTxt.text(urls.siteRoot(rc)));
+    }
+
+    /**
+     * Everything in one file (2.14.0, MarkdownCopies.llmsFull). text/plain like
+     * llms.txt, and noindex: Google indexes .txt, and this file duplicates the
+     * pages. A copy that fails makes the whole file 503: a "full" file without a
+     * page misleads the agent.
+     */
+    private void llmsFull(RoutingContext rc) {
+        Optional<String> body = copies.llmsFull(urls.siteRoot(rc));
+        if (body.isEmpty()) {
+            unavailable(rc);
+            return;
+        }
+        rc.response().putHeader("X-Robots-Tag", "noindex");
+        text(rc, "text/plain; charset=utf-8", body.get());
+    }
+
+    /**
+     * The Markdown copy of a page (2.14.0), with the indexing of its HTML: the
+     * same SeoMetadata gives the canonical (Link rel="canonical") and, for a
+     * noindex page (the records of a type that is not indexable), X-Robots-Tag:
+     * noindex. The headers are set again when they are written, so the HTML
+     * policy the spa filter stamps on /resource/{type}/{id}... never stays on a
+     * record copy.
+     */
+    private void markdownCopy(RoutingContext rc, String page) {
+        Optional<String> body = copies.copy(page, urls.siteRoot(rc));
+        if (body.isEmpty()) {
+            unavailable(rc);
+            return;
+        }
+        SeoMetadata route = metadata.forPath(page);
+        String canonical = "<" + urls.absoluteUrl(rc, route.canonicalPath()) + ">; rel=\"canonical\"";
+        boolean noindex = route.robots().startsWith(SeoMetadata.NOINDEX);
+        rc.addHeadersEndHandler(v -> {
+            var headers = rc.response().headers();
+            headers.set(HttpHeaders.CONTENT_TYPE, MARKDOWN);
+            headers.set(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL);
+            headers.set(HttpHeaders.VARY, "Origin");
+            headers.set("Link", canonical);
+            if (noindex) {
+                headers.set("X-Robots-Tag", "noindex");
+            }
+        });
+        rc.response().end(body.get());
+    }
+
+    /** A copy or /llms-full.txt that could not be built: 503, never cached. */
+    private static void unavailable(RoutingContext rc) {
+        rc.addHeadersEndHandler(v -> rc.response().headers().set(HttpHeaders.CACHE_CONTROL, "no-cache"));
+        rc.response()
+                .setStatusCode(503)
+                .putHeader(HttpHeaders.CONTENT_TYPE, "text/plain; charset=utf-8")
+                .putHeader(HttpHeaders.CACHE_CONTROL, "no-cache")
+                .end("Markdown copy unavailable\n");
     }
 
     /**
@@ -274,6 +291,9 @@ public class SeoRoutes {
         if (main.isPresent()) {
             html = html.replace(ServerRendering.EMPTY_MAIN, main.get());
         }
+        // 2.14.0: a page with a Markdown copy announces it (relative, like the HTML links).
+        copies.copyPathOf(path).ifPresent(copy ->
+                rc.response().putHeader("Link", "<" + copy + ">; rel=\"alternate\"; type=\"text/markdown\""));
         rc.response()
                 .putHeader(HttpHeaders.CONTENT_TYPE, "text/html; charset=utf-8")
                 .end(html);

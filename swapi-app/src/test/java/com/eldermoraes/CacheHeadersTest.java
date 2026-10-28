@@ -253,7 +253,7 @@ class CacheHeadersTest {
     // carry s-maxage=86400.
     @Test
     void seoFilesVaryByOrigin() {
-        for (String path : List.of("/robots.txt", "/sitemap.xml", "/llms.txt")) {
+        for (String path : List.of("/robots.txt", "/sitemap.xml", "/llms.txt", "/llms-full.txt", "/docs.md")) {
             given()
                     .header("Origin", "https://app.example")
             .when()

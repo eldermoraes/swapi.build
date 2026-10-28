@@ -154,6 +154,26 @@ class StatsResourceTest {
                 .body("groups.seo", greaterThanOrEqualTo(1));
     }
 
+    // 2.14.0: the Markdown copies and /llms-full.txt are SEO, and a record copy
+    // never grows the count of the record page.
+    @Test
+    void markdownCopyIsCountedUnderSeo() {
+        long recordPages = routeCount("/resource/films/{id}");
+        given().get("/docs.md").then().statusCode(200);
+        given().get("/resource/films/1.md").then().statusCode(200);
+        given().get("/llms-full.txt").then().statusCode(200);
+
+        given().when().get("/api/stats").then()
+                .statusCode(200)
+                .body("routes.'/docs.md'", greaterThanOrEqualTo(1))
+                .body("routeGroups.'/docs.md'", equalTo("seo"))
+                .body("routes.'/resource/films/{id}.md'", greaterThanOrEqualTo(1))
+                .body("routeGroups.'/resource/films/{id}.md'", equalTo("seo"))
+                .body("routes.'/llms-full.txt'", greaterThanOrEqualTo(1))
+                .body("routeGroups.'/llms-full.txt'", equalTo("seo"));
+        org.junit.jupiter.api.Assertions.assertEquals(recordPages, routeCount("/resource/films/{id}"));
+    }
+
     // --- 404s (2.9.1) ----------------------------------------------------------
 
     private static long routeCount(String route) {

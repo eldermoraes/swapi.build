@@ -12,6 +12,13 @@ describe('links the SPA router must not swallow', () => {
     '/robots.txt',
     '/llms.txt',
     '/sitemap.xml',
+    // 2.14.0: the Markdown copies and the full file are server answers.
+    '/docs.md',
+    '/docs.md#x',
+    '/docs.md?x=1',
+    '/index.html.md',
+    '/resource/films/1.md',
+    '/llms-full.txt',
   ])(
     '%s goes to the server (regression: /api/stats on /privacy rendered the home page)',
     (href) => {

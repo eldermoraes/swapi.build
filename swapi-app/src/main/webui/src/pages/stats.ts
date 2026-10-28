@@ -97,7 +97,7 @@ export const GROUPS: { id: GroupId; label: string; hint: string }[] = [
     label: 'Pages and docs',
     hint: 'this site: full loads and in-site navigations since 2.11.0',
   },
-  { id: 'seo', label: 'SEO', hint: 'robots.txt, sitemap.xml and llms.txt' },
+  { id: 'seo', label: 'SEO', hint: 'robots.txt, sitemap.xml, llms.txt, llms-full.txt and the Markdown copies (.md)' },
   { id: 'other', label: 'Other', hint: 'unknown paths' },
 ];
 
