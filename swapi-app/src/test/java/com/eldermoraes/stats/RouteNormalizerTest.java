@@ -41,16 +41,40 @@ class RouteNormalizerTest {
             "/stats, /stats",
             "/resource/planets, /resource/planets",
             "/resource/planets/3, /resource/planets/{id}",
+            // 2.14.0 (slice G1): the Markdown copies and /llms-full.txt.
+            "/llms-full.txt, /llms-full.txt",
+            "/llms-full.txt/, /llms-full.txt",
+            "/index.html.md, /index.html.md",
+            "/docs.md, /docs.md",
+            "/docs/mcp.md, /docs/mcp.md",
+            "/about.md, /about.md",
+            "/resource/people/1.md, /resource/people/{id}.md",
+            "/resource/films/1.md, /resource/films/{id}.md",
+            "/resource/planets/9999.md, /resource/planets/{id}.md",
+            "/resource/species/3.md, /resource/species/{id}.md",
+            "/resource/starships/2.md, /resource/starships/{id}.md",
+            "/resource/vehicles/4.md, /resource/vehicles/{id}.md",
     })
     void knownRoutesMapToTheirTemplate(String path, String expected) {
         assertEquals(Optional.of(expected), RouteNormalizer.normalize(path));
+    }
+
+    // Regression (2.14.0, before the copies shipped): any fourth segment counted
+    // as a record page, so /resource/people/1.md would grow /resource/people/{id}.
+    @Test
+    void recordCopyIsNotCountedAsARecordPage() {
+        assertEquals(Optional.of("/resource/people/{id}.md"), RouteNormalizer.normalize("/resource/people/1.md"));
+        assertEquals(Optional.of("/resource/people/{id}"), RouteNormalizer.normalize("/resource/people/1"));
+        // Only the record address has a copy: the API keeps its own templates.
+        assertEquals(Optional.of("/api/people/{id}"), RouteNormalizer.normalize("/api/people/1.md"));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {
             "/wp-login.php", "/.env", "/api/users", "/api/people/1/films", "/mcp/sse",
             "/mcp/messages/abc", "/resource/droids/1", "/resource/people/1/extra", "/API/people",
-            "/docs/other", "/api/people//",
+            "/docs/other", "/api/people//", "/foo.md", "/stats.md", "/docs/webmcp.md", "/resource/people.md",
+            "/index.md", "/resource/droids/1.md",
     })
     void unknownPathsCollapseIntoOther(String path) {
         assertEquals(Optional.of(RouteNormalizer.OTHER), RouteNormalizer.normalize(path));

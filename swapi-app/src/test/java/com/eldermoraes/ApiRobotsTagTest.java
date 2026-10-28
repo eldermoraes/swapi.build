@@ -37,7 +37,7 @@ class ApiRobotsTagTest {
     void nothingOutsideTheApiSaysNoindexInAHeader() {
         for (String path : List.of("/", "/docs", "/resource/films/1", "/resource/people/1", "/resource/films",
                 "/openapi.json", "/robots.txt", "/sitemap.xml", "/llms.txt", "/og-image.png", "/not-a-real-page",
-                "/apix", "/resource/people/9999", "/docs/")) {
+                "/apix", "/resource/people/9999", "/docs/", "/docs.md", "/index.html.md", "/resource/films/1.md")) {
             Response get = given().accept("text/html").redirects().follow(false).when().get(path);
             Assertions.assertEquals(List.of(), get.headers().getValues("X-Robots-Tag"), "GET " + path);
             Response head = given().accept("text/html").redirects().follow(false).when().head(path);

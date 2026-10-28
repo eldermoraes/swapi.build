@@ -39,6 +39,15 @@ class RouteGroupTest {
         assertEquals(group, RouteGroup.of(route).id());
     }
 
+    // 2.14.0: every template that ends in .md, and /llms-full.txt, is what an agent fetches.
+    @ParameterizedTest(name = "{0} -> seo")
+    @CsvSource({"/llms-full.txt", "/index.html.md", "/docs.md", "/docs/mcp.md", "/about.md",
+            "/resource/people/{id}.md", "/resource/films/{id}.md", "/resource/planets/{id}.md",
+            "/resource/species/{id}.md", "/resource/starships/{id}.md", "/resource/vehicles/{id}.md"})
+    void markdownAndLlmsFullAreSeo(String route) {
+        assertEquals(RouteGroup.SEO, RouteGroup.of(route));
+    }
+
     @Test
     void groupIdsAreTheOnesThePageKnows() {
         // src/main/webui/src/pages/stats.ts labels exactly these ids.

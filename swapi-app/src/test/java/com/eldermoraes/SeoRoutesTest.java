@@ -78,13 +78,71 @@ class SeoRoutesTest {
     }
 
     // Changes on purpose in 2.11.0: /docs and /docs/mcp come with their content
-    // in the HTML, so the file no longer warns that they need JavaScript.
+    // in the HTML, so the file no longer warns that they need JavaScript. Changes
+    // on purpose again in 2.14.0: the two links point to the Markdown copies.
     @Test
     void llmsTxtNoLongerSaysTheDocsNeedJavaScript() {
         String body = given().when().get("/llms.txt").then().statusCode(200).extract().body().asString();
         Assertions.assertFalse(body.contains("needs JavaScript"), body);
-        Assertions.assertTrue(body.contains("/docs): endpoints with live examples"), body);
-        Assertions.assertTrue(body.contains("/docs/mcp): setup for Claude Code"), body);
+        Assertions.assertTrue(body.contains("/docs.md): endpoints with live examples"), body);
+        Assertions.assertTrue(body.contains("/docs/mcp.md): setup for Claude Code"), body);
+    }
+
+    // 2.14.0 (slice G1): the llmstxt.org convention, links to the .md copies, and
+    // the one file with everything.
+    @Test
+    void llmsTxtPointsToTheCopiesAndLlmsFull() {
+        String body = given()
+                .header("X-Forwarded-Proto", "https")
+                .header("X-Forwarded-Host", "preview.example")
+                .when().get("/llms.txt").then().statusCode(200).extract().body().asString();
+        Assertions.assertTrue(body.contains("[REST documentation](https://preview.example/docs.md)"), body);
+        Assertions.assertTrue(body.contains("[MCP server guide](https://preview.example/docs/mcp.md)"), body);
+        Assertions.assertTrue(body.contains("[About](https://preview.example/about.md)"), body);
+        Assertions.assertTrue(body.contains("the home is `https://preview.example/index.html.md`"), body);
+        Assertions.assertTrue(body.contains("everything in one file: `https://preview.example/llms-full.txt`"), body);
+        // Pages without a copy keep their HTML address.
+        Assertions.assertTrue(body.contains("[WebMCP guide](https://preview.example/docs/webmcp)"), body);
+        Assertions.assertTrue(body.contains("[OpenAPI contract](https://preview.example/openapi.json)"), body);
+        Assertions.assertTrue(body.contains("[Usage stats](https://preview.example/stats)"), body);
+    }
+
+    // 2.14.0: the HTML of a page with a Markdown copy says where the copy is, in
+    // an HTTP header (relative: nothing of the host to poison).
+    @Test
+    void pagesWithACopyAnnounceItInALinkHeader() {
+        String[][] cases = {
+                {"/", "</index.html.md>; rel=\"alternate\"; type=\"text/markdown\""},
+                {"/docs", "</docs.md>; rel=\"alternate\"; type=\"text/markdown\""},
+                {"/docs/mcp", "</docs/mcp.md>; rel=\"alternate\"; type=\"text/markdown\""},
+                {"/about", "</about.md>; rel=\"alternate\"; type=\"text/markdown\""},
+                {"/resource/films/1", "</resource/films/1.md>; rel=\"alternate\"; type=\"text/markdown\""},
+                {"/resource/people/1", "</resource/people/1.md>; rel=\"alternate\"; type=\"text/markdown\""},
+        };
+        for (String[] c : cases) {
+            io.restassured.response.Response response = given().accept("text/html")
+                    .header("X-Forwarded-Host", "evil.example").when().get(c[0]);
+            Assertions.assertEquals(200, response.statusCode(), c[0]);
+            Assertions.assertEquals(java.util.List.of(c[1]), response.headers().getValues("Link"), c[0]);
+        }
+    }
+
+    @Test
+    void pagesWithoutACopyHaveNoLinkHeader() {
+        for (String path : new String[] {"/docs/webmcp", "/stats", "/privacy", "/terms", "/resource/people"}) {
+            io.restassured.response.Response response = given().accept("text/html").when().get(path);
+            Assertions.assertEquals(200, response.statusCode(), path);
+            Assertions.assertEquals(java.util.List.of(), response.headers().getValues("Link"), path);
+        }
+    }
+
+    @Test
+    void notFoundHasNoLinkHeader() {
+        for (String path : new String[] {"/not-a-real-page", "/resource/people/9999", "/docs/webmcp.md"}) {
+            io.restassured.response.Response response = given().accept("text/html").when().get(path);
+            Assertions.assertEquals(404, response.statusCode(), path);
+            Assertions.assertEquals(java.util.List.of(), response.headers().getValues("Link"), path);
+        }
     }
 
     // Regression of diagnosis 3 in the SEO/AEO study: /llms.txt fell into the SPA

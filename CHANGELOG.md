@@ -16,6 +16,43 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.14.0] - 2026-10-28
+
+### Added
+
+- A Markdown copy (`text/markdown; charset=utf-8`) of every page whose content
+  the server draws, at the page's address plus `.md`: `/index.html.md` (the
+  home, the llmstxt.org convention), `/docs.md`, `/docs/mcp.md`, `/about.md`
+  and `/resource/{type}/{id}.md` for every record that exists. The copy is the
+  drawn `<main>` converted (jsoup 1.23.2, `seo/md/MarkdownFromHtml`), never a
+  template of its own: tables become GFM tables, code blocks keep their
+  language, links are absolute on the request host and a link to a page with a
+  copy points to that copy. It opens with `> HTML version: <URL>`, has the
+  indexing of its HTML (`Link: <...>; rel="canonical"`, and `X-Robots-Tag:
+  noindex` on the records of the non-indexable types) and the SEO cache policy
+  with `Vary: Origin`. A failed render or conversion answers `503`, never
+  cached. Nothing is chosen by the `Accept` header: `/docs` is always HTML.
+- The HTML of a page with a copy announces it:
+  `Link: </docs.md>; rel="alternate"; type="text/markdown"`.
+- `/llms-full.txt`: the summary of `llms.txt`, the four page copies and an
+  index of every record (its copy and its JSON), `text/plain` with
+  `X-Robots-Tag: noindex` (it duplicates the pages); `503` as a whole when a
+  copy fails.
+
+### Changed
+
+- `llms.txt` announces the copies and `/llms-full.txt`, and its links to the
+  REST and MCP guides and to About point to their Markdown copies.
+- The SEO group of `/stats` counts the copies (`/docs.md`,
+  `/resource/{type}/{id}.md`...) and `/llms-full.txt`; still five groups.
+- The decorative icons of `/about` are marked `data-md="skip"`, out of the
+  copy.
+
+### Fixed
+
+- Preventive: a record copy (`/resource/people/1.md`) is counted under its own
+  template, never as the record page `/resource/people/{id}`.
+
 ## [2.13.0] - 2026-10-28
 
 Without the new arguments, every tool answer is the 2.12.1 text byte for byte
@@ -916,7 +953,7 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.13.0...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.14.0...HEAD
 [2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
@@ -966,4 +1003,5 @@ snapshot version is not a release. -->
 
 [2.12.1]: https://github.com/eldermoraes/swapi.build/compare/v2.12.0...v2.12.1
 
+[2.14.0]: https://github.com/eldermoraes/swapi.build/compare/v2.13.0...v2.14.0
 [2.13.0]: https://github.com/eldermoraes/swapi.build/compare/v2.12.1...v2.13.0

@@ -45,6 +45,15 @@ describe('the MCP group hint', () => {
   });
 });
 
+// 2.14.0: /llms-full.txt and the Markdown copies (.md) count under SEO.
+describe('the SEO group hint', () => {
+  it('names llms-full.txt and the Markdown copies', () => {
+    expect(GROUPS.find((g) => g.id === 'seo')!.hint).toBe(
+      'robots.txt, sitemap.xml, llms.txt, llms-full.txt and the Markdown copies (.md)',
+    );
+  });
+});
+
 function view(period: '24h' | '7d' | '30d'): StatsView {
   const hourly = period === '24h';
   const n = hourly ? 24 : period === '7d' ? 7 : 30;

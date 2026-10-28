@@ -237,6 +237,10 @@ A new page or section is on-standard when:
     `<main>`; its client code only binds behaviour and never redraws the
     `<main>`; and what it hides with JavaScript stays visible without it (tab
     panels hide only under `.js`).
+11. A page drawn on the server gets its Markdown copy for free (2.14.0, the
+    `<main>` converted at its address plus `.md`); mark decoration that is not
+    content with `data-md="skip"` (the feature icons of `/about`), and read the
+    copy once before shipping.
 
 ## 8. Voice & copy
 

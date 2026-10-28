@@ -12,6 +12,9 @@ const SERVER_PATHS = [
   /^\/robots\.txt(?:[?#]|$)/,
   /^\/sitemap\.xml(?:[?#]|$)/,
   /^\/llms\.txt(?:[?#]|$)/,
+  // 2.14.0 (slice G1): /llms-full.txt and the Markdown copies (path plus .md).
+  /^\/llms-full\.txt(?:[?#]|$)/,
+  /\.md(?:[?#]|$)/,
 ];
 
 export function isServerPath(href: string): boolean {

@@ -92,7 +92,8 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   read by `SeoMetadataRegistry` and by `seo.ts`/`routes.ts`; the client never
   rewrites the head on the first load. Record addresses become indexable one type
   per release (`indexable` in that file), each gated on Search Console coverage;
-  `/api/*` answers `X-Robots-Tag: noindex`, never the HTML.
+  `/api/*` answers `X-Robots-Tag: noindex`, never the HTML (and the non-indexable
+  Markdown copies and `/llms-full.txt`).
 - **Server-rendered pages have one source**: the Qute templates in
   `swapi-app/src/main/resources/templates/ssr/` draw the `<main>` of every page
   marked `ssr` in `seo/site.json`; the client adopts it on the first load (never
@@ -102,6 +103,12 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   `RawString`. Code that renders an entity sets `RequestBaseUrl` and restores the
   previous value. `swapi.public-base-url` is the **API** base
   (`https://host/api`); the site root is derived from it.
+- **The Markdown copies come from the drawn `<main>`** (2.14.0,
+  `seo/md/MarkdownCopies` and `MarkdownFromHtml`), never from a template of their
+  own: only a page whose `<main>` the server draws has one (its address plus
+  `.md`, the home's is `/index.html.md`), with the same indexing as its HTML (the
+  `noindex` and the canonical of its `SeoMetadata`). A copy is never chosen by the
+  `Accept` header. Decoration that is not content is marked `data-md="skip"`.
 - **Container tooling is `podman`** (`/opt/podman/bin`), not `docker`. The podman
   machine needs 8 GB for local native builds.
 - **MCP serves stateful and stateless clients on the same `/mcp` endpoint.**
