@@ -2,7 +2,7 @@
 
 A free, open-source Star Wars API serving data about People, Films, Planets, Species, Starships, and Vehicles. Built with [Quarkus](https://quarkus.io/) and [GraalVM](https://www.graalvm.org/) for instant startup, minimal memory footprint, and out-of-the-box performance.
 
-Inspired by the original [SWAPI](https://swapi.dev/) (created by Paul Hallett, maintained by Juriy Bura), this project was born out of the need for a Star Wars API that **never goes offline**. If you've ever had a live demo break because a third-party API went down, you know why this exists.
+Inspired by the original [SWAPI](https://swapi.dev/) (created by Paul Hallett, maintained by Juriy Bura), this project was born out of the need for a Star Wars API **built to stay up for live demos**. If you've ever had a live demo break because a third-party API went down, you know why this exists.
 
 ## Quick Start
 

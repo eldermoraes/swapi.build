@@ -39,6 +39,7 @@ class MarkdownCopiesTest {
             "/index.html.md | # The Star Wars API",
             "/docs.md | /api/people/{id}",
             "/docs/mcp.md | claude mcp add --transport http swapi-build https://preview.example/mcp",
+            "/faq.md | ## How does swapi.build compare?",
             "/about.md | ## Why build another one?",
     })
     void fixedPagesHaveACopy(String path, String phrase) {
@@ -79,6 +80,7 @@ class MarkdownCopiesTest {
             "/index.html.md | https://preview.example/",
             "/docs.md | https://preview.example/docs",
             "/docs/mcp.md | https://preview.example/docs/mcp",
+            "/faq.md | https://preview.example/faq",
             "/about.md | https://preview.example/about",
             "/resource/films/1.md | https://preview.example/resource/films/1",
             "/resource/people/1.md | https://preview.example/resource/people/1",
@@ -92,6 +94,7 @@ class MarkdownCopiesTest {
             "/index.html.md | The Star Wars API",
             "/docs.md | /api/people/{id}",
             "/docs/mcp.md | Connect your client",
+            "/faq.md | How does swapi.build compare?",
             "/about.md | Why build another one?",
             "/resource/films/1.md | George Lucas",
     })
@@ -111,8 +114,34 @@ class MarkdownCopiesTest {
         Assertions.assertFalse(body.contains("⚡"), body);
     }
 
+    // 2.15.0: the comparison of /faq reaches an agent as a real table, with its
+    // header row, every column and the sources as links below it.
+    @Test
+    void faqCopyHasTheComparisonAsATable() {
+        String body = copy("/faq.md");
+        Assertions.assertTrue(body.contains("| Feature | swapi.build | swapi.dev | swapi.tech | swapi.info | Pipeworx (swapi MCP) |\n"
+                + "| --- | --- | --- | --- | --- | --- |\n"), body);
+        Assertions.assertTrue(body.contains("| Public status page | None; public monitor history |"), body);
+        Assertions.assertTrue(body.contains("[swapi.dev](https://swapi.dev/api/people/1/)"), body);
+        Assertions.assertTrue(body.contains("## Is it free? Do I need an API key or an account?"), body);
+        Assertions.assertTrue(body.contains("Checked on 28 October 2026"), body);
+        Assertions.assertTrue(body.contains("[MCP server guide](https://preview.example/docs/mcp.md)"), body);
+    }
+
+    // 2.15.0: "never go offline" left /about. The page reaches readers on three
+    // surfaces (the HTML, its copy and /llms-full.txt): the new phrase is on
+    // every one and the old one on none.
     @ParameterizedTest
-    @ValueSource(strings = {"/index.html.md", "/docs.md", "/docs/mcp.md", "/about.md", "/resource/films/1.md",
+    @ValueSource(strings = {"/about", "/about.md", "/llms-full.txt"})
+    void aboutSaysBuiltToStayUpForLiveDemosOnEverySurface(String path) {
+        String body = preview().accept("text/html").when().get(path).then().statusCode(200).extract().body().asString();
+        Assertions.assertTrue(body.contains("built to stay up for live demos"), path);
+        Assertions.assertTrue(body.contains("public uptime monitor"), path);
+        Assertions.assertFalse(body.toLowerCase(java.util.Locale.ROOT).contains("never go offline"), path);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/index.html.md", "/docs.md", "/docs/mcp.md", "/faq.md", "/about.md", "/resource/films/1.md",
             "/resource/people/1.md"})
     void copyContentTypeIsTextMarkdownUtf8(String path) {
         Response response = preview().accept("text/html").when().get(path);
@@ -121,7 +150,7 @@ class MarkdownCopiesTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/index.html.md", "/docs.md", "/docs/mcp.md", "/about.md", "/resource/films/1.md"})
+    @ValueSource(strings = {"/index.html.md", "/docs.md", "/docs/mcp.md", "/faq.md", "/about.md", "/resource/films/1.md"})
     void copyHasTheSeoCachePolicyAndVaryOrigin(String path) {
         Response response = preview().header("Origin", "https://app.example").when().get(path);
         Assertions.assertEquals(List.of(SEO_CACHE_CONTROL), response.headers().getValues("Cache-Control"), path);
@@ -143,6 +172,7 @@ class MarkdownCopiesTest {
             "/index.html.md | https://preview.example/",
             "/docs.md | https://preview.example/docs",
             "/docs/mcp.md | https://preview.example/docs/mcp",
+            "/faq.md | https://preview.example/faq",
             "/about.md | https://preview.example/about",
             "/resource/films/1.md | https://preview.example/resource/films/1",
     })
@@ -152,7 +182,7 @@ class MarkdownCopiesTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/index.html.md", "/docs.md", "/docs/mcp.md", "/about.md", "/resource/films/1.md"})
+    @ValueSource(strings = {"/index.html.md", "/docs.md", "/docs/mcp.md", "/faq.md", "/about.md", "/resource/films/1.md"})
     void indexableCopiesHaveNoRobotsHeader(String path) {
         Response response = preview().when().get(path);
         Assertions.assertEquals(200, response.statusCode(), path);

@@ -43,6 +43,7 @@ public final class LlmsTxt {
             - [REST documentation]({base}/docs.md): endpoints with live examples
             - [MCP server guide]({base}/docs/mcp.md): setup for Claude Code, Claude Desktop, OpenAI Codex, GitHub Copilot and IBM Bob
             - [WebMCP guide]({base}/docs/webmcp): experimental browser tools
+            - [FAQ and comparison]({base}/faq.md): free, no key, data scope, and a dated comparison with other Star Wars APIs
 
             ## Examples
 

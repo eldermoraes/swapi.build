@@ -81,6 +81,21 @@ class JsonLdTest {
         assertTrue(node(graph("/docs/mcp"), "Dataset").isEmpty());
     }
 
+    // 2.15.0: Home > FAQ, and no FAQPage. Google limited the FAQ rich result to
+    // government and health sites in August 2023, and nothing checked shows
+    // another engine or agent reading it; the probe of verify-deploy.sh agrees.
+    @Test
+    void faqHasABreadcrumbAndNoFaqPage() {
+        JsonObject graph = graph("/faq");
+        assertEquals(List.of(
+                        crumb(1, "Home", "https://preview.example/"),
+                        crumb(2, "FAQ", "https://preview.example/faq")),
+                node(graph, "BreadcrumbList").orElseThrow().getJsonArray("itemListElement").stream()
+                        .map(JsonValue::asJsonObject).toList());
+        assertTrue(node(graph, "FAQPage").isEmpty());
+        assertFalse(script("/faq").contains("FAQPage"));
+    }
+
     @Test
     void aListingHasTwoCrumbs() {
         JsonObject list = node(graph("/resource/films"), "BreadcrumbList").orElseThrow();
@@ -118,7 +133,7 @@ class JsonLdTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/", "/docs", "/docs/mcp", "/about", "/resource/films", "/resource/films/1"})
+    @ValueSource(strings = {"/", "/docs", "/docs/mcp", "/faq", "/about", "/resource/films", "/resource/films/1"})
     void theScriptNeverHoldsACloseTagOrACommentOpener(String path) {
         String script = script(path);
         assertFalse(script.contains("</"), script);

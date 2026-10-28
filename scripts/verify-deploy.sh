@@ -8,19 +8,19 @@
 #                                           MCP (stateless, stateful burst, edges), CORS, the
 #                                           X-Forwarded-Host / Forwarded poisoning probes, the
 #                                           record addresses (2.10.0+: films indexable with their
-#                                           own canonical and title, 20 sitemap URLs, no lastmod),
+#                                           own canonical and title, 21 sitemap URLs since 2.15.0, no lastmod),
 #                                           X-Robots-Tag noindex on /api only, the server-rendered
 #                                           content (2.11.0+: the <main> of /, /docs, /docs/mcp
-#                                           and /about with its marker and text, the lean
+#                                           /faq (2.15.0+) and /about with its marker and text, the lean
 #                                           JSON-LD), the record content (2.12.0+: films/1
 #                                           and people/1 with marker, name, links and the
 #                                           samples on the host; people still noindex; the
 #                                           poisoning pairs of both and Forwarded on films/1),
 #                                           the Markdown copies (2.14.0+: /index.html.md,
-#                                           /docs.md, /docs/mcp.md, /about.md and record
+#                                           /docs.md, /docs/mcp.md, /faq.md, /about.md and record
 #                                           copies, text/markdown with canonical Link and the
 #                                           page's indexing; the HTML Link alternate;
-#                                           /llms-full.txt with the four copies and the record
+#                                           /llms-full.txt with the five copies and the record
 #                                           index, noindex, 20-100 KB; their poisoning pairs),
 #                                           the trailing-slash 301, and the Caddy headers
 #                                           (HSTS, no Server)
@@ -432,10 +432,12 @@ if [ "${page##*$'\n'}" = "200" ] && echo "$page" | grep -qF 'name="robots" conte
 else
   fail "/resource/people/1 robots" "200, noindex,follow, canonical $BASE/resource/people" "${page##*$'\n'}"
 fi
-# The sitemap: the 14 pages and lists plus the six films, nothing else, no lastmod.
+# The sitemap: the 15 pages and lists plus the six films, nothing else, no lastmod.
 # Counted by occurrence, not by line: the count must not depend on the layout.
 nlocs=$(echo "$sitemap" | grep -o '<loc>' | wc -l | tr -d ' ')
-[ "$nlocs" = "20" ] && pass "sitemap.xml has 20 <loc>" || fail "sitemap.xml <loc> count" "20" "$nlocs"
+[ "$nlocs" = "21" ] && pass "sitemap.xml has 21 <loc>" || fail "sitemap.xml <loc> count" "21" "$nlocs"
+echo "$sitemap" | grep -qF "<loc>$BASE/faq</loc>" && pass "sitemap.xml lists /faq" \
+  || fail "sitemap.xml /faq" "<loc>$BASE/faq</loc>" "missing"
 missing=""
 for id in 1 2 3 4 5 6; do
   echo "$sitemap" | grep -qF "<loc>$BASE/resource/films/$id</loc>" || missing="$missing $id"
@@ -490,6 +492,7 @@ ssr_probe() {
 ssr_probe / home 'The Star Wars API'
 ssr_probe /docs docs '/api/people/{id}'
 ssr_probe /docs/mcp mcp "claude mcp add --transport http swapi-build $BASE/mcp"
+ssr_probe /faq faq 'How does swapi.build compare?'
 ssr_probe /about about 'Why build another one?'
 # The 404 draws nothing.
 n=$("${CURL[@]}" -H 'Accept: text/html' "$BASE/not-a-real-page" | grep -c 'data-ssr-')
@@ -524,6 +527,30 @@ done
   || fail "home JSON-LD" '"alternateName", "@type":"Person", "@type":"Dataset"' "missing:$missing"
 jsonld /docs/mcp | grep -qF '"@type":"BreadcrumbList"' && pass "/docs/mcp JSON-LD: BreadcrumbList" \
   || fail "/docs/mcp JSON-LD" '"@type":"BreadcrumbList"' "missing"
+# 2.15.0: /faq carries the dated comparison with the four other APIs and the
+# status-page row; its JSON-LD is a BreadcrumbList and never a FAQPage. /about
+# says "built to stay up for live demos", and "never go offline" is gone.
+faq_text=$("${CURL[@]}" -H 'Accept: text/html' "$BASE/faq" | main_text)
+missing=""
+for want in 'Checked on' 'swapi.dev' 'swapi.tech' 'swapi.info' 'Pipeworx' 'Public status page'; do
+  [[ "$faq_text" == *"$want"* ]] || missing="$missing \"$want\""
+done
+[ -z "$missing" ] && pass "/faq: Checked on, the four other APIs and Public status page" \
+  || fail "/faq comparison" "Checked on, swapi.dev, swapi.tech, swapi.info, Pipeworx, Public status page" "missing:$missing"
+ld_faq=$(jsonld /faq)
+faqpage=$(printf '%s' "$ld_faq" | grep -c '"@type":"FAQPage"')
+if printf '%s' "$ld_faq" | grep -qF '"@type":"BreadcrumbList"' && [ "$faqpage" = "0" ]; then
+  pass "/faq JSON-LD: BreadcrumbList and no FAQPage"
+else
+  fail "/faq JSON-LD" '"@type":"BreadcrumbList" and zero "@type":"FAQPage"' "FAQPage: $faqpage"
+fi
+about_text=$("${CURL[@]}" -H 'Accept: text/html' "$BASE/about" | main_text)
+offline=$(printf '%s' "$about_text" | grep -ci 'never go offline')
+if [[ "$about_text" == *"built to stay up for live demos"* ]] && [ "$offline" = "0" ]; then
+  pass "/about: \"built to stay up for live demos\", no \"never go offline\""
+else
+  fail "/about phrase" "\"built to stay up for live demos\" and zero \"never go offline\"" "never go offline: $offline"
+fi
 
 # --- Record content (2.12.0+) ------------------------------------------------------
 # Every record address of the six types is drawn by the one template of detail:
@@ -598,8 +625,13 @@ md_probe() {
 md_probe /index.html.md "$BASE/" 'The Star Wars API'
 md_probe /docs.md "$BASE/docs" '/api/people/{id}'
 md_probe /docs/mcp.md "$BASE/docs/mcp" "claude mcp add --transport http swapi-build $BASE/mcp"
+md_probe /faq.md "$BASE/faq" 'How does swapi.build compare?'
 md_probe /about.md "$BASE/about" 'Why build another one?'
 md_probe /resource/films/1.md "$BASE/resource/films/1" 'George Lucas'
+# 2.15.0: the comparison reaches an agent as a Markdown table.
+rows=$("${CURL[@]}" "$BASE/faq.md" | grep -c '^| ')
+[ "$rows" -ge 3 ] && pass "/faq.md carries the comparison as a table ($rows table lines)" \
+  || fail "/faq.md table" "lines that start with \"| \"" "$rows"
 # A record of a type that is not indexable keeps its page's indexing (noindex,
 # list canonical); a record that does not exist has no copy. One line, a pair.
 md_luke=$("${CURL[@]}" -w '\n%{http_code} %{content_type} %header{x-robots-tag}' "$BASE/resource/people/1.md")
@@ -635,16 +667,16 @@ full=$("${CURL[@]}" -H 'Accept: text/html' -w '\n%{http_code} %{content_type} %h
 full_meta="${full##*$'\n'}"; full_body="${full%$'\n'*}"
 full_missing=""
 for want in '# swapi.build' "$BASE/mcp" '## Records' 'The Star Wars API' '/api/people/{id}' \
-  'Connect your client' 'Why build another one?'; do
+  'Connect your client' 'How does swapi.build compare?' 'Why build another one?'; do
   printf '%s' "$full_body" | grep -qF "$want" || full_missing="$full_missing \"$want\""
 done
 full_lines=$(printf '%s\n' "$full_body" | grep -c '^> HTML version:')
 full_size=$(printf '%s' "$full_body" | wc -c | tr -d ' ')
-if [[ "$full_meta" == "200 text/plain"*" noindex" ]] && [ -z "$full_missing" ] && [ "$full_lines" = "4" ] \
+if [[ "$full_meta" == "200 text/plain"*" noindex" ]] && [ -z "$full_missing" ] && [ "$full_lines" = "5" ] \
    && [ "$full_size" -ge 20000 ] && [ "$full_size" -le 100000 ]; then
-  pass "/llms-full.txt: 200 text/plain, noindex, 4 copies, ## Records, $full_size bytes"
+  pass "/llms-full.txt: 200 text/plain, noindex, 5 copies, ## Records, $full_size bytes"
 else
-  fail "/llms-full.txt" "200 text/plain noindex, all phrases, 4 '> HTML version:' lines, 20000-100000 bytes" \
+  fail "/llms-full.txt" "200 text/plain noindex, all phrases, 5 '> HTML version:' lines, 20000-100000 bytes" \
     "$full_meta, missing:${full_missing:- none}, $full_lines lines, $full_size bytes"
 fi
 llms=$("${CURL[@]}" "$BASE/llms.txt")

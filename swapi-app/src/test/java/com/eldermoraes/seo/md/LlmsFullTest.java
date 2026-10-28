@@ -63,7 +63,8 @@ class LlmsFullTest {
     @Test
     void hasAPhraseOfEveryCopy() {
         String body = full();
-        for (String phrase : List.of("The Star Wars API", "/api/people/{id}", "Connect your client", "Why build another one?")) {
+        for (String phrase : List.of("The Star Wars API", "/api/people/{id}", "Connect your client", "How does swapi.build compare?",
+                "Why build another one?")) {
             Assertions.assertTrue(body.contains(phrase), phrase);
         }
     }
@@ -71,7 +72,7 @@ class LlmsFullTest {
     @Test
     void hasOneHtmlVersionLinePerCopy() {
         long lines = full().lines().filter(line -> line.startsWith("> HTML version:")).count();
-        Assertions.assertEquals(4, lines);
+        Assertions.assertEquals(5, lines);
     }
 
     @Test
@@ -80,10 +81,11 @@ class LlmsFullTest {
         int home = body.indexOf("> HTML version: https://preview.example/\n");
         int docs = body.indexOf("> HTML version: https://preview.example/docs\n");
         int mcp = body.indexOf("> HTML version: https://preview.example/docs/mcp\n");
+        int faq = body.indexOf("> HTML version: https://preview.example/faq\n");
         int about = body.indexOf("> HTML version: https://preview.example/about\n");
         int records = body.indexOf("\n## Records\n");
-        Assertions.assertTrue(0 < home && home < docs && docs < mcp && mcp < about && about < records,
-                home + " " + docs + " " + mcp + " " + about + " " + records);
+        Assertions.assertTrue(0 < home && home < docs && docs < mcp && mcp < faq && faq < about && about < records,
+                home + " " + docs + " " + mcp + " " + faq + " " + about + " " + records);
         Assertions.assertTrue(body.substring(0, home).endsWith("---\n\n"), "a separator before each copy");
     }
 

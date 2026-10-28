@@ -1,0 +1,42 @@
+    <div class="faq sw-inner-prose">
+      <h1 class="sw-page-title">FAQ</h1>
+      <p class="page-sub">Answers about swapi.build, the free Star Wars API and MCP server, and how it compares with other Star Wars APIs.</p>
+
+      {#for q in view.questions}
+      <section class="about-section faq-question" id="{q.id}">
+        <h2>{q.question}</h2>
+        {#for p in q.paragraphs}
+        <p>{p}</p>
+        {/for}
+        {#if q.links}
+        <ul class="faq-links">
+          {#for l in q.links}
+          <li><a href="{l.href}"{#if l.external} target="_blank" rel="noopener"{/if}>{l.text}</a></li>
+          {/for}
+        </ul>
+        {/if}
+      </section>
+      {/for}
+
+      <section class="about-section faq-compare" id="compare">
+        <h2>How does swapi.build compare?</h2>
+        <p>Checked on <time datetime="{view.checkedOn}">{view.checkedOnText}</time>. Every cell is what the API or its
+        documentation showed that day; the source of each one is in the notes below the table.</p>
+        <div class="sw-table-wrap">
+        <table class="sw-table faq-table">
+          <thead><tr><th scope="col">Feature</th>{#for c in view.columns}<th scope="col">{c}</th>{/for}</tr></thead>
+          <tbody>
+            {#for r in view.rows}
+            <tr><th scope="row">{r.label}</th>{#for v in r.values}<td>{v}</td>{/for}</tr>
+            {/for}
+          </tbody>
+        </table>
+        </div>
+        <h3>Sources</h3>
+        <ul class="faq-sources">
+          {#for r in view.rows}
+          <li>{r.label}: {#for s in r.sources}<a href="{s.url}" target="_blank" rel="noopener">{s.column}</a>{#if s_hasNext}, {/if}{/for} (checked on {r.checkedOn})</li>
+          {/for}
+        </ul>
+      </section>
+    </div>

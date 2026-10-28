@@ -1,0 +1,126 @@
+<main id="main-content" tabindex="-1" data-ssr-page="faq">    <div class="faq sw-inner-prose">
+      <h1 class="sw-page-title">FAQ</h1>
+      <p class="page-sub">Answers about swapi.build, the free Star Wars API and MCP server, and how it compares with other Star Wars APIs.</p>
+
+      <section class="about-section faq-question" id="what-is-swapi-build">
+        <h2>What is swapi.build?</h2>
+        <p>swapi.build is a free, open-source Star Wars API. It serves the same data two ways: a REST JSON API under /api and a remote MCP server at /mcp that AI agents call directly.</p>
+        <p>It is built with Quarkus and compiled with GraalVM into a native binary. Every page whose content the server draws is also plain Markdown at the same address plus .md.</p>
+        <ul class="faq-links">
+          <li><a href="/docs">REST documentation</a></li>
+          <li><a href="/docs/mcp">MCP server guide</a></li>
+        </ul>
+      </section>
+      <section class="about-section faq-question" id="free-and-api-key">
+        <h2>Is it free? Do I need an API key or an account?</h2>
+        <p>It is free. There is no API key, no account and no sign-up: every endpoint is public and read-only, on the REST API and on the MCP server.</p>
+      </section>
+      <section class="about-section faq-question" id="data">
+        <h2>What data does it have?</h2>
+        <p>Six types of records from the six films of Episodes I-VI: 6 films, 82 people, 60 planets, 37 species, 36 starships and 39 vehicles.</p>
+        <p>There is nothing from the sequels, the series or the games. swapi.dev, swapi.tech and swapi.info cover the same six films and 82 people; the comparison below has the details.</p>
+        <ul class="faq-links">
+          <li><a href="/faq#compare">Comparison</a></li>
+        </ul>
+      </section>
+      <section class="about-section faq-question" id="same-data-as-swapi">
+        <h2>Is the data the same as SWAPI&#39;s?</h2>
+        <p>Yes. The records come from the original SWAPI, created by Paul Hallett and maintained by Juriy Bura, with the same ids and fields. The links inside each record point to this API instead of swapi.dev.</p>
+        <ul class="faq-links">
+          <li><a href="https://swapi.dev" target="_blank" rel="noopener">The original SWAPI</a></li>
+          <li><a href="/about">About this project</a></li>
+        </ul>
+      </section>
+      <section class="about-section faq-question" id="different-from-swapi-dev">
+        <h2>How is it different from swapi.dev?</h2>
+        <p>Lists and searches return a plain JSON array of every matching record, like swapi.info, instead of pages of count, next and results.</p>
+        <p>It also has a remote MCP server for AI agents and a published OpenAPI contract, which swapi.dev does not list in its documentation. Both serve the same records with no API key.</p>
+        <ul class="faq-links">
+          <li><a href="/faq#compare">Comparison</a></li>
+        </ul>
+      </section>
+      <section class="about-section faq-question" id="film-ids">
+        <h2>Why is /api/films/1 A New Hope and not Episode I?</h2>
+        <p>Ids are record ids, not episode numbers. The films were added in release order, so /api/films/1 is A New Hope (Episode IV) and /api/films/4 is The Phantom Menace (Episode I).</p>
+        <p>Each film has an episode_id field with its episode number.</p>
+        <ul class="faq-links">
+          <li><a href="/api/films/1">A New Hope as JSON</a></li>
+        </ul>
+      </section>
+      <section class="about-section faq-question" id="connect-an-ai-agent">
+        <h2>How do I connect an AI agent?</h2>
+        <p>Point any MCP client at the Streamable HTTP endpoint /mcp on this site. There is no authentication.</p>
+        <p>The agent gets four tools (sw_search, sw_get, sw_list and sw_random), a resource for every record and the character_profile prompt.</p>
+        <ul class="faq-links">
+          <li><a href="/docs/mcp">MCP server guide</a></li>
+        </ul>
+      </section>
+      <section class="about-section faq-question" id="mcp-clients">
+        <h2>Which MCP clients work?</h2>
+        <p>The MCP server guide has step-by-step setup for Claude Code, Claude Desktop and claude.ai, OpenAI Codex, GitHub Copilot and IBM Bob. Any other client that speaks Streamable HTTP works with the same URL.</p>
+        <ul class="faq-links">
+          <li><a href="/docs/mcp">MCP server guide</a></li>
+        </ul>
+      </section>
+      <section class="about-section faq-question" id="openapi">
+        <h2>Is there an OpenAPI contract?</h2>
+        <p>Yes: /openapi.json is generated from the code of the version that is running, so it always matches the API. The REST documentation is drawn from it.</p>
+        <ul class="faq-links">
+          <li><a href="/openapi.json">OpenAPI contract</a></li>
+          <li><a href="/docs">REST documentation</a></li>
+        </ul>
+      </section>
+      <section class="about-section faq-question" id="is-it-up">
+        <h2>How do I know it is up?</h2>
+        <p>A public monitor in GitHub Actions is scheduled every 15 minutes: 646 of 647 scheduled checks of GET /api/people/1 passed between 19 October and 28 October 2026. The schedule is best-effort, so some 15-minute windows have no check, and the monitor only checks that one request, the certificate and DNS.</p>
+        <p>The usage stats page shows how many requests the site answered in the last 24 hours, 7 days and 30 days.</p>
+        <ul class="faq-links">
+          <li><a href="https://github.com/eldermoraes/swapi.build/actions/workflows/uptime.yml" target="_blank" rel="noopener">Monitor history</a></li>
+          <li><a href="/stats">Usage stats</a></li>
+        </ul>
+      </section>
+      <section class="about-section faq-question" id="use-the-code">
+        <h2>Can I use the code?</h2>
+        <p>Yes. The code is open source under the Apache License 2.0. The data comes from the original SWAPI (see the answer above), and all Star Wars content belongs to Lucasfilm Ltd. and Disney.</p>
+        <ul class="faq-links">
+          <li><a href="https://github.com/eldermoraes/swapi.build" target="_blank" rel="noopener">Source code</a></li>
+        </ul>
+      </section>
+
+      <section class="about-section faq-compare" id="compare">
+        <h2>How does swapi.build compare?</h2>
+        <p>Checked on <time datetime="2026-10-28">28 October 2026</time>. Every cell is what the API or its
+        documentation showed that day; the source of each one is in the notes below the table.</p>
+        <div class="sw-table-wrap">
+        <table class="sw-table faq-table">
+          <thead><tr><th scope="col">Feature</th><th scope="col">swapi.build</th><th scope="col">swapi.dev</th><th scope="col">swapi.tech</th><th scope="col">swapi.info</th><th scope="col">Pipeworx (swapi MCP)</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">REST JSON</th><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>n/a (MCP only)</td></tr>
+            <tr><th scope="row">List format</th><td>Plain JSON array of every record</td><td>Pages of 10: count, next, results</td><td>Pages of 10 with uid, name and url; full records with ?expanded=true</td><td>Plain JSON array of every record</td><td>n/a (MCP only)</td></tr>
+            <tr><th scope="row">Documented search parameter</th><td>?search=</td><td>?search=</td><td>?name=</td><td>None found (?search= returns the whole list)</td><td>search_people tool (people only)</td></tr>
+            <tr><th scope="row">Data scope</th><td>Episodes I-VI: 6 films, 82 people</td><td>Episodes I-VI: 6 films, 82 people</td><td>Episodes I-VI: 6 films, 82 people</td><td>Episodes I-VI: 6 films, 82 people</td><td>From swapi.py4e.com: 7 films (adds The Force Awakens), 87 people</td></tr>
+            <tr><th scope="row">Remote MCP server</th><td>Yes: /mcp, 4 tools</td><td>None found</td><td>None found</td><td>None found</td><td>Yes: 4 Star Wars tools, plus the general tools of the gateway</td></tr>
+            <tr><th scope="row">MCP resources and prompts</th><td>A resource for every record; 1 prompt</td><td>n/a (no MCP server found)</td><td>n/a (no MCP server found)</td><td>n/a (no MCP server found)</td><td>No resources; no Star Wars prompts</td></tr>
+            <tr><th scope="row">API key</th><td>Not required</td><td>Not required</td><td>Not required</td><td>Not required</td><td>Not required (anonymous tier)</td></tr>
+            <tr><th scope="row">OpenAPI contract</th><td>Published: /openapi.json</td><td>Not published</td><td>Not published</td><td>Not published</td><td>n/a (MCP only)</td></tr>
+            <tr><th scope="row">Open source and license</th><td>Yes, Apache 2.0</td><td>Yes, BSD 3-Clause</td><td>Yes, BSD 3-Clause</td><td>Yes, MIT</td><td>Yes, MIT</td></tr>
+            <tr><th scope="row">Public status page</th><td>None; public monitor history</td><td>None found</td><td>None found</td><td>Yes: status.swapi.info</td><td>Yes: pipeworx.io/status, for all Pipeworx services</td></tr>
+          </tbody>
+        </table>
+        </div>
+        <h3>Sources</h3>
+        <ul class="faq-sources">
+          <li>REST JSON: <a href="https://swapi.build/api/people/1" target="_blank" rel="noopener">swapi.build</a>, <a href="https://swapi.dev/api/people/1/" target="_blank" rel="noopener">swapi.dev</a>, <a href="https://www.swapi.tech/api/people/1" target="_blank" rel="noopener">swapi.tech</a>, <a href="https://swapi.info/api/people/1" target="_blank" rel="noopener">swapi.info</a>, <a href="https://gateway.pipeworx.io/swapi/mcp" target="_blank" rel="noopener">Pipeworx (swapi MCP)</a> (checked on 2026-10-28)</li>
+          <li>List format: <a href="https://swapi.build/api/people" target="_blank" rel="noopener">swapi.build</a>, <a href="https://swapi.dev/api/people/" target="_blank" rel="noopener">swapi.dev</a>, <a href="https://www.swapi.tech/api/people" target="_blank" rel="noopener">swapi.tech</a>, <a href="https://swapi.info/api/people" target="_blank" rel="noopener">swapi.info</a>, <a href="https://gateway.pipeworx.io/swapi/mcp" target="_blank" rel="noopener">Pipeworx (swapi MCP)</a> (checked on 2026-10-28)</li>
+          <li>Documented search parameter: <a href="https://swapi.build/api/people?search=sky" target="_blank" rel="noopener">swapi.build</a>, <a href="https://swapi.dev/documentation#search" target="_blank" rel="noopener">swapi.dev</a>, <a href="https://www.swapi.tech/documentation" target="_blank" rel="noopener">swapi.tech</a>, <a href="https://swapi.info/api/people?search=sky" target="_blank" rel="noopener">swapi.info</a>, <a href="https://gateway.pipeworx.io/swapi/mcp" target="_blank" rel="noopener">Pipeworx (swapi MCP)</a> (checked on 2026-10-28)</li>
+          <li>Data scope: <a href="https://swapi.build/api/people" target="_blank" rel="noopener">swapi.build</a>, <a href="https://swapi.dev/api/people/" target="_blank" rel="noopener">swapi.dev</a>, <a href="https://www.swapi.tech/api/people" target="_blank" rel="noopener">swapi.tech</a>, <a href="https://swapi.info/api/people" target="_blank" rel="noopener">swapi.info</a>, <a href="https://swapi.py4e.com/api/films/" target="_blank" rel="noopener">Pipeworx (swapi MCP)</a> (checked on 2026-10-28)</li>
+          <li>Remote MCP server: <a href="https://swapi.build/docs/mcp" target="_blank" rel="noopener">swapi.build</a>, <a href="https://swapi.dev/documentation" target="_blank" rel="noopener">swapi.dev</a>, <a href="https://www.swapi.tech/documentation" target="_blank" rel="noopener">swapi.tech</a>, <a href="https://swapi.info/documentation" target="_blank" rel="noopener">swapi.info</a>, <a href="https://gateway.pipeworx.io/swapi/mcp" target="_blank" rel="noopener">Pipeworx (swapi MCP)</a> (checked on 2026-10-28)</li>
+          <li>MCP resources and prompts: <a href="https://swapi.build/docs/mcp" target="_blank" rel="noopener">swapi.build</a>, <a href="https://swapi.dev/documentation" target="_blank" rel="noopener">swapi.dev</a>, <a href="https://www.swapi.tech/documentation" target="_blank" rel="noopener">swapi.tech</a>, <a href="https://swapi.info/documentation" target="_blank" rel="noopener">swapi.info</a>, <a href="https://gateway.pipeworx.io/swapi/mcp" target="_blank" rel="noopener">Pipeworx (swapi MCP)</a> (checked on 2026-10-28)</li>
+          <li>API key: <a href="https://swapi.build/api/people/1" target="_blank" rel="noopener">swapi.build</a>, <a href="https://swapi.dev/documentation#auth" target="_blank" rel="noopener">swapi.dev</a>, <a href="https://www.swapi.tech/documentation" target="_blank" rel="noopener">swapi.tech</a>, <a href="https://swapi.info/documentation" target="_blank" rel="noopener">swapi.info</a>, <a href="https://gateway.pipeworx.io/swapi/mcp" target="_blank" rel="noopener">Pipeworx (swapi MCP)</a> (checked on 2026-10-28)</li>
+          <li>OpenAPI contract: <a href="https://swapi.build/openapi.json" target="_blank" rel="noopener">swapi.build</a>, <a href="https://swapi.dev/documentation" target="_blank" rel="noopener">swapi.dev</a>, <a href="https://www.swapi.tech/openapi.json" target="_blank" rel="noopener">swapi.tech</a>, <a href="https://swapi.info/documentation" target="_blank" rel="noopener">swapi.info</a>, <a href="https://gateway.pipeworx.io/swapi/mcp" target="_blank" rel="noopener">Pipeworx (swapi MCP)</a> (checked on 2026-10-28)</li>
+          <li>Open source and license: <a href="https://github.com/eldermoraes/swapi.build/blob/main/LICENSE" target="_blank" rel="noopener">swapi.build</a>, <a href="https://github.com/Juriy/swapi/blob/master/LICENCE" target="_blank" rel="noopener">swapi.dev</a>, <a href="https://github.com/semperry/swapi/blob/main/LICENSE" target="_blank" rel="noopener">swapi.tech</a>, <a href="https://github.com/SivaramPg/swapi.info/blob/main/LICENSE" target="_blank" rel="noopener">swapi.info</a>, <a href="https://github.com/pipeworx-io/mcp-swapi/blob/main/LICENSE" target="_blank" rel="noopener">Pipeworx (swapi MCP)</a> (checked on 2026-10-28)</li>
+          <li>Public status page: <a href="https://github.com/eldermoraes/swapi.build/actions/workflows/uptime.yml" target="_blank" rel="noopener">swapi.build</a>, <a href="https://swapi.dev/documentation" target="_blank" rel="noopener">swapi.dev</a>, <a href="https://www.swapi.tech/documentation" target="_blank" rel="noopener">swapi.tech</a>, <a href="https://status.swapi.info" target="_blank" rel="noopener">swapi.info</a>, <a href="https://pipeworx.io/status" target="_blank" rel="noopener">Pipeworx (swapi MCP)</a> (checked on 2026-10-28)</li>
+        </ul>
+      </section>
+    </div>
+</main>

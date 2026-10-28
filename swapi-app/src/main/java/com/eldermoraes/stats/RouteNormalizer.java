@@ -25,9 +25,9 @@ public final class RouteNormalizer {
 
     private static final Set<String> FIXED = Set.of(
             "/", "/api", "/api/stats", "/mcp", "/openapi.json", "/robots.txt", "/sitemap.xml",
-            "/llms.txt", "/docs", "/docs/mcp", "/docs/webmcp", "/about", "/privacy", "/terms", "/stats",
+            "/llms.txt", "/docs", "/docs/mcp", "/docs/webmcp", "/faq", "/about", "/privacy", "/terms", "/stats",
             // 2.14.0 (slice G1): /llms-full.txt and the Markdown copies of the fixed pages.
-            "/llms-full.txt", "/index.html.md", "/docs.md", "/docs/mcp.md", "/about.md");
+            "/llms-full.txt", "/index.html.md", "/docs.md", "/docs/mcp.md", "/faq.md", "/about.md");
 
     private RouteNormalizer() {
     }

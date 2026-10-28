@@ -39,7 +39,7 @@ class SsrFixturesTest {
     Engine engine;
 
     @ParameterizedTest
-    @ValueSource(strings = {"home:/", "docs:/docs", "mcp:/docs/mcp", "about:/about"})
+    @ValueSource(strings = {"home:/", "docs:/docs", "mcp:/docs/mcp", "faq:/faq", "about:/about"})
     void theMainOfEachPageMatchesItsFixture(String spec) throws IOException {
         String[] parts = spec.split(":", 2);
         String body = given().accept("text/html")

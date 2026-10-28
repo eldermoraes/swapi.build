@@ -21,6 +21,9 @@ public final class SsrTemplates {
 
     public static native TemplateInstance mcp(McpView view);
 
+    /** The FAQ and its dated comparison (2.15.0), from seo/faq.json. */
+    public static native TemplateInstance faq(FaqView view);
+
     public static native TemplateInstance about();
 
     /** The template of detail (2.12.0): every record of the six types. */

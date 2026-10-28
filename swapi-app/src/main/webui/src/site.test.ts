@@ -22,11 +22,11 @@ describe('site.json on the client', () => {
   });
 
   // Slice E1 (2.11.0): the server draws the <main> of these four, and only these.
-  it('isServerRendered is true for home, docs, mcp and about only', () => {
+  it('isServerRendered is true for home, docs, mcp, faq (2.15.0) and about only', () => {
     const rendered = site.pages
       .filter((page) => isServerRendered(getRoute(page.path)))
       .map((page) => page.page);
-    expect(rendered).toEqual(['home', 'docs', 'mcp', 'about']);
+    expect(rendered).toEqual(['home', 'docs', 'mcp', 'faq', 'about']);
     expect(isServerRendered({ page: 'resource-detail', type: 'films', id: '1' })).toBe(false);
     expect(isServerRendered({ page: 'resource-list', type: 'films' })).toBe(false);
     expect(isServerRendered({ page: 'not-found' })).toBe(false);

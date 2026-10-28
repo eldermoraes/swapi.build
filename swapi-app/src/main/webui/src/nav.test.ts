@@ -7,6 +7,23 @@ function menuLinks(): HTMLAnchorElement[] {
   return [...doc.querySelectorAll<HTMLAnchorElement>('nav.sw-menu a.nav-link')];
 }
 
+describe('footer', () => {
+  // 2.15.0: the FAQ is linked from the footer, before Privacy Policy, and not from the top menu.
+  it('links the FAQ first in the legal line, as an internal link', () => {
+    const doc = new DOMParser().parseFromString(indexHtml, 'text/html');
+    const links = [...doc.querySelectorAll<HTMLAnchorElement>('footer .footer-legal a')];
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      '/faq',
+      '/privacy',
+      '/terms',
+      '/stats',
+    ]);
+    expect(links[0].textContent!.trim()).toBe('FAQ');
+    expect(links[0].hasAttribute('target')).toBe(false);
+    expect(menuLinks().map((a) => a.getAttribute('href'))).not.toContain('/faq');
+  });
+});
+
 describe('main navigation', () => {
   it('shows a Stats link to /stats right after Documentation, styled like the others', () => {
     const links = menuLinks();
@@ -32,6 +49,7 @@ describe('main navigation', () => {
     expect(activeNavHref('mcp')).toBe('/docs/mcp');
     expect(activeNavHref('about')).toBe('/about');
     expect(activeNavHref('privacy')).toBeNull();
+    expect(activeNavHref('faq')).toBeNull();
     expect(activeNavHref('resource-list')).toBeNull();
   });
 

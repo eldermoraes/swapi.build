@@ -1,5 +1,6 @@
 package com.eldermoraes.seo.ssr;
 
+import com.eldermoraes.seo.KnownEntities;
 import com.eldermoraes.seo.SeoMetadataRegistry;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -16,7 +17,7 @@ import java.util.Set;
 public class SsrPages {
 
     /** The pages this class draws; every page marked ssr in seo/site.json must be one. */
-    public static final Set<String> PAGES = Set.of("home", "docs", "mcp", "about");
+    public static final Set<String> PAGES = Set.of("home", "docs", "mcp", "faq", "about");
 
     @Inject
     OpenApiDocs openApi;
@@ -48,6 +49,26 @@ public class SsrPages {
     /** @param siteRoot the root of this request (PublicSiteUrlResolver.siteRoot), for the endpoint */
     public String mcp(String siteRoot) {
         return SsrTemplates.mcp(McpGuides.view(siteRoot + "/mcp")).render();
+    }
+
+    @Inject
+    FaqContent faqContent;
+
+    @Inject
+    KnownEntities known;
+
+    // /faq has no host in it either (its links are paths or https URLs): drawn
+    // once with the counts of the data and reused.
+    private volatile String faq;
+
+    /** The FAQ (2.15.0): the text of seo/faq.json with {count:type} filled from the data. */
+    public String faq() {
+        String html = faq;
+        if (html == null) {
+            html = SsrTemplates.faq(FaqView.of(faqContent.file(), type -> known.ids(type).size())).render();
+            faq = html;
+        }
+        return html;
     }
 
     public String about() {
