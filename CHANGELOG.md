@@ -16,6 +16,34 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.15.0] - 2026-10-28
+
+### Added
+
+- `/faq`, drawn on the server: eleven questions (free and no key, the data
+  and its counts, the credit to the original SWAPI, the difference from
+  swapi.dev, why `/api/films/1` is A New Hope, connecting an AI agent, the MCP
+  clients, the OpenAPI contract, how to know it is up, the license) and a
+  dated, sourced comparison with swapi.dev, swapi.tech, swapi.info and the
+  Pipeworx swapi MCP (`#compare`). Every cell has a value, an https source and
+  the day it was checked; the sources are links below the table. Availability
+  is a "Public status page" row, never a number; the one number, swapi.build's
+  own monitor, is in the prose of one answer with its method. The text lives
+  in `seo/faq.json` (no HTML; counts filled from the data), validated at
+  startup. JSON-LD: the BreadcrumbList, and no `FAQPage`.
+- `/faq.md`, its Markdown copy, with the comparison as a table.
+
+### Changed
+
+- The sitemap has 21 URLs (`/faq`).
+- The footer links the FAQ, before Privacy Policy.
+- `llms.txt` links the FAQ copy in `## Docs`; `/llms-full.txt` carries five
+  copies (the FAQ between `/docs/mcp` and `/about`).
+- `/about` no longer says the API would "never go offline": it is "built to
+  stay up for live demos", with a link to the public uptime monitor, and its
+  credits link the comparison. The README says the same.
+- `/stats` counts `/faq` under pages and `/faq.md` under SEO.
+
 ### Fixed
 
 - People records lacked the `vehicles` field that swapi.dev serves (Luke
@@ -962,7 +990,7 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.14.0...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.15.0...HEAD
 [2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
@@ -1012,5 +1040,6 @@ snapshot version is not a release. -->
 
 [2.12.1]: https://github.com/eldermoraes/swapi.build/compare/v2.12.0...v2.12.1
 
+[2.15.0]: https://github.com/eldermoraes/swapi.build/compare/v2.14.0...v2.15.0
 [2.14.0]: https://github.com/eldermoraes/swapi.build/compare/v2.13.0...v2.14.0
 [2.13.0]: https://github.com/eldermoraes/swapi.build/compare/v2.12.1...v2.13.0

@@ -193,10 +193,20 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   still answers `text/html` (a copy is never chosen by the `Accept`).
   `/docs.md` carries `Vary: Origin`. `/llms-full.txt` answers `200 text/plain`
   even to `Accept: text/html`, with `X-Robots-Tag: noindex`, `# swapi.build`,
-  `https://<host>/mcp`, `## Records`, the phrases of the four copies, exactly
-  four `> HTML version:` lines and between 20000 and 100000 bytes; `llms.txt`
-  links `https://<host>/llms-full.txt` and `https://<host>/docs/mcp.md`. Any
-  `FAIL` here after a deploy is an immediate rollback to 2.13.0.
+  `https://<host>/mcp`, `## Records`, the phrases of the copies, exactly
+  five `> HTML version:` lines (four before 2.15.0) and between 20000 and 100000
+  bytes; `llms.txt` links `https://<host>/llms-full.txt` and
+  `https://<host>/docs/mcp.md`. Any `FAIL` here after a deploy is an immediate
+  rollback to the previous version.
+- **FAQ (2.15.0+)**: `/faq` is drawn on the server (`data-ssr-page="faq"`, the
+  phrase `How does swapi.build compare?`) and its text has `Checked on`,
+  `swapi.dev`, `swapi.tech`, `swapi.info`, `Pipeworx` and `Public status page`;
+  its JSON-LD has a `BreadcrumbList` and zero `FAQPage`. The sitemap has 21
+  `<loc>` and lists `https://<host>/faq`. `/faq.md` answers `200 text/markdown`
+  with the phrase, the canonical `https://<host>/faq` and the comparison as a
+  table (lines that start with `| `). `/about` says `built to stay up for live
+  demos` and never `never go offline`. Any `FAIL` here after a deploy is an
+  immediate rollback to 2.14.0.
 - **Cold start**: the time of one request, informational only.
 - **MCP stateless**: a `tools/call` of `sw_get` with the 2026-07-28 headers and
   `_meta` returns `isError: false` and URLs on the host. `server/discover` and
@@ -306,6 +316,8 @@ applied there and verified with the probe on 2026-10-26 (18:25 BRT).
 | A page shows "This page could not be loaded" (2.11.0+) | Its render failed on the server, which then served the shell without the marker. The log has an `ERROR` from `ServerRendering` or `OpenApiDocs` naming the page, and the server-rendered content probe reads `FAIL`: roll back (see [5. Rollback](#5-rollback)). |
 | A `.md` copy answers HTML, or two `Cache-Control` headers (2.14.0+) | The `spa` filter of `application.properties` (`quarkus.http.filter.spa`) stamped the HTML policy on `/resource/{type}/{id}.md`, or a route before `SeoRoutes` answered it. `SeoRoutes` sets the copy's headers when they are written, so only its own `Cache-Control` stays (`MarkdownCopiesTest.recordCopyHasOneCacheControlTheMarkdownOne`); check that the running version is 2.14.0+ and that no new filter matches `.md`. |
 | A copy or `/llms-full.txt` answers `503 Markdown copy unavailable` (2.14.0+) | The render of that page failed (the log has an `ERROR` from `ServerRendering`, or `OpenApiDocs` for `/docs.md` without the OpenAPI document) or the converter threw (`ERROR Markdown copy of <page> failed`). One failed copy makes all of `/llms-full.txt` `503`. A `503` is never cached; the HTML of the page keeps working. Roll back (see [5. Rollback](#5-rollback)). |
+| A release stopped by the 180-day test (2.15.0+): `FaqFileTest.shippedFactsAreAtMost180DaysOld` fails in CI | A fact of the FAQ comparison (`seo/faq.json`) was checked more than 180 days ago. This is on purpose, even for a release that does not touch the FAQ: an old comparison is the reputational risk. Check each listed cell again (content type and body, not just the status), update its value and `checkedOn` (and the top `checkedOn`), recalculate the monitor count of "How do I know it is up?", and run the suite again. It never blocks a rollback: the `workflow_dispatch` with `sha256` skips test and build. |
+| The app does not start after a release that touched `seo/faq.json` (2.15.0+) | The file is invalid: the log names `seo/faq.json` and the key (an unknown key, a cell count that does not match the columns, a source that is not https, a date that is not `yyyy-mm-dd`, HTML in a text, or a marker other than `{count:<type>}`). `FaqFileTest.invalidFilesFailWithTheKey` covers each. Fix the file, or roll back with the command `swapi-update` printed. |
 | The app does not start after a release that touched the Qute templates (2.11.0+) | A page marked `ssr` in `seo/site.json` has no renderer or template; the log names it. The **Native smoke** step of the build should have stopped that release; if it reached the host, roll back with the command `swapi-update` printed. |
 
 ## WebMCP verification (2.5.0+)

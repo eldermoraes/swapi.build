@@ -46,6 +46,13 @@ cd swapi-app && ./mvnw test
 
 `ChangelogVersionTest` fails if steps 2 and 3 disagree. `OpenApiVersionTest` fails
 if the published `info.version` stops matching the pom.
+`FaqFileTest.shippedFactsAreAtMost180DaysOld` fails when a fact of the FAQ
+comparison (`seo/faq.json`) was checked more than 180 days ago, even in a release
+that does not touch the FAQ: check each cell again (content type and body, not
+just the status), update the values and dates, and only then release. A release
+that touches the FAQ also recalculates the monitor count of the answer "How do I
+know it is up?" (scheduled runs of the `Uptime` workflow:
+`gh run list --workflow Uptime --limit 1000 --json event,conclusion`).
 
 ## 5. Commit and merge to `main`
 
@@ -192,6 +199,14 @@ record addresses), and only after every probe line read `PASS`:
    curl -s -o /dev/null -w '%{http_code}\n' -X POST https://api.indexnow.org/indexnow \
      -H 'Content-Type: application/json; charset=utf-8' \
      -d '{"host":"swapi.build","key":"a5b77f3621994d6d59f6e5f3d85055a5","keyLocation":"https://swapi.build/a5b77f3621994d6d59f6e5f3d85055a5.txt","urlList":["https://swapi.build/resource/films/1","https://swapi.build/resource/films/2","https://swapi.build/resource/films/3","https://swapi.build/resource/films/4","https://swapi.build/resource/films/5","https://swapi.build/resource/films/6","https://swapi.build/sitemap.xml"]}'
+   ```
+
+   Example from 2.15.0 (the new `/faq` page):
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST https://api.indexnow.org/indexnow \
+     -H 'Content-Type: application/json; charset=utf-8' \
+     -d '{"host":"swapi.build","key":"a5b77f3621994d6d59f6e5f3d85055a5","keyLocation":"https://swapi.build/a5b77f3621994d6d59f6e5f3d85055a5.txt","urlList":["https://swapi.build/faq","https://swapi.build/sitemap.xml"]}'
    ```
 
    Expect `200` or `202`.
