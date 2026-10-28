@@ -150,10 +150,16 @@ class LlmsFullTest {
 
     @Test
     void cacheHoldsAtMostFourRoots() {
+        Assertions.assertEquals(4, MarkdownCopies.ROOTS);
         for (int i = 0; i < 6; i++) {
             copies.llmsFull("https://root" + i + ".example").orElseThrow();
         }
         Assertions.assertTrue(copies.cachedRoots() <= MarkdownCopies.ROOTS, "roots in the cache: " + copies.cachedRoots());
-        Assertions.assertEquals(4, MarkdownCopies.ROOTS);
+        // Least recently used goes first: the two oldest roots left, the four newest stayed.
+        Assertions.assertFalse(copies.isCached("https://root0.example", MarkdownCopies.LLMS_FULL));
+        Assertions.assertFalse(copies.isCached("https://root1.example", MarkdownCopies.LLMS_FULL));
+        for (int i = 2; i < 6; i++) {
+            Assertions.assertTrue(copies.isCached("https://root" + i + ".example", MarkdownCopies.LLMS_FULL), "root" + i);
+        }
     }
 }

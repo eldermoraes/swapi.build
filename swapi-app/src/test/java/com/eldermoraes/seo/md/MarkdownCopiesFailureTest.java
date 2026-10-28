@@ -59,7 +59,8 @@ class MarkdownCopiesFailureTest {
     public static class ThrowingCopies extends MarkdownCopies {
         @Override
         protected String convert(String main, String siteRoot) {
-            if (main.contains("data-ssr-page=\"about\"")) {
+            if (main.contains("data-ssr-page=\"about\"")
+                    || main.contains("data-ssr-type=\"people\" data-ssr-id=\"2\"")) {
                 throw new IllegalStateException("converter broken on purpose");
             }
             return super.convert(main, siteRoot);
@@ -105,9 +106,18 @@ class MarkdownCopiesFailureTest {
         Assertions.assertEquals(List.of("no-cache"), response.headers().getValues("Cache-Control"), path);
     }
 
-    private boolean logged(String name) {
-        return errors.stream().anyMatch(r -> String.valueOf(r.getMessage()).contains(name)
-                || String.valueOf(r.getParameters() == null ? "" : List.of(r.getParameters())).contains(name));
+    /** The message as written to the log (errorf: a printf format and its arguments). */
+    private static String text(LogRecord record) {
+        Object[] args = record.getParameters();
+        return args == null || args.length == 0 ? record.getMessage() : String.format(record.getMessage(), args);
+    }
+
+    /** An ERROR with exactly this message, carrying the exception thrown on purpose. */
+    private void assertLogged(String message, String cause) {
+        Assertions.assertTrue(errors.stream().anyMatch(r -> message.equals(text(r))
+                        && r.getThrown() != null && cause.equals(r.getThrown().getMessage())),
+                "no ERROR \"" + message + "\" caused by \"" + cause + "\": "
+                        + errors.stream().map(MarkdownCopiesFailureTest::text).toList());
     }
 
     @Test
@@ -115,14 +125,26 @@ class MarkdownCopiesFailureTest {
         Response response = given().when().get("/docs/mcp.md");
         assertUnavailable(response, "/docs/mcp.md");
         Assertions.assertEquals("Markdown copy unavailable\n", response.body().asString());
-        Assertions.assertTrue(logged("mcp"), "no ERROR naming the page");
+        assertLogged("Server render of page mcp failed: serving the shell without content", "broken on purpose");
     }
 
     @Test
     void copyIs503WhenTheConverterThrows() {
         assertUnavailable(given().when().get("/about.md"), "/about.md");
-        Assertions.assertTrue(logged("/about"), "no ERROR naming the page: "
-                + errors.stream().map(LogRecord::getMessage).toList());
+        assertLogged("Markdown copy of /about failed: answering 503", "converter broken on purpose");
+    }
+
+    // The spa filter stamps the HTML Cache-Control on /resource/{type}/{id}...:
+    // a failed record copy must still carry exactly one, no-cache.
+    @Test
+    void recordCopyIs503WithOneNoCacheWhenTheConverterThrows() {
+        Response response = given().when().get("/resource/people/2.md");
+        assertUnavailable(response, "/resource/people/2.md");
+        Assertions.assertEquals("Markdown copy unavailable\n", response.body().asString());
+        assertLogged("Markdown copy of /resource/people/2 failed: answering 503", "converter broken on purpose");
+        // HEAD takes the same road.
+        Assertions.assertEquals(List.of("no-cache"),
+                given().when().head("/resource/people/2.md").headers().getValues("Cache-Control"));
     }
 
     @Test
