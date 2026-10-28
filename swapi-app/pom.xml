@@ -63,6 +63,14 @@
             <artifactId>quarkus-qute</artifactId>
         </dependency>
         <dependency>
+            <!-- The Markdown copies of the server-rendered pages (2.14.0, seo/md/MarkdownFromHtml).
+                 Not in the Quarkus BOM: explicit version, released 2026-08-26. Its entity
+                 table is a class (EntitiesData), so nothing joins quarkus.native.resources.includes. -->
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.23.2</version>
+        </dependency>
+        <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-scheduler</artifactId>
         </dependency>
