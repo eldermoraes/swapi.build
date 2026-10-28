@@ -30,8 +30,14 @@ public final class RecordFields {
     public record Field(String key, String label, Function<SWObject, String> value) {
     }
 
-    /** A block of related records: the JSON key, the label, the type it points to, its URLs. */
-    public record Relation(String key, String label, String type, Function<SWObject, List<String>> urls) {
+    /**
+     * A block of related records: the JSON key, the label, the type it points to,
+     * whether the API holds one URL or an array (single: only the two homeworld
+     * relations; 2.13.0 MCP expand decides object or array by it, never by the
+     * data), its URLs.
+     */
+    public record Relation(String key, String label, String type, boolean single,
+                           Function<SWObject, List<String>> urls) {
     }
 
     private RecordFields() {
@@ -101,29 +107,29 @@ public final class RecordFields {
     public static List<Relation> relations(String type) {
         return switch (type) {
             case "people" -> List.of(
-                    new Relation("homeworld", "Homeworld", "planets", e -> one(((People) e).getHomeworld())),
-                    new Relation("films", "Films", "films", e -> many(((People) e).getFilms())),
-                    new Relation("species", "Species", "species", e -> many(((People) e).getSpecies())),
-                    new Relation("starships", "Starships", "starships", e -> many(((People) e).getStarships())));
+                    new Relation("homeworld", "Homeworld", "planets", true, e -> one(((People) e).getHomeworld())),
+                    new Relation("films", "Films", "films", false, e -> many(((People) e).getFilms())),
+                    new Relation("species", "Species", "species", false, e -> many(((People) e).getSpecies())),
+                    new Relation("starships", "Starships", "starships", false, e -> many(((People) e).getStarships())));
             case "films" -> List.of(
-                    new Relation("characters", "Characters", "people", e -> many(((Film) e).getCharacters())),
-                    new Relation("planets", "Planets", "planets", e -> many(((Film) e).getPlanets())),
-                    new Relation("starships", "Starships", "starships", e -> many(((Film) e).getStarships())),
-                    new Relation("vehicles", "Vehicles", "vehicles", e -> many(((Film) e).getVehicles())),
-                    new Relation("species", "Species", "species", e -> many(((Film) e).getSpecies())));
+                    new Relation("characters", "Characters", "people", false, e -> many(((Film) e).getCharacters())),
+                    new Relation("planets", "Planets", "planets", false, e -> many(((Film) e).getPlanets())),
+                    new Relation("starships", "Starships", "starships", false, e -> many(((Film) e).getStarships())),
+                    new Relation("vehicles", "Vehicles", "vehicles", false, e -> many(((Film) e).getVehicles())),
+                    new Relation("species", "Species", "species", false, e -> many(((Film) e).getSpecies())));
             case "planets" -> List.of(
-                    new Relation("residents", "Residents", "people", e -> many(((Planet) e).getResidents())),
-                    new Relation("films", "Films", "films", e -> many(((Planet) e).getFilms())));
+                    new Relation("residents", "Residents", "people", false, e -> many(((Planet) e).getResidents())),
+                    new Relation("films", "Films", "films", false, e -> many(((Planet) e).getFilms())));
             case "species" -> List.of(
-                    new Relation("homeworld", "Homeworld", "planets", e -> one(((Specie) e).getHomeworld())),
-                    new Relation("people", "People", "people", e -> many(((Specie) e).getPeople())),
-                    new Relation("films", "Films", "films", e -> many(((Specie) e).getFilms())));
+                    new Relation("homeworld", "Homeworld", "planets", true, e -> one(((Specie) e).getHomeworld())),
+                    new Relation("people", "People", "people", false, e -> many(((Specie) e).getPeople())),
+                    new Relation("films", "Films", "films", false, e -> many(((Specie) e).getFilms())));
             case "starships" -> List.of(
-                    new Relation("pilots", "Pilots", "people", e -> many(((Starship) e).getPilots())),
-                    new Relation("films", "Films", "films", e -> many(((Starship) e).getFilms())));
+                    new Relation("pilots", "Pilots", "people", false, e -> many(((Starship) e).getPilots())),
+                    new Relation("films", "Films", "films", false, e -> many(((Starship) e).getFilms())));
             case "vehicles" -> List.of(
-                    new Relation("pilots", "Pilots", "people", e -> many(((Vehicle) e).getPilots())),
-                    new Relation("films", "Films", "films", e -> many(((Vehicle) e).getFilms())));
+                    new Relation("pilots", "Pilots", "people", false, e -> many(((Vehicle) e).getPilots())),
+                    new Relation("films", "Films", "films", false, e -> many(((Vehicle) e).getFilms())));
             default -> throw new IllegalArgumentException("unknown record type: " + type);
         };
     }

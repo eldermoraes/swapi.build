@@ -111,6 +111,42 @@ public class SwapiToolsTest {
         assertFalse(instructions.contains("original"), instructions);
         assertTrue(instructions.contains("not an episode number"), instructions);
         assertFalse(instructions.contains("http"), instructions);
+        // 2.13.0 (slice F1): the instructions point at the new arguments.
+        assertTrue(instructions.contains("expand"), instructions);
+        assertTrue(instructions.contains("fields"), instructions);
+    }
+
+    // 2.13.0 (slice F1): Claude Code saves a tool result over about 50 000
+    // characters to a file and hands the model only the path; sw_get with
+    // expand ["*"] on a film passes that. The three tools that can answer that
+    // much declare the limit Claude Code reads; sw_random answers one record.
+    @Test
+    public void largeResultToolsDeclareMaxResultSizeChars() {
+        client().when()
+                .toolsList(page -> {
+                    for (String name : java.util.List.of("sw_list", "sw_get", "sw_search")) {
+                        var meta = page.findByName(name).meta();
+                        assertNotNull(meta, name + " has no _meta");
+                        assertEquals(100000, meta.getInteger("anthropic/maxResultSizeChars"), name + ": " + meta);
+                    }
+                    var random = page.findByName("sw_random").meta();
+                    assertTrue(random == null || !random.containsKey("anthropic/maxResultSizeChars"), "" + random);
+                })
+                .thenAssertResults();
+    }
+
+    // 2.13.0 (slice F1): each description names its new optional argument.
+    @Test
+    public void descriptionsNameTheNewArguments() {
+        client().when()
+                .toolsList(page -> {
+                    String get = page.findByName("sw_get").description();
+                    assertTrue(get.contains("expand"), get);
+                    assertTrue(get.contains("50 KB"), get);
+                    assertTrue(page.findByName("sw_list").description().contains("fields"));
+                    assertTrue(page.findByName("sw_search").description().contains("pass fields to shorten each entity"));
+                })
+                .thenAssertResults();
     }
 
     @Test

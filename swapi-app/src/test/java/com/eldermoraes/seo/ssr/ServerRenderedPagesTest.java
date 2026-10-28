@@ -83,6 +83,17 @@ class ServerRenderedPagesTest {
         for (String tool : new String[]{"sw_list", "sw_get", "sw_random", "sw_search"}) {
             assertTrue(main.contains("<code>" + tool + "</code>"), tool);
         }
+        // 2.13.0 (slice F1): the new arguments, the resources and the server prompt.
+        assertTrue(main.contains("<code>expand</code>"), main);
+        assertTrue(main.contains("<code>fields</code>"), main);
+        assertTrue(main.contains("swapi://people/1"), main);
+        assertTrue(main.contains("character_profile"), main);
+        // Claude Code splits slash-command arguments on whitespace: a one-word
+        // example, and the note that a full name needs a client sending JSON.
+        assertTrue(main.contains("<code>/mcp__swapi-build__character_profile Vader</code>"), main);
+        assertFalse(main.contains("character_profile Darth Vader"), main);
+        assertTrue(main.contains("arguments as JSON"), main);
+        assertTrue(main.contains("Who is Luke Skywalker? Include his homeworld and species."), main);
         assertTrue(main.contains("codex mcp add swapi-build --url https://preview.example/mcp"), "the Codex guide, an inactive panel");
         assertFalse(main.contains("https://swapi.build"), "no fixed domain");
         // Decision 1 (Elder, 27/10/2026): texts of the Vercel days.

@@ -65,6 +65,18 @@ class SeoRoutesTest {
         Assertions.assertFalse(body.contains("<resource>"), body);
     }
 
+    // 2.13.0 (slice F1): an agent that reads only this file learns the new
+    // arguments, the resources and the server prompt.
+    @Test
+    void llmsTxtMentionsExpandFieldsAndResources() {
+        String body = given().when().get("/llms.txt").then().statusCode(200).extract().body().asString();
+        Assertions.assertTrue(body.contains("expand"), body);
+        Assertions.assertTrue(body.contains("fields"), body);
+        Assertions.assertTrue(body.contains("swapi://people/1"), body);
+        Assertions.assertTrue(body.contains("character_profile"), body);
+        Assertions.assertFalse(body.contains("<resource>"), body);
+    }
+
     // Changes on purpose in 2.11.0: /docs and /docs/mcp come with their content
     // in the HTML, so the file no longer warns that they need JavaScript.
     @Test

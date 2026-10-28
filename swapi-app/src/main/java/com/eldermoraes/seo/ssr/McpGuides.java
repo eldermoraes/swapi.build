@@ -18,6 +18,7 @@ public final class McpGuides {
 
     static final List<String> PROMPTS = List.of(
             "Using swapi-build, list every film Luke Skywalker appears in.",
+            "Who is Luke Skywalker? Include his homeworld and species.",
             "Pick a random starship from swapi-build and compare its specs with the Millennium Falcon.",
             "Search swapi-build for planets matching \"Tatooine\" and summarize their climate and population.");
 

@@ -185,29 +185,49 @@ class McpListenLimitTest {
         assertTrue(body.getJsonObject("error").getString("message").contains("stateless"), r.body());
     }
 
+    // 2.13.0 (slice F1): swapi://people/1 became a resource, so the unknown
+    // URI is a record that does not exist.
     @Test
     void sessionSubscribeToAnUnknownUriIsNotFound() throws Exception {
         String session = openSession();
         HttpResponse<String> r = sendWithDeadline(sessionPost(session, """
-                {"jsonrpc":"2.0","id":6,"method":"resources/subscribe","params":{"uri":"swapi://people/1"}}
+                {"jsonrpc":"2.0","id":6,"method":"resources/subscribe","params":{"uri":"swapi://people/9999"}}
                 """).build(), DEADLINE_MS);
         assertEquals(200, r.statusCode(), r.body());
         JsonObject body = new JsonObject(r.body());
         assertEquals(-32002, body.getJsonObject("error").getInteger("code"), r.body());
-        assertTrue(body.getJsonObject("error").getString("message").contains("swapi://people/1"), r.body());
+        assertTrue(body.getJsonObject("error").getString("message").contains("swapi://people/9999"), r.body());
         assertEquals(6, body.getInteger("id"));
         HttpResponse<String> unsubscribe = sendWithDeadline(sessionPost(session, """
-                {"jsonrpc":"2.0","id":7,"method":"resources/unsubscribe","params":{"uri":"swapi://people/1"}}
+                {"jsonrpc":"2.0","id":7,"method":"resources/unsubscribe","params":{"uri":"swapi://people/9999"}}
                 """).build(), DEADLINE_MS);
         assertEquals(-32002, new JsonObject(unsubscribe.body()).getJsonObject("error").getInteger("code"),
                 unsubscribe.body());
     }
 
+    // 2.13.0 (slice F1): a subscribe to a real resource is accepted ({}) and
+    // still leaves nothing in the extension's subscriber map.
+    @Test
+    void sessionSubscribeToAKnownUriSucceedsWithoutState() throws Exception {
+        Map<?, ?> subscribers = subscribers();
+        String session = openSession();
+        for (String uri : java.util.List.of("swapi://people/1", "swapi://films")) {
+            HttpResponse<String> r = sendWithDeadline(sessionPost(session, """
+                    {"jsonrpc":"2.0","id":14,"method":"resources/subscribe","params":{"uri":"%s"}}
+                    """.formatted(uri)).build(), DEADLINE_MS);
+            assertEquals(200, r.statusCode(), r.body());
+            JsonObject body = new JsonObject(r.body());
+            assertEquals(new JsonObject(), body.getJsonObject("result"), r.body());
+            assertEquals(14, body.getInteger("id"));
+        }
+        assertTrue(subscribers.isEmpty(), "the extension recorded subscribers for " + subscribers.keySet());
+    }
+
     // The state itself, not a log line: ResourceManagerImpl keeps the
     // subscribers in uriToSubscribers (a map per URI, never cleaned when the
     // session dies). The extension only records a subscriber for a resource it
-    // knows, and 2.12.1 registers none, so the test registers one for the
-    // duration: without the filter, 100 subscribes would leave 100 ids there.
+    // knows; the test registers its own for the duration (2.12.1 had none):
+    // without the filter, 100 subscribes would leave 100 ids there.
     @Test
     void sessionSubscribeKeepsNoState() throws Exception {
         String uri = "swapi://test/keeps-no-state";

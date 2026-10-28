@@ -15,9 +15,10 @@
 # main_text the deploy probes use). Since 2.12.1, MCP too (mcp_probe): tools/list
 # with the four tools, sw_get PEOPLE 1, subscriptions/listen answered within 5 s
 # with -32601 (McpTransportFilter reads the body: a path new to the native
-# image), an empty resources/list and, in a 2025-11-25 session, the listen
-# with the method only in the body and a resources/subscribe (-32002), each
-# within 5 s. Content only: without Caddy in front,
+# image) and, in a 2025-11-25 session, the listen with the method only in the
+# body and a resources/subscribe to an unknown URI (-32002), each within 5 s.
+# Since 2.13.0: sw_get with expand, sw_list with fields, resources/list and
+# resources/read swapi://people/1, prompts/get. Content only: without Caddy in front,
 # the poisoning checks belong to verify-deploy.sh. Also run against the jar and
 # the local native build in the release rehearsal (docs/RELEASE.md).
 set -u
@@ -102,13 +103,31 @@ mcp_probe() {
 four_tools() { [ "$(grep -o '"name":"sw_[a-z]*"' | wc -l | tr -d ' ')" = "4" ]; }
 has_luke() { grep -qF 'Luke Skywalker'; }
 listen_refused() { local b; b=$(cat); printf '%s' "$b" | grep -qF '"code":-32601' && printf '%s' "$b" | grep -qF 'subscriptions/listen'; }
-no_resources() { grep -qF '"resources":[]'; }
 mcp_probe "MCP tools/list: the four sw_ tools" tools/list '' '' 20 four_tools '4 "name":"sw_..." entries'
 mcp_probe "MCP sw_get PEOPLE 1: Luke Skywalker" tools/call \
   '"name":"sw_get","arguments":{"resource":"PEOPLE","id":1}' sw_get 20 has_luke 'Luke Skywalker'
 mcp_probe "MCP subscriptions/listen answered within 5 s: -32601" subscriptions/listen \
   '"notifications":{"toolsListChanged":true}' '' 5 listen_refused 'curl ends, -32601 citing subscriptions/listen'
-mcp_probe "MCP resources/list: empty" resources/list '' '' 20 no_resources '"resources":[]'
+# 2.13.0+: expand and fields (RecordExpansion builds its valid fields at
+# startup, JSON-P projects), the resources registered by the ResourceManager
+# at startup, and the prompt: paths new to the native image.
+expanded_tatooine() { local b; b=$(cat); printf '%s' "$b" | grep -qF 'expanded' && printf '%s' "$b" | grep -qF 'Tatooine'; }
+compact_index() { local b; b=$(cat); [ "${#b}" -lt 10000 ] && printf '%s' "$b" | grep -qF 'Luke Skywalker' \
+  && ! printf '%s' "$b" | grep -qF 'hair_color'; }
+lists_luke() { grep -qF '"uri":"swapi://people/1"'; }
+vader_profile() { local b; b=$(cat); printf '%s' "$b" | grep -qF 'sw_search' && printf '%s' "$b" | grep -qF 'Darth Vader'; }
+mcp_probe "MCP sw_get expand [homeworld]: Tatooine" tools/call \
+  '"name":"sw_get","arguments":{"resource":"PEOPLE","id":1,"expand":["homeworld"]}' sw_get 20 expanded_tatooine \
+  'expanded with Tatooine'
+mcp_probe "MCP sw_list PEOPLE fields [name]: a compact index" tools/call \
+  '"name":"sw_list","arguments":{"resource":"PEOPLE","fields":["name"]}' sw_list 20 compact_index \
+  'under 10000 bytes, Luke Skywalker, no hair_color'
+mcp_probe "MCP resources/list: swapi://people/1" resources/list '' '' 20 lists_luke '"uri":"swapi://people/1"'
+mcp_probe "MCP resources/read swapi://people/1: Luke Skywalker" resources/read '"uri":"swapi://people/1"' \
+  'swapi://people/1' 20 has_luke 'Luke Skywalker'
+mcp_probe "MCP prompts/get character_profile: Darth Vader" prompts/get \
+  '"name":"character_profile","arguments":{"name":"Darth Vader"}' character_profile 20 vader_profile \
+  'sw_search and Darth Vader'
 
 # The branch only the filter has: a 2025-11-25 session, the listen with the
 # method only in the body (no Mcp-Method) and a subscribe that the extension
@@ -129,16 +148,17 @@ session_probe() {
     fail "$label" "$expected" "curl exit $rc, $(printf '%s' "$resp" | head -c 160)"
   fi
 }
-not_found() { local b; b=$(cat); printf '%s' "$b" | grep -qF '"code":-32002' && printf '%s' "$b" | grep -qF 'swapi://people/1'; }
+# 2.13.0: swapi://people/1 is a resource; the unknown URI is people/9999.
+not_found() { local b; b=$(cat); printf '%s' "$b" | grep -qF '"code":-32002' && printf '%s' "$b" | grep -qF 'swapi://people/9999'; }
 if [ -z "$sid" ]; then
   fail "MCP session probes" "a session id on initialize 2025-11-25" "none (probes NOT executed)"
 else
   session_probe "MCP session listen, method only in the body: -32601 within 5 s" \
     '{"jsonrpc":"2.0","id":42,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true}}}' \
     listen_refused 'curl ends, -32601 citing subscriptions/listen'
-  session_probe "MCP session resources/subscribe: -32002 within 5 s" \
-    '{"jsonrpc":"2.0","id":43,"method":"resources/subscribe","params":{"uri":"swapi://people/1"}}' \
-    not_found '-32002 citing swapi://people/1'
+  session_probe "MCP session resources/subscribe unknown URI: -32002 within 5 s" \
+    '{"jsonrpc":"2.0","id":43,"method":"resources/subscribe","params":{"uri":"swapi://people/9999"}}' \
+    not_found '-32002 citing swapi://people/9999'
 fi
 
 echo

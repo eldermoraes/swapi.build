@@ -195,7 +195,11 @@ public class SeoRoutes {
             > people, films, planets, species, starships and vehicles. No API key, no sign-up.
 
             - Connect: `claude mcp add --transport http swapi-build {base}/mcp`; any other MCP client:
-              Streamable HTTP URL `{base}/mcp`, no auth. Tools: sw_search, sw_get, sw_list, sw_random.
+              Streamable HTTP URL `{base}/mcp`, no auth. Tools: sw_search, sw_get, sw_list, sw_random;
+              sw_get takes an optional `expand` (related records in the same call, e.g. ["homeworld"]),
+              sw_list and sw_search an optional `fields` (e.g. ["name"] for a compact index).
+            - MCP resources: `swapi://people` (index) and `swapi://people/1` (one record), the same for
+              films, planets, species, starships and vehicles. MCP prompt: `character_profile` (a name).
             - REST: `{base}/api/{resource}`, `{base}/api/{resource}/{id}`, `{base}/api/{resource}/random`
               and `{base}/api/{resource}?search={text}`; resources: people, films, planets, species,
               starships, vehicles.

@@ -83,4 +83,61 @@ public class ConcurrentBaseUrlTest {
             pool.shutdown();
         }
     }
+
+    private static final String STATELESS_META = """
+            "_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28",
+              "io.modelcontextprotocol/clientInfo":{"name":"concurrent-test","version":"1.0"},
+              "io.modelcontextprotocol/clientCapabilities":{}}""";
+
+    // 2.13.0 (slice F1): MCP tools (with expand, which reads related records)
+    // and resource reads set RequestBaseUrl through withBaseUrl on pooled
+    // threads. 200 of each, hosts alternated: each body carries only its own
+    // host, for the record and for the expanded homeworld.
+    @Test
+    public void concurrentMcpCallsKeepTheirOwnHost() throws Exception {
+        int rounds = 400;
+        ExecutorService pool = Executors.newFixedThreadPool(16);
+        try {
+            List<Future<String>> results = new ArrayList<>();
+            for (int i = 0; i < rounds; i++) {
+                final String host = (i % 2 == 0) ? "a.example" : "b.example";
+                final String other = (i % 2 == 0) ? "b.example" : "a.example";
+                final boolean tool = (i / 2) % 2 == 0;
+                results.add(pool.submit(() -> {
+                    String body = given()
+                            .contentType("application/json")
+                            .accept("application/json, text/event-stream")
+                            .header("X-Forwarded-Proto", "https")
+                            .header("X-Forwarded-Host", host)
+                            .header("MCP-Protocol-Version", "2026-07-28")
+                            .header("Mcp-Method", tool ? "tools/call" : "resources/read")
+                            .header("Mcp-Name", tool ? "sw_get" : "swapi://people/1")
+                            .body(tool
+                                    ? """
+                                      {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"sw_get",
+                                       "arguments":{"resource":"PEOPLE","id":1,"expand":["homeworld"]},%s}}
+                                      """.formatted(STATELESS_META)
+                                    : """
+                                      {"jsonrpc":"2.0","id":1,"method":"resources/read",
+                                       "params":{"uri":"swapi://people/1",%s}}
+                                      """.formatted(STATELESS_META))
+                            .when().post("/mcp")
+                            .then().statusCode(200)
+                            .extract().asString();
+                    boolean ok = body.contains("https://" + host + "/api/people/1")
+                            && body.contains("https://" + host + "/api/planets/1")
+                            && !body.contains(other)
+                            && (!tool || body.contains("expanded"));
+                    return ok ? "" : (tool ? "tools/call" : "resources/read") + " on " + host + ": "
+                            + body.substring(0, Math.min(200, body.length()));
+                }));
+            }
+            for (Future<String> f : results) {
+                String wrong = f.get(60, TimeUnit.SECONDS);
+                assertTrue(wrong.isEmpty(), "response contaminated: " + wrong);
+            }
+        } finally {
+            pool.shutdown();
+        }
+    }
 }
