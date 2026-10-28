@@ -18,7 +18,9 @@
 # image) and, in a 2025-11-25 session, the listen with the method only in the
 # body and a resources/subscribe to an unknown URI (-32002), each within 5 s.
 # Since 2.13.0: sw_get with expand, sw_list with fields, resources/list and
-# resources/read swapi://people/1, prompts/get. Content only: without Caddy in front,
+# resources/read swapi://people/1, prompts/get. Since 2.14.0 (md_probe): the
+# Markdown copies /docs/mcp.md and /resource/films/1.md and /llms-full.txt
+# (## Records, the four copies). Content only: without Caddy in front,
 # the poisoning checks belong to verify-deploy.sh. Also run against the jar and
 # the local native build in the release rehearsal (docs/RELEASE.md).
 set -u
@@ -81,6 +83,35 @@ page_probe /about about 'Why build another one?'
 # views (RecordViews, the entity getters) are new to the native image.
 page_probe /resource/films/1 resource-detail 'George Lucas'
 page_probe /resource/people/1 resource-detail 'Luke Skywalker'
+
+# 2.14.0+: the Markdown copies (jsoup converts the drawn <main>: new code in the
+# native image) and /llms-full.txt, which joins them.
+md_probe() {
+  local p="$1" phrase="$2" got meta body
+  got=$("${CURL[@]}" -w '\n%{http_code} %{content_type}' "$BASE$p")
+  meta="${got##*$'\n'}"; body="${got%$'\n'*}"
+  if [[ "$meta" == "200 text/markdown"* ]] && printf '%s' "$body" | grep -qF "$phrase" \
+     && ! printf '%s' "$body" | grep -qF '<main'; then
+    pass "$p -> text/markdown with \"$phrase\", no <main"
+  else
+    fail "$p" "200 text/markdown, \"$phrase\", no <main" "$meta"
+  fi
+}
+md_probe /docs/mcp.md "claude mcp add --transport http swapi-build $BASE/mcp"
+md_probe /resource/films/1.md 'George Lucas'
+full=$("${CURL[@]}" -w '\n%{http_code} %{content_type}' "$BASE/llms-full.txt")
+full_meta="${full##*$'\n'}"; full="${full%$'\n'*}"
+full_missing=""
+for want in '## Records' 'The Star Wars API' '/api/people/{id}' 'Connect your client' 'Why build another one?'; do
+  printf '%s' "$full" | grep -qF "$want" || full_missing="$full_missing \"$want\""
+done
+full_lines=$(printf '%s\n' "$full" | grep -c '^> HTML version:')
+if [[ "$full_meta" == "200 text/plain"* ]] && [ -z "$full_missing" ] && [ "$full_lines" = "4" ]; then
+  pass "/llms-full.txt -> text/plain, ## Records, the four copies"
+else
+  fail "/llms-full.txt" "200 text/plain, ## Records, the four phrases, 4 '> HTML version:' lines" \
+    "$full_meta, missing:${full_missing:- none}, $full_lines lines"
+fi
 
 # 2.12.1+: the MCP endpoint, stateless, one request per check.
 # mcp_probe <label> <method> <params without _meta, or ''> <Mcp-Name or ''> <max s> <check> <expected>

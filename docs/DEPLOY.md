@@ -177,6 +177,26 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   samples are read from the markup of `<main>` (`main_html` in
   `scripts/lib/main-text.sh`), the text from `main_text`. Any `FAIL` here after
   a deploy is an immediate rollback to 2.11.0.
+- **Markdown copies and `/llms-full.txt` (2.14.0+)**: every page whose `<main>`
+  the server draws has a Markdown copy at its address plus `.md`, converted
+  from that `<main>`. `/index.html.md` (the home), `/docs.md`, `/docs/mcp.md`,
+  `/about.md` and `/resource/films/1.md` answer `200 text/markdown` with the
+  phrase of their page (the `/docs/mcp.md` one carries the host, the film
+  `George Lucas`), no `<main` and no `<html` (the shell never leaks),
+  `Link: <https://<host>/<page>>; rel="canonical"` (the home: `https://<host>/`)
+  and no `X-Robots-Tag`. In one line, a pair: `/resource/people/1.md` answers
+  `200` with `Luke Skywalker`, `X-Robots-Tag: noindex` and the canonical
+  `/resource/people` (the indexing of its page), and `/resource/people/9999.md`
+  answers `404`. `/docs/webmcp.md` answers `404` (no server content, no copy).
+  `GET /docs` carries `Link: </docs.md>; rel="alternate"; type="text/markdown"`,
+  `GET /docs/webmcp` no `Link`, and `GET /docs` with `Accept: text/markdown`
+  still answers `text/html` (a copy is never chosen by the `Accept`).
+  `/docs.md` carries `Vary: Origin`. `/llms-full.txt` answers `200 text/plain`
+  even to `Accept: text/html`, with `X-Robots-Tag: noindex`, `# swapi.build`,
+  `https://<host>/mcp`, `## Records`, the phrases of the four copies, exactly
+  four `> HTML version:` lines and between 20000 and 100000 bytes; `llms.txt`
+  links `https://<host>/llms-full.txt` and `https://<host>/docs/mcp.md`. Any
+  `FAIL` here after a deploy is an immediate rollback to 2.13.0.
 - **Cold start**: the time of one request, informational only.
 - **MCP stateless**: a `tools/call` of `sw_get` with the 2026-07-28 headers and
   `_meta` returns `isError: false` and URLs on the host. `server/discover` and
@@ -229,7 +249,9 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   overwrites the header) or the record pages `/resource/films/1` and
   `/resource/people/1` (2.12.0+, an indexable type and a `noindex` one), and an
   RFC 7239 `Forwarded` header is ignored by the app, on `/api/people/3` and,
-  from 2.12.0, on `/resource/films/1`.
+  from 2.12.0, on `/resource/films/1`. From 2.14.0, `/docs/mcp.md` and
+  `/llms-full.txt` with `X-Forwarded-Host: evil.example` carry
+  `https://<host>/mcp` and no `evil.example` in the same answer.
 - **Caddy headers**: `Strict-Transport-Security: max-age=63072000` and no
   `Server` header.
 
@@ -255,7 +277,9 @@ JavaScript that arrives through `www`: it reads the `Location` of
 `https://swapi.build/`), wanting the `claude mcp add` line with the apex
 endpoint inside a `<main>` of at least 200 characters. From 2.12.0 it follows
 `GET /resource/films/1` the same way, wanting `George Lucas` (the record page
-is the one an agent is most often handed). A `FAIL` there with the
+is the one an agent is most often handed). From 2.14.0 `GET /docs/mcp.md`
+must answer `308` to `https://swapi.build/docs/mcp.md` and, followed once,
+`text/markdown` with the same `claude mcp add` line. A `FAIL` there with the
 `origin` mode all `PASS`: run the `redirect` mode once more; if it repeats,
 roll back.
 
@@ -280,6 +304,8 @@ applied there and verified with the probe on 2026-10-26 (18:25 BRT).
 | The app does not start after a release that touched `seo/site.json` (2.10.0+) | The file is invalid (the log names the key and the reason, for example a placeholder that is not a field of its type) or it is missing from `quarkus.native.resources.includes` in `application.properties` (the log names `seo/site.json`). The app refuses to start rather than serve pages without metadata. `swapi-update` has already switched the link and restarted the service when it reports "is not answering": the site is down until you run the rollback command it printed. |
 | A page shows its text, but the tabs, the copy buttons or "Try it" do not respond (2.11.0+) | The client code of that page did not bind: the `data-ssr-page` marker of the `<main>` did not match the route the client resolved. The browser console says which; compare the marker with the page's key in `seo/site.json`. |
 | A page shows "This page could not be loaded" (2.11.0+) | Its render failed on the server, which then served the shell without the marker. The log has an `ERROR` from `ServerRendering` or `OpenApiDocs` naming the page, and the server-rendered content probe reads `FAIL`: roll back (see [5. Rollback](#5-rollback)). |
+| A `.md` copy answers HTML, or two `Cache-Control` headers (2.14.0+) | The `spa` filter of `application.properties` (`quarkus.http.filter.spa`) stamped the HTML policy on `/resource/{type}/{id}.md`, or a route before `SeoRoutes` answered it. `SeoRoutes` sets the copy's headers when they are written, so only its own `Cache-Control` stays (`MarkdownCopiesTest.recordCopyHasOneCacheControlTheMarkdownOne`); check that the running version is 2.14.0+ and that no new filter matches `.md`. |
+| A copy or `/llms-full.txt` answers `503 Markdown copy unavailable` (2.14.0+) | The render of that page failed (the log has an `ERROR` from `ServerRendering`, or `OpenApiDocs` for `/docs.md` without the OpenAPI document) or the converter threw (`ERROR Markdown copy of <page> failed`). One failed copy makes all of `/llms-full.txt` `503`. A `503` is never cached; the HTML of the page keeps working. Roll back (see [5. Rollback](#5-rollback)). |
 | The app does not start after a release that touched the Qute templates (2.11.0+) | A page marked `ssr` in `seo/site.json` has no renderer or template; the log names it. The **Native smoke** step of the build should have stopped that release; if it reached the host, roll back with the command `swapi-update` printed. |
 
 ## WebMCP verification (2.5.0+)

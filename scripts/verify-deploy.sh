@@ -16,6 +16,12 @@
 #                                           and people/1 with marker, name, links and the
 #                                           samples on the host; people still noindex; the
 #                                           poisoning pairs of both and Forwarded on films/1),
+#                                           the Markdown copies (2.14.0+: /index.html.md,
+#                                           /docs.md, /docs/mcp.md, /about.md and record
+#                                           copies, text/markdown with canonical Link and the
+#                                           page's indexing; the HTML Link alternate;
+#                                           /llms-full.txt with the four copies and the record
+#                                           index, noindex, 20-100 KB; their poisoning pairs),
 #                                           the trailing-slash 301, and the Caddy headers
 #                                           (HSTS, no Server)
 #        verify-deploy.sh redirect <from-host> <to-host>
@@ -28,7 +34,9 @@
 #                                           Location exactly https://<to-host> + the same path
 #                                           and query; and (2.11.0+) /docs/mcp, and (2.12.0+)
 #                                           /resource/films/1, followed once to <to-host> must
-#                                           give their text without JavaScript
+#                                           give their text without JavaScript; (2.14.0+)
+#                                           /docs/mcp.md answers 308 and, followed once,
+#                                           text/markdown with the connection line
 #
 # The `preview` and `prod` modes probed the former Vercel deployments and were
 # removed with them.
@@ -119,6 +127,24 @@ if [ "$MODE" = "redirect" ]; then
   follow_probe "/docs/mcp" "claude mcp add --transport http swapi-build https://${TO}/mcp"
   # 2.12.0+: a record too, the page an agent is most often handed.
   follow_probe "/resource/films/1" "George Lucas"
+
+  # 2.14.0+: the Markdown copy too: 308 to the apex, and followed once it gives
+  # text/markdown with the connection line.
+  redirect_probe GET "/docs/mcp.md"
+  md_location=$("${CURL[@]}" -o /dev/null -w '%header{location}' "${FROM_BASE}/docs/mcp.md")
+  case "$md_location" in
+    "https://${TO}/"*)
+      md_page=$("${CURL[@]}" -w '\n%{http_code} %{content_type}' "${SCHEME}://${md_location#https://}")
+      md_meta="${md_page##*$'\n'}"
+      if [[ "$md_meta" == "200 text/markdown"* ]] \
+         && printf '%s' "${md_page%$'\n'*}" | grep -qF "claude mcp add --transport http swapi-build https://${TO}/mcp"; then
+        pass "follow /docs/mcp.md -> $md_location: 200 text/markdown with the connection line"
+      else
+        fail "follow /docs/mcp.md" "200 text/markdown with claude mcp add ... https://${TO}/mcp" "$md_meta"
+      fi
+      ;;
+    *) fail "follow /docs/mcp.md" "Location on https://${TO}/" "${md_location:-none}" ;;
+  esac
 
   echo
   if [ "$FAILURES" -eq 0 ]; then
@@ -546,6 +572,88 @@ n=$("${CURL[@]}" -H 'Accept: text/html' "$BASE/resource/people/9999" | grep -c '
 jsonld /resource/films/1 | grep -qF '"@type":"BreadcrumbList"' && pass "/resource/films/1 JSON-LD: BreadcrumbList" \
   || fail "/resource/films/1 JSON-LD" '"@type":"BreadcrumbList"' "missing"
 
+# --- Markdown copies and /llms-full.txt (2.14.0+) ----------------------------------
+# Every page whose <main> the server draws has a Markdown copy at its address
+# plus .md (the home's is /index.html.md), converted from that <main> (jsoup).
+# Each copy: 200 text/markdown, the phrase of its page, no <main nor <html (the
+# shell never leaks), Link rel="canonical" on the HTML address, and the indexing
+# of its page (films indexable: no X-Robots-Tag). Any FAIL after a deploy =
+# rollback to 2.13.0 (docs/DEPLOY.md, "5. Rollback").
+# md_probe <copy> <canonical> <phrase>
+md_probe() {
+  local p="$1" canonical="$2" phrase="$3" got meta body link xrt
+  got=$("${CURL[@]}" -w '\n%{http_code} %{content_type}' "$BASE$p")
+  meta="${got##*$'\n'}"; body="${got%$'\n'*}"
+  link=$("${CURL[@]}" -o /dev/null -w '%header{link}' "$BASE$p")
+  xrt=$("${CURL[@]}" -o /dev/null -w '%header{x-robots-tag}' "$BASE$p")
+  if [[ "$meta" == "200 text/markdown"* ]] && printf '%s' "$body" | grep -qF "$phrase" \
+     && ! printf '%s' "$body" | grep -qF '<main' && ! printf '%s' "$body" | grep -qF '<html' \
+     && [ "$link" = "<$canonical>; rel=\"canonical\"" ] && [ -z "$xrt" ]; then
+    pass "$p: 200 text/markdown, \"$phrase\", no shell, canonical $canonical, no X-Robots-Tag"
+  else
+    fail "$p Markdown copy" "200 text/markdown, \"$phrase\", no <main/<html, Link <$canonical>; rel=\"canonical\", no X-Robots-Tag" \
+      "$meta, link ${link:-missing}, x-robots-tag ${xrt:-none}"
+  fi
+}
+md_probe /index.html.md "$BASE/" 'The Star Wars API'
+md_probe /docs.md "$BASE/docs" '/api/people/{id}'
+md_probe /docs/mcp.md "$BASE/docs/mcp" "claude mcp add --transport http swapi-build $BASE/mcp"
+md_probe /about.md "$BASE/about" 'Why build another one?'
+md_probe /resource/films/1.md "$BASE/resource/films/1" 'George Lucas'
+# A record of a type that is not indexable keeps its page's indexing (noindex,
+# list canonical); a record that does not exist has no copy. One line, a pair.
+md_luke=$("${CURL[@]}" -w '\n%{http_code} %{content_type} %header{x-robots-tag}' "$BASE/resource/people/1.md")
+md_luke_link=$("${CURL[@]}" -o /dev/null -w '%header{link}' "$BASE/resource/people/1.md")
+md_none=$("${CURL[@]}" -w '\n%{http_code}' "$BASE/resource/people/9999.md")
+if [[ "${md_luke##*$'\n'}" == "200 text/markdown"*" noindex" ]] \
+   && printf '%s' "${md_luke%$'\n'*}" | grep -qF 'Luke Skywalker' \
+   && [ "$md_luke_link" = "<$BASE/resource/people>; rel=\"canonical\"" ] \
+   && [ "${md_none##*$'\n'}" = "404" ] && ! printf '%s' "${md_none%$'\n'*}" | grep -qF 'Luke Skywalker'; then
+  pass "/resource/people/1.md: 200 with Luke Skywalker, noindex, canonical $BASE/resource/people; 9999.md 404"
+else
+  fail "/resource/people/1.md pair" "200 text/markdown Luke Skywalker noindex, canonical $BASE/resource/people; 9999.md 404" \
+    "${md_luke##*$'\n'}, link ${md_luke_link:-missing}; 9999.md ${md_none##*$'\n'}"
+fi
+# A page the server does not draw has no copy.
+code=$("${CURL[@]}" -o /dev/null -w '%{http_code}' "$BASE/docs/webmcp.md")
+[ "$code" = "404" ] && pass "/docs/webmcp.md -> 404 (no copy)" || fail "/docs/webmcp.md" "404" "$code"
+# The HTML announces its copy; a page without one says nothing.
+link=$("${CURL[@]}" -o /dev/null -w '%header{link}' -H 'Accept: text/html' "$BASE/docs")
+[[ "$link" == *"</docs.md>"* ]] && [[ "$link" == *"text/markdown"* ]] \
+  && pass "/docs Link: $link" || fail "/docs Link" "</docs.md>; rel=\"alternate\"; type=\"text/markdown\"" "${link:-missing}"
+link=$("${CURL[@]}" -o /dev/null -w '%header{link}' -H 'Accept: text/html' "$BASE/docs/webmcp")
+[ -z "$link" ] && pass "/docs/webmcp has no Link header" || fail "/docs/webmcp Link" "absent" "$link"
+# The copy lives at its own address, never chosen by the Accept header.
+ct=$("${CURL[@]}" -o /dev/null -w '%{content_type}' -H 'Accept: text/markdown' "$BASE/docs")
+[[ "$ct" == "text/html"* ]] && pass "/docs with Accept: text/markdown still answers $ct" \
+  || fail "/docs Accept: text/markdown" "text/html" "${ct:-none}"
+vary=$("${CURL[@]}" -o /dev/null -w '%header{vary}' "$BASE/docs.md")
+[[ "$vary" == *"Origin"* ]] && pass "/docs.md Vary: $vary" || fail "/docs.md Vary" "contains Origin" "${vary:-missing}"
+# /llms-full.txt: the llms.txt summary, every copy and the index of every record,
+# as text even to an HTML Accept, noindex (it duplicates the pages).
+full=$("${CURL[@]}" -H 'Accept: text/html' -w '\n%{http_code} %{content_type} %header{x-robots-tag}' "$BASE/llms-full.txt")
+full_meta="${full##*$'\n'}"; full_body="${full%$'\n'*}"
+full_missing=""
+for want in '# swapi.build' "$BASE/mcp" '## Records' 'The Star Wars API' '/api/people/{id}' \
+  'Connect your client' 'Why build another one?'; do
+  printf '%s' "$full_body" | grep -qF "$want" || full_missing="$full_missing \"$want\""
+done
+full_lines=$(printf '%s\n' "$full_body" | grep -c '^> HTML version:')
+full_size=$(printf '%s' "$full_body" | wc -c | tr -d ' ')
+if [[ "$full_meta" == "200 text/plain"*" noindex" ]] && [ -z "$full_missing" ] && [ "$full_lines" = "4" ] \
+   && [ "$full_size" -ge 20000 ] && [ "$full_size" -le 100000 ]; then
+  pass "/llms-full.txt: 200 text/plain, noindex, 4 copies, ## Records, $full_size bytes"
+else
+  fail "/llms-full.txt" "200 text/plain noindex, all phrases, 4 '> HTML version:' lines, 20000-100000 bytes" \
+    "$full_meta, missing:${full_missing:- none}, $full_lines lines, $full_size bytes"
+fi
+llms=$("${CURL[@]}" "$BASE/llms.txt")
+if printf '%s' "$llms" | grep -qF "$BASE/llms-full.txt" && printf '%s' "$llms" | grep -qF "$BASE/docs/mcp.md"; then
+  pass "llms.txt points to $BASE/llms-full.txt and $BASE/docs/mcp.md"
+else
+  fail "llms.txt links" "$BASE/llms-full.txt and $BASE/docs/mcp.md" "missing"
+fi
+
 # --- Cold start (informational, never fails) ---------------------------------
 t=$("${CURL[@]}" -o /dev/null -w '%{time_total}' "$BASE/api/people/1")
 echo "INFO  first measured request: ${t}s (floor; the instance may already be warm)"
@@ -893,6 +1001,16 @@ for p in /resource/films/1 /resource/people/1; do
   r_clean=$("${CURL[@]}" "$BASE$p?poison=$$" | grep -c evil.example)
   [ "$r_poison" = "0" ] && [ "$r_clean" = "0" ] && pass "poisoning $p X-Forwarded-Host: 0 occurrences" \
     || fail "poisoning $p X-Forwarded-Host" "0 and 0" "$r_poison and $r_clean (see runbook)"
+done
+# 2.14.0+: the Markdown copy of /docs/mcp and /llms-full.txt carry the request
+# host; in the same answer, $BASE/mcp and no trace of the spoofed host.
+for p in /docs/mcp.md /llms-full.txt; do
+  resp=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE$p?poison=$$")
+  if printf '%s' "$resp" | grep -qF "$BASE/mcp" && ! printf '%s' "$resp" | grep -qF 'evil.example'; then
+    pass "poisoning $p X-Forwarded-Host: $BASE/mcp, 0 occurrences"
+  else
+    fail "poisoning $p X-Forwarded-Host" "$BASE/mcp and no evil.example" "$(printf '%s' "$resp" | head -c 160) (see runbook)"
+  fi
 done
 # 2.13.0: MCP, on a tool call and on a resource read; in the same answer, the
 # record with the URLs of $BASE and no trace of the spoofed host.

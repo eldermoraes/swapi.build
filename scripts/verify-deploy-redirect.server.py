@@ -17,10 +17,11 @@ The apex host (2.11.0+), the end of the www follow:
   apex         200 text/html, a <main id="main-content" data-ssr-page="mcp">
                with the claude mcp add line on its own host and enough text;
                on /resource/films/1 (2.12.0+) the <main> of the record, with
-               George Lucas
+               George Lucas; on /docs/mcp.md (2.14.0+) the Markdown copy,
+               200 text/markdown with the claude mcp add line
   empty-main   200 text/html, the <main> empty on one line followed by a
                footer of more than 200 characters (the case that fooled a sed
-               range)
+               range); /docs/mcp.md too (no Markdown copy)
 """
 import http.server
 import os
@@ -51,6 +52,17 @@ class Host(http.server.BaseHTTPRequestHandler):
         if BEHAVIOUR == "apex":
             host = self.headers.get("Host", "")
             prose = "Use the Star Wars API from your AI agent. " * 5
+            if self.path.split("?", 1)[0] == "/docs/mcp.md":
+                body = ("> HTML version: https://" + host + "/docs/mcp\n\n# MCP Server\n\n" + prose + "\n\n"
+                        "```bash\nclaude mcp add --transport http swapi-build https://" + host + "/mcp\n```\n"
+                        ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/markdown; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                if self.command != "HEAD":
+                    self.wfile.write(body)
+                return
             if self.path.split("?", 1)[0] == "/resource/films/1":
                 self._page('<main id="main-content" tabindex="-1" data-ssr-page="resource-detail"'
                            ' data-ssr-type="films" data-ssr-id="1">\n'
