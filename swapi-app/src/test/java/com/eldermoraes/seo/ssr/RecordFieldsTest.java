@@ -45,7 +45,9 @@ class RecordFieldsTest {
 
     @Test
     void theRelationsOfEachTypeAndWhereTheyPoint() {
-        assertEquals(List.of("homeworld:planets", "films:films", "species:species", "starships:starships"),
+        // Changes on purpose (fix-people-vehicles): people relate to their vehicles.
+        assertEquals(List.of("homeworld:planets", "films:films", "species:species", "vehicles:vehicles",
+                        "starships:starships"),
                 relations("people"));
         assertEquals(List.of("characters:people", "planets:planets", "starships:starships", "vehicles:vehicles",
                 "species:species"), relations("films"));

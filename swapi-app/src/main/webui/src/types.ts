@@ -16,6 +16,7 @@ export interface Person extends SWResource {
   homeworld: string;
   films: string[];
   species: string[];
+  vehicles: string[];
   starships: string[];
 }
 

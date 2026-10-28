@@ -1,0 +1,27 @@
+{
+  "_comment": "The keys of one record of each type on swapi.dev, read on 2026-10-28 (GET https://swapi.dev/api/<type>/<id>/, 200 application/json, jq keys). The same set for people/1 and people/83. SwapiDevFieldsTest compares what this API serves against it; no network in the test.",
+  "people": {
+    "id": 1,
+    "fields": ["birth_year", "created", "edited", "eye_color", "films", "gender", "hair_color", "height", "homeworld", "mass", "name", "skin_color", "species", "starships", "url", "vehicles"]
+  },
+  "films": {
+    "id": 1,
+    "fields": ["characters", "created", "director", "edited", "episode_id", "opening_crawl", "planets", "producer", "release_date", "species", "starships", "title", "url", "vehicles"]
+  },
+  "planets": {
+    "id": 1,
+    "fields": ["climate", "created", "diameter", "edited", "films", "gravity", "name", "orbital_period", "population", "residents", "rotation_period", "surface_water", "terrain", "url"]
+  },
+  "species": {
+    "id": 1,
+    "fields": ["average_height", "average_lifespan", "classification", "created", "designation", "edited", "eye_colors", "films", "hair_colors", "homeworld", "language", "name", "people", "skin_colors", "url"]
+  },
+  "starships": {
+    "id": 2,
+    "fields": ["MGLT", "cargo_capacity", "consumables", "cost_in_credits", "created", "crew", "edited", "films", "hyperdrive_rating", "length", "manufacturer", "max_atmosphering_speed", "model", "name", "passengers", "pilots", "starship_class", "url"]
+  },
+  "vehicles": {
+    "id": 4,
+    "fields": ["cargo_capacity", "consumables", "cost_in_credits", "created", "crew", "edited", "films", "length", "manufacturer", "max_atmosphering_speed", "model", "name", "passengers", "pilots", "url", "vehicle_class"]
+  }
+}

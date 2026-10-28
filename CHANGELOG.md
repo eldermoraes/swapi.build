@@ -16,6 +16,15 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+### Fixed
+
+- People records lacked the `vehicles` field that swapi.dev serves (Luke
+  Skywalker: vehicles 14 and 30). The data always had it; the model dropped it.
+  It is now served on every surface: the REST API, the `People` schema of
+  `/openapi.json`, the MCP tools and resources, the `expand` argument of
+  `sw_get` (`vehicles` for PEOPLE), and the record pages. A regression test
+  compares the fields of every type with swapi.dev's, from a local fixture.
+
 ## [2.14.0] - 2026-10-28
 
 ### Added
