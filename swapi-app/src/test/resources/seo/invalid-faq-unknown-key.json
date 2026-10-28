@@ -1,0 +1,15 @@
+{
+  "checkedOn": "2026-01-01",
+  "questions": [
+    { "id": "one", "question": "One?", "answer": ["Yes."], "html": "<b>no</b>" }
+  ],
+  "comparison": {
+    "columns": ["swapi.build", "swapi.dev"],
+    "rows": [
+      { "label": "REST JSON", "cells": [
+        { "value": "Yes", "source": "https://swapi.build/api/people/1", "checkedOn": "2026-01-01" },
+        { "value": "Yes", "source": "https://swapi.dev/api/people/1/", "checkedOn": "2026-01-01" }
+      ] }
+    ]
+  }
+}
