@@ -55,7 +55,8 @@
       <p><code>character_profile</code> takes a character's name and asks the agent to build a short profile with the
       tools: <code>sw_search</code>, then <code>sw_get</code> with <code>expand</code> for homeworld, species and films.
       In Claude Code it is the command <code>/mcp__swapi-build__character_profile</code>, e.g.
-      <code>/mcp__swapi-build__character_profile Darth Vader</code>.</p>
+      <code>/mcp__swapi-build__character_profile Vader</code>. Claude Code splits the arguments of a slash command on
+      spaces, so use one word there; a full name works in clients that send prompt arguments as JSON.</p>
     </section>
 
     <section class="mcp-setup">

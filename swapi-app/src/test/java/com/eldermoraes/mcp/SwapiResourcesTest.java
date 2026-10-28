@@ -15,6 +15,7 @@ import io.quarkus.test.junit.TestProfile;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
@@ -63,6 +64,12 @@ class SwapiResourcesTest {
 
     @Inject
     SwapiResources resources;
+
+    @ConfigProperty(name = "quarkus.mcp.server.resources.page-size")
+    int pageSize;
+
+    /** Room left in the one page of resources/list before a new record would push it to two. */
+    static final int PAGE_MARGIN = 20;
 
     @TestHTTPResource("/mcp")
     URI mcp;
@@ -121,6 +128,16 @@ class SwapiResourcesTest {
                 assertEquals("application/json", info.mimeType());
             }
         }
+    }
+
+    // Review of 2.13.0: fails while there is still room, before the data
+    // grows past the page and the "@" picker of Claude Code loses records.
+    @Test
+    void resourcesListKeepsAMarginBelowThePageSize() {
+        int total = 6 + recordCount();
+        assertTrue(total <= pageSize - PAGE_MARGIN, total + " resources against quarkus.mcp.server.resources.page-size="
+                + pageSize + ": raise page-size in application.properties (keep " + PAGE_MARGIN
+                + " of margin) so resources/list stays one page");
     }
 
     @Test

@@ -43,9 +43,11 @@ Without the new arguments, every tool answer is the 2.12.1 text byte for byte
   template; only the canonical id (digits, no leading zero) is a record, any
   other is not found (`-32602` stateless, `-32002` in a session).
 - MCP prompt `character_profile` (argument `name`, up to 80 characters after
-  trimming, no control characters): a user message that builds a short
-  profile with `sw_search` and `sw_get` with `expand`. In Claude Code:
-  `/mcp__swapi-build__character_profile`.
+  trimming; no control, format or separator characters nor double quotes): a
+  user message that builds a short profile with `sw_search` and `sw_get` with
+  `expand`. In Claude Code: `/mcp__swapi-build__character_profile Vader`;
+  Claude Code splits a slash command on spaces, so a name of two words works
+  only in clients that send prompt arguments as JSON.
 - `_meta["anthropic/maxResultSizeChars"] = 100000` on `sw_list`, `sw_get` and
   `sw_search`: Claude Code saves a tool result over about 50 000 characters to
   a file, and `sw_get` with `expand ["*"]` on a film passes that.
@@ -54,6 +56,9 @@ Without the new arguments, every tool answer is the 2.12.1 text byte for byte
 
 - The MCP instructions and the tool descriptions name `expand` and `fields`;
   the `required` arguments of the four tools are unchanged.
+- A client that already sent `expand` or `fields` (ignored up to 2.12.1) now
+  gets them applied, and a tool error (`isError`, listing the valid names)
+  when a name is invalid, where 2.12.1 answered the plain record or list.
 - The server capabilities advertise `resources` and `prompts`.
   Subscribe and list-changed produce no traffic: the transport filter answers
   the listen and the session subscribe (a subscribe to a known URI is `{}`,

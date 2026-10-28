@@ -88,6 +88,11 @@ class ServerRenderedPagesTest {
         assertTrue(main.contains("<code>fields</code>"), main);
         assertTrue(main.contains("swapi://people/1"), main);
         assertTrue(main.contains("character_profile"), main);
+        // Claude Code splits slash-command arguments on whitespace: a one-word
+        // example, and the note that a full name needs a client sending JSON.
+        assertTrue(main.contains("<code>/mcp__swapi-build__character_profile Vader</code>"), main);
+        assertFalse(main.contains("character_profile Darth Vader"), main);
+        assertTrue(main.contains("arguments as JSON"), main);
         assertTrue(main.contains("Who is Luke Skywalker? Include his homeworld and species."), main);
         assertTrue(main.contains("codex mcp add swapi-build --url https://preview.example/mcp"), "the Codex guide, an inactive panel");
         assertFalse(main.contains("https://swapi.build"), "no fixed domain");
