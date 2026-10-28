@@ -781,11 +781,19 @@ if printf '%s' "$resp" | grep -qF 'Luke Skywalker' && printf '%s' "$resp" | grep
 else
   fail "MCP sw_get expand" 'Luke Skywalker, Tatooine and expanded' "$(printf '%s' "$resp" | head -c 160)"
 fi
+# Without expand the tool text is the REST record of the same host, byte for byte.
+rest=$("${CURL[@]}" "$BASE/api/people/1")
 resp=$(sw_get '')
-if printf '%s' "$resp" | grep -qF 'Luke Skywalker' && ! printf '%s' "$resp" | grep -qF 'expanded'; then
-  pass "MCP sw_get without expand: the 2.12.1 record"
+if printf '%s' "$resp" | REST_BODY="$rest" python3 -c "$MCP_JSON"'
+import os
+text = response["result"]["content"][0]["text"]
+assert "expanded" not in json.loads(text)
+assert text == os.environ["REST_BODY"]
+' 2>/dev/null; then
+  pass "MCP sw_get without expand: the text of /api/people/1 on the same host"
 else
-  fail "MCP sw_get without expand" 'Luke Skywalker and no expanded' "$(printf '%s' "$resp" | head -c 160)"
+  fail "MCP sw_get without expand" 'the body of /api/people/1, byte for byte, no expanded' \
+    "$(printf '%s' "$resp" | head -c 160)"
 fi
 resp=$(sw_get '"expand":["nope"]')
 if printf '%s' "$resp" | grep -qF '"isError":true' && printf '%s' "$resp" | grep -qF 'homeworld'; then
