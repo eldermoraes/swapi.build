@@ -51,6 +51,17 @@ Without the new arguments, every tool answer is the 2.12.1 text byte for byte
 - `_meta["anthropic/maxResultSizeChars"] = 100000` on `sw_list`, `sw_get` and
   `sw_search`: Claude Code saves a tool result over about 50 000 characters to
   a file, and `sw_get` with `expand ["*"]` on a film passes that.
+- Memory, measured on the native binary (podman, ubi9-minimal, amd64 under
+  qemu on the Mac, `--memory=300m`, `-Xmx200m`; RSS of PID 1, idle 164 MB):
+  50 parallel `sw_get FILMS 6` with `expand ["*"]` (about 60 KB each) peak at
+  191 MB and stay near 190 MB; rounds of 200 parallel peak at 225 MB on the
+  first, 240 MB after five and 267 MB after six, settling between 220 and
+  261 MB 30 s later. The same rounds of `sw_list PEOPLE` (44 KB, as in
+  2.12.1) peak at 222 MB, then 247 MB after twelve. The heap grows toward
+  `-Xmx200m` before a full collection; the ceiling stays under
+  `MemoryMax=300M`. A semaphore of 8 concurrent expanded answers was tried
+  and measured (247 MB after six rounds, 272 MB after twelve) and left out: it
+  did not lower the peak.
 
 ### Changed
 
