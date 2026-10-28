@@ -395,7 +395,11 @@ public final class MarkdownFromHtml {
         return before + "[" + label + "](" + url + ")" + after;
     }
 
-    /** Absolute on the root of the request; an internal page with a copy points to its copy. */
+    /**
+     * Absolute on the root of the request; an internal page with a copy points to its copy.
+     * The copy keeps the query but never the #fragment (2.15.0): a Markdown copy has no ids,
+     * so /faq#compare would point to an anchor that is not there.
+     */
     private String url(String href) {
         String absolute;
         try {
@@ -411,7 +415,8 @@ public final class MarkdownFromHtml {
             String tail = cut < 0 ? "" : rest.substring(cut);
             Optional<String> copy = copyOf.apply(path);
             if (copy.isPresent()) {
-                absolute = root + copy.get() + tail;
+                int fragment = tail.indexOf('#');
+                absolute = root + copy.get() + (fragment < 0 ? tail : tail.substring(0, fragment));
             }
         }
         return absolute.replace(" ", "%20").replace("(", "%28").replace(")", "%29");

@@ -32,6 +32,9 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
   in `seo/faq.json` (no HTML; counts filled from the data), validated at
   startup. JSON-LD: the BreadcrumbList, and no `FAQPage`.
 - `/faq.md`, its Markdown copy, with the comparison as a table.
+- A link to `/faq#compare` from another page, or Back to it, scrolls to the
+  comparison once the page is in; a link that only changes the fragment of the
+  page shown scrolls to it without fetching the page again.
 
 ### Changed
 
@@ -39,9 +42,10 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 - The footer links the FAQ, before Privacy Policy.
 - `llms.txt` links the FAQ copy in `## Docs`; `/llms-full.txt` carries five
   copies (the FAQ between `/docs/mcp` and `/about`).
-- `/about` no longer says the API would "never go offline": it is "built to
-  stay up for live demos", with a link to the public uptime monitor, and its
-  credits link the comparison. The README says the same.
+- `/about` no longer says the API would "never go offline": Elder built one
+  that "stays up for live demos", with a link to the public uptime monitor,
+  and its credits link the comparison. The README calls it "built to stay up
+  for live demos".
 - `/stats` counts `/faq` under pages and `/faq.md` under SEO.
 
 ### Fixed

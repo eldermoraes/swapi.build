@@ -51,8 +51,15 @@ comparison (`seo/faq.json`) was checked more than 180 days ago, even in a releas
 that does not touch the FAQ: check each cell again (content type and body, not
 just the status), update the values and dates, and only then release. A release
 that touches the FAQ also recalculates the monitor count of the answer "How do I
-know it is up?" (scheduled runs of the `Uptime` workflow:
-`gh run list --workflow Uptime --limit 1000 --json event,conclusion`).
+know it is up?" from the scheduled runs of the `Uptime` workflow:
+`gh run list --workflow Uptime --event schedule --limit 5000 --json conclusion,createdAt --jq '[length, (map(select(.conclusion=="success"))|length), (map(.createdAt)|min), (map(.createdAt)|max)]'`.
+The total and the successes go into the answer, the first and last day into its
+"between ... and ..." (in UTC). The earliest `createdAt` must be
+`2026-10-19T22:39:05Z`, the first scheduled run: a later one means the list was
+cut (by `--limit`, or by the 1000-result cap GitHub may apply to a filtered list
+of runs), and the count is wrong; do not publish it. The schedule gives about 70
+runs a day (647 by 28 October 2026), so the history passes 1000 runs in early
+November 2026 and 5000 around the end of December 2026.
 
 ## 5. Commit and merge to `main`
 

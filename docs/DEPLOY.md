@@ -204,7 +204,7 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   its JSON-LD has a `BreadcrumbList` and zero `FAQPage`. The sitemap has 21
   `<loc>` and lists `https://<host>/faq`. `/faq.md` answers `200 text/markdown`
   with the phrase, the canonical `https://<host>/faq` and the comparison as a
-  table (lines that start with `| `). `/about` says `built to stay up for live
+  table (lines that start with `| `). `/about` says `stays up for live
   demos` and never `never go offline`. Any `FAIL` here after a deploy is an
   immediate rollback to 2.14.0.
 - **Cold start**: the time of one request, informational only.

@@ -195,8 +195,10 @@ class ServerRenderedPagesTest {
             assertTrue(count > 0, type);
             assertTrue(main.contains(count + " " + type), count + " " + type);
         }
-        assertTrue(main.contains("<td>Episodes I-VI: " + known.ids("films").size() + " films, "
-                + known.ids("people").size() + " people</td>"), main);
+        // One row per count (review of slice G2), each cell with its own source.
+        assertTrue(main.contains("<tr><th scope=\"row\">Films</th><td>" + known.ids("films").size()
+                + " (Episodes I-VI)</td>"), main);
+        assertTrue(main.contains("<tr><th scope=\"row\">People</th><td>" + known.ids("people").size() + "</td>"), main);
     }
 
     @Test

@@ -529,7 +529,7 @@ jsonld /docs/mcp | grep -qF '"@type":"BreadcrumbList"' && pass "/docs/mcp JSON-L
   || fail "/docs/mcp JSON-LD" '"@type":"BreadcrumbList"' "missing"
 # 2.15.0: /faq carries the dated comparison with the four other APIs and the
 # status-page row; its JSON-LD is a BreadcrumbList and never a FAQPage. /about
-# says "built to stay up for live demos", and "never go offline" is gone.
+# says "stays up for live demos", and "never go offline" is gone.
 faq_text=$("${CURL[@]}" -H 'Accept: text/html' "$BASE/faq" | main_text)
 missing=""
 for want in 'Checked on' 'swapi.dev' 'swapi.tech' 'swapi.info' 'Pipeworx' 'Public status page'; do
@@ -546,10 +546,10 @@ else
 fi
 about_text=$("${CURL[@]}" -H 'Accept: text/html' "$BASE/about" | main_text)
 offline=$(printf '%s' "$about_text" | grep -ci 'never go offline')
-if [[ "$about_text" == *"built to stay up for live demos"* ]] && [ "$offline" = "0" ]; then
-  pass "/about: \"built to stay up for live demos\", no \"never go offline\""
+if [[ "$about_text" == *"stays up for live demos"* ]] && [ "$offline" = "0" ]; then
+  pass "/about: \"stays up for live demos\", no \"never go offline\""
 else
-  fail "/about phrase" "\"built to stay up for live demos\" and zero \"never go offline\"" "never go offline: $offline"
+  fail "/about phrase" "\"stays up for live demos\" and zero \"never go offline\"" "never go offline: $offline"
 fi
 
 # --- Record content (2.12.0+) ------------------------------------------------------
@@ -1035,13 +1035,16 @@ for p in /resource/films/1 /resource/people/1; do
     || fail "poisoning $p X-Forwarded-Host" "0 and 0" "$r_poison and $r_clean (see runbook)"
 done
 # 2.14.0+: the Markdown copy of /docs/mcp and /llms-full.txt carry the request
-# host; in the same answer, $BASE/mcp and no trace of the spoofed host.
-for p in /docs/mcp.md /llms-full.txt; do
+# host; in the same answer, $BASE/mcp and no trace of the spoofed host. 2.15.0+:
+# /faq.md too, whose host-bearing link is the MCP guide's copy.
+for pair in "/docs/mcp.md $BASE/mcp" "/llms-full.txt $BASE/mcp" "/faq.md $BASE/docs/mcp.md"; do
+  p=${pair%% *}
+  want=${pair#* }
   resp=$("${CURL[@]}" -H 'X-Forwarded-Host: evil.example' "$BASE$p?poison=$$")
-  if printf '%s' "$resp" | grep -qF "$BASE/mcp" && ! printf '%s' "$resp" | grep -qF 'evil.example'; then
-    pass "poisoning $p X-Forwarded-Host: $BASE/mcp, 0 occurrences"
+  if printf '%s' "$resp" | grep -qF "$want" && ! printf '%s' "$resp" | grep -qF 'evil.example'; then
+    pass "poisoning $p X-Forwarded-Host: $want, 0 occurrences"
   else
-    fail "poisoning $p X-Forwarded-Host" "$BASE/mcp and no evil.example" "$(printf '%s' "$resp" | head -c 160) (see runbook)"
+    fail "poisoning $p X-Forwarded-Host" "$want and no evil.example" "$(printf '%s' "$resp" | head -c 160) (see runbook)"
   fi
 done
 # 2.13.0: MCP, on a tool call and on a resource read; in the same answer, the

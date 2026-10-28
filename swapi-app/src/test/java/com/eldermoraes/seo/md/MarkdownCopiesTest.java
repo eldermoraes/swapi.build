@@ -126,6 +126,11 @@ class MarkdownCopiesTest {
         Assertions.assertTrue(body.contains("## Is it free? Do I need an API key or an account?"), body);
         Assertions.assertTrue(body.contains("Checked on 28 October 2026"), body);
         Assertions.assertTrue(body.contains("[MCP server guide](https://preview.example/docs/mcp.md)"), body);
+        // The "Comparison" links of the answers: the copy has no #compare anchor.
+        Assertions.assertTrue(body.contains("[Comparison](https://preview.example/faq.md)"), body);
+        Assertions.assertFalse(body.contains(".md#"), body);
+        Assertions.assertTrue(body.contains("| Films | 6 (Episodes I-VI) |"), body);
+        Assertions.assertTrue(body.contains("| People | 82 |"), body);
     }
 
     // 2.15.0: "never go offline" left /about. The page reaches readers on three
@@ -133,9 +138,9 @@ class MarkdownCopiesTest {
     // every one and the old one on none.
     @ParameterizedTest
     @ValueSource(strings = {"/about", "/about.md", "/llms-full.txt"})
-    void aboutSaysBuiltToStayUpForLiveDemosOnEverySurface(String path) {
+    void aboutSaysItStaysUpForLiveDemosOnEverySurface(String path) {
         String body = preview().accept("text/html").when().get(path).then().statusCode(200).extract().body().asString();
-        Assertions.assertTrue(body.contains("built to stay up for live demos"), path);
+        Assertions.assertTrue(body.contains("stays up for live demos"), path);
         Assertions.assertTrue(body.contains("public uptime monitor"), path);
         Assertions.assertFalse(body.toLowerCase(java.util.Locale.ROOT).contains("never go offline"), path);
     }

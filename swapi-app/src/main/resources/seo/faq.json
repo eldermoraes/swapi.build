@@ -6,9 +6,10 @@
       "question": "What is swapi.build?",
       "answer": [
         "swapi.build is a free, open-source Star Wars API. It serves the same data two ways: a REST JSON API under /api and a remote MCP server at /mcp that AI agents call directly.",
-        "It is built with Quarkus and compiled with GraalVM into a native binary. Every page whose content the server draws is also plain Markdown at the same address plus .md."
+        "It is built with Quarkus and compiled with GraalVM into a native binary. Every page whose content the server draws is also plain Markdown at the same address plus .md; the copy of the home is /index.html.md."
       ],
       "links": [
+        { "text": "The home as Markdown", "path": "/index.html.md" },
         { "text": "REST documentation", "path": "/docs" },
         { "text": "MCP server guide", "path": "/docs/mcp" }
       ]
@@ -100,7 +101,7 @@
       "id": "is-it-up",
       "question": "How do I know it is up?",
       "answer": [
-        "A public monitor in GitHub Actions is scheduled every 15 minutes: 646 of 647 scheduled checks of GET /api/people/1 passed between 19 October and 28 October 2026. The schedule is best-effort, so some 15-minute windows have no check, and the monitor only checks that one request, the certificate and DNS.",
+        "A public monitor in GitHub Actions is scheduled every 15 minutes: 649 of 650 scheduled checks of GET /api/people/1 passed between 19 October and 28 October 2026. The schedule is best-effort, so some 15-minute windows have no check, and the monitor only checks that one request, the certificate and DNS.",
         "The usage stats page shows how many requests the site answered in the last 24 hours, 7 days and 30 days."
       ],
       "links": [
@@ -147,19 +148,29 @@
         "cells": [
           { "value": "?search=", "source": "https://swapi.build/api/people?search=sky", "checkedOn": "2026-10-28" },
           { "value": "?search=", "source": "https://swapi.dev/documentation#search", "checkedOn": "2026-10-28" },
-          { "value": "?name=", "source": "https://www.swapi.tech/documentation", "checkedOn": "2026-10-28" },
+          { "value": "?name= (?title= for films; also ?model= on starships and vehicles)", "source": "https://www.swapi.tech/documentation", "checkedOn": "2026-10-28" },
           { "value": "None found (?search= returns the whole list)", "source": "https://swapi.info/api/people?search=sky", "checkedOn": "2026-10-28" },
           { "value": "search_people tool (people only)", "source": "https://gateway.pipeworx.io/swapi/mcp", "checkedOn": "2026-10-28" }
         ]
       },
       {
-        "label": "Data scope",
+        "label": "Films",
         "cells": [
-          { "value": "Episodes I-VI: {count:films} films, {count:people} people", "source": "https://swapi.build/api/people", "checkedOn": "2026-10-28" },
-          { "value": "Episodes I-VI: 6 films, 82 people", "source": "https://swapi.dev/api/people/", "checkedOn": "2026-10-28" },
-          { "value": "Episodes I-VI: 6 films, 82 people", "source": "https://www.swapi.tech/api/people", "checkedOn": "2026-10-28" },
-          { "value": "Episodes I-VI: 6 films, 82 people", "source": "https://swapi.info/api/people", "checkedOn": "2026-10-28" },
-          { "value": "From swapi.py4e.com: 7 films (adds The Force Awakens), 87 people", "source": "https://swapi.py4e.com/api/films/", "checkedOn": "2026-10-28" }
+          { "value": "{count:films} (Episodes I-VI)", "source": "https://swapi.build/api/films", "checkedOn": "2026-10-28" },
+          { "value": "6 (Episodes I-VI)", "source": "https://swapi.dev/api/films/", "checkedOn": "2026-10-28" },
+          { "value": "6 (Episodes I-VI)", "source": "https://www.swapi.tech/api/films", "checkedOn": "2026-10-28" },
+          { "value": "6 (Episodes I-VI)", "source": "https://swapi.info/api/films", "checkedOn": "2026-10-28" },
+          { "value": "7, from swapi.py4e.com (adds The Force Awakens)", "source": "https://swapi.py4e.com/api/films/", "checkedOn": "2026-10-28" }
+        ]
+      },
+      {
+        "label": "People",
+        "cells": [
+          { "value": "{count:people}", "source": "https://swapi.build/api/people", "checkedOn": "2026-10-28" },
+          { "value": "82", "source": "https://swapi.dev/api/people/", "checkedOn": "2026-10-28" },
+          { "value": "82", "source": "https://www.swapi.tech/api/people", "checkedOn": "2026-10-28" },
+          { "value": "82", "source": "https://swapi.info/api/people", "checkedOn": "2026-10-28" },
+          { "value": "87, from swapi.py4e.com", "source": "https://swapi.py4e.com/api/people/", "checkedOn": "2026-10-28" }
         ]
       },
       {
@@ -179,7 +190,7 @@
           { "value": "n/a (no MCP server found)", "source": "https://swapi.dev/documentation", "checkedOn": "2026-10-28" },
           { "value": "n/a (no MCP server found)", "source": "https://www.swapi.tech/documentation", "checkedOn": "2026-10-28" },
           { "value": "n/a (no MCP server found)", "source": "https://swapi.info/documentation", "checkedOn": "2026-10-28" },
-          { "value": "No resources; no Star Wars prompts", "source": "https://gateway.pipeworx.io/swapi/mcp", "checkedOn": "2026-10-28" }
+          { "value": "No Star Wars resources or prompts (only the gateway's general ones)", "source": "https://gateway.pipeworx.io/swapi/mcp", "checkedOn": "2026-10-28" }
         ]
       },
       {
