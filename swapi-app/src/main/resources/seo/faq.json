@@ -1,0 +1,238 @@
+{
+  "checkedOn": "2026-10-28",
+  "questions": [
+    {
+      "id": "what-is-swapi-build",
+      "question": "What is swapi.build?",
+      "answer": [
+        "swapi.build is a free, open-source Star Wars API. It serves the same data two ways: a REST JSON API under /api and a remote MCP server at /mcp that AI agents call directly.",
+        "It is built with Quarkus and compiled with GraalVM into a native binary. Every page whose content the server draws is also plain Markdown at the same address plus .md; the copy of the home is /index.html.md."
+      ],
+      "links": [
+        { "text": "The home as Markdown", "path": "/index.html.md" },
+        { "text": "REST documentation", "path": "/docs" },
+        { "text": "MCP server guide", "path": "/docs/mcp" }
+      ]
+    },
+    {
+      "id": "free-and-api-key",
+      "question": "Is it free? Do I need an API key or an account?",
+      "answer": [
+        "It is free. There is no API key, no account and no sign-up: every endpoint is public and read-only, on the REST API and on the MCP server."
+      ]
+    },
+    {
+      "id": "data",
+      "question": "What data does it have?",
+      "answer": [
+        "Six types of records from the six films of Episodes I-VI: {count:films} films, {count:people} people, {count:planets} planets, {count:species} species, {count:starships} starships and {count:vehicles} vehicles.",
+        "There is nothing from the sequels, the series or the games. swapi.dev, swapi.tech and swapi.info cover the same six films and 82 people; the comparison below has the details."
+      ],
+      "links": [
+        { "text": "Comparison", "path": "/faq#compare" }
+      ]
+    },
+    {
+      "id": "same-data-as-swapi",
+      "question": "Is the data the same as SWAPI's?",
+      "answer": [
+        "Yes. The records come from the original SWAPI, created by Paul Hallett and maintained by Juriy Bura, with the same ids and fields. The links inside each record point to this API instead of swapi.dev."
+      ],
+      "links": [
+        { "text": "The original SWAPI", "path": "https://swapi.dev" },
+        { "text": "About this project", "path": "/about" }
+      ]
+    },
+    {
+      "id": "different-from-swapi-dev",
+      "question": "How is it different from swapi.dev?",
+      "answer": [
+        "Lists and searches return a plain JSON array of every matching record, like swapi.info, instead of pages of count, next and results.",
+        "It also has a remote MCP server for AI agents and a published OpenAPI contract, which swapi.dev does not list in its documentation. Both serve the same records with no API key."
+      ],
+      "links": [
+        { "text": "Comparison", "path": "/faq#compare" }
+      ]
+    },
+    {
+      "id": "film-ids",
+      "question": "Why is /api/films/1 A New Hope and not Episode I?",
+      "answer": [
+        "Ids are record ids, not episode numbers. The films were added in release order, so /api/films/1 is A New Hope (Episode IV) and /api/films/4 is The Phantom Menace (Episode I).",
+        "Each film has an episode_id field with its episode number."
+      ],
+      "links": [
+        { "text": "A New Hope as JSON", "path": "/api/films/1" }
+      ]
+    },
+    {
+      "id": "connect-an-ai-agent",
+      "question": "How do I connect an AI agent?",
+      "answer": [
+        "Point any MCP client at the Streamable HTTP endpoint /mcp on this site. There is no authentication.",
+        "The agent gets four tools (sw_search, sw_get, sw_list and sw_random), a resource for every record and the character_profile prompt."
+      ],
+      "links": [
+        { "text": "MCP server guide", "path": "/docs/mcp" }
+      ]
+    },
+    {
+      "id": "mcp-clients",
+      "question": "Which MCP clients work?",
+      "answer": [
+        "The MCP server guide has step-by-step setup for Claude Code, Claude Desktop and claude.ai, OpenAI Codex, GitHub Copilot and IBM Bob. Any other client that speaks Streamable HTTP works with the same URL."
+      ],
+      "links": [
+        { "text": "MCP server guide", "path": "/docs/mcp" }
+      ]
+    },
+    {
+      "id": "openapi",
+      "question": "Is there an OpenAPI contract?",
+      "answer": [
+        "Yes: /openapi.json is generated from the code of the version that is running, so it always matches the API. The REST documentation is drawn from it."
+      ],
+      "links": [
+        { "text": "OpenAPI contract", "path": "/openapi.json" },
+        { "text": "REST documentation", "path": "/docs" }
+      ]
+    },
+    {
+      "id": "is-it-up",
+      "question": "How do I know it is up?",
+      "answer": [
+        "A public monitor in GitHub Actions is scheduled every 15 minutes: 649 of 650 scheduled checks of GET /api/people/1 passed between 19 October and 28 October 2026. The schedule is best-effort, so some 15-minute windows have no check, and the monitor only checks that one request, the certificate and DNS.",
+        "The usage stats page shows how many requests the site answered in the last 24 hours, 7 days and 30 days."
+      ],
+      "links": [
+        { "text": "Monitor history", "path": "https://github.com/eldermoraes/swapi.build/actions/workflows/uptime.yml" },
+        { "text": "Usage stats", "path": "/stats" }
+      ]
+    },
+    {
+      "id": "use-the-code",
+      "question": "Can I use the code?",
+      "answer": [
+        "Yes. The code is open source under the Apache License 2.0. The data comes from the original SWAPI (see the answer above), and all Star Wars content belongs to Lucasfilm Ltd. and Disney."
+      ],
+      "links": [
+        { "text": "Source code", "path": "https://github.com/eldermoraes/swapi.build" }
+      ]
+    }
+  ],
+  "comparison": {
+    "columns": ["swapi.build", "swapi.dev", "swapi.tech", "swapi.info", "Pipeworx (swapi MCP)"],
+    "rows": [
+      {
+        "label": "REST JSON",
+        "cells": [
+          { "value": "Yes", "source": "https://swapi.build/api/people/1", "checkedOn": "2026-10-28" },
+          { "value": "Yes", "source": "https://swapi.dev/api/people/1/", "checkedOn": "2026-10-28" },
+          { "value": "Yes", "source": "https://www.swapi.tech/api/people/1", "checkedOn": "2026-10-28" },
+          { "value": "Yes", "source": "https://swapi.info/api/people/1", "checkedOn": "2026-10-28" },
+          { "value": "n/a (MCP only)", "source": "https://gateway.pipeworx.io/swapi/mcp", "checkedOn": "2026-10-28" }
+        ]
+      },
+      {
+        "label": "List format",
+        "cells": [
+          { "value": "Plain JSON array of every record", "source": "https://swapi.build/api/people", "checkedOn": "2026-10-28" },
+          { "value": "Pages of 10: count, next, results", "source": "https://swapi.dev/api/people/", "checkedOn": "2026-10-28" },
+          { "value": "Pages of 10 with uid, name and url; full records with ?expanded=true", "source": "https://www.swapi.tech/api/people", "checkedOn": "2026-10-28" },
+          { "value": "Plain JSON array of every record", "source": "https://swapi.info/api/people", "checkedOn": "2026-10-28" },
+          { "value": "n/a (MCP only)", "source": "https://gateway.pipeworx.io/swapi/mcp", "checkedOn": "2026-10-28" }
+        ]
+      },
+      {
+        "label": "Documented search parameter",
+        "cells": [
+          { "value": "?search=", "source": "https://swapi.build/api/people?search=sky", "checkedOn": "2026-10-28" },
+          { "value": "?search=", "source": "https://swapi.dev/documentation#search", "checkedOn": "2026-10-28" },
+          { "value": "?name= (?title= for films; also ?model= on starships and vehicles)", "source": "https://www.swapi.tech/documentation", "checkedOn": "2026-10-28" },
+          { "value": "None found (?search= returns the whole list)", "source": "https://swapi.info/api/people?search=sky", "checkedOn": "2026-10-28" },
+          { "value": "search_people tool (people only)", "source": "https://gateway.pipeworx.io/swapi/mcp", "checkedOn": "2026-10-28" }
+        ]
+      },
+      {
+        "label": "Films",
+        "cells": [
+          { "value": "{count:films} (Episodes I-VI)", "source": "https://swapi.build/api/films", "checkedOn": "2026-10-28" },
+          { "value": "6 (Episodes I-VI)", "source": "https://swapi.dev/api/films/", "checkedOn": "2026-10-28" },
+          { "value": "6 (Episodes I-VI)", "source": "https://www.swapi.tech/api/films", "checkedOn": "2026-10-28" },
+          { "value": "6 (Episodes I-VI)", "source": "https://swapi.info/api/films", "checkedOn": "2026-10-28" },
+          { "value": "7, from swapi.py4e.com (adds The Force Awakens)", "source": "https://swapi.py4e.com/api/films/", "checkedOn": "2026-10-28" }
+        ]
+      },
+      {
+        "label": "People",
+        "cells": [
+          { "value": "{count:people}", "source": "https://swapi.build/api/people", "checkedOn": "2026-10-28" },
+          { "value": "82", "source": "https://swapi.dev/api/people/", "checkedOn": "2026-10-28" },
+          { "value": "82", "source": "https://www.swapi.tech/api/people", "checkedOn": "2026-10-28" },
+          { "value": "82", "source": "https://swapi.info/api/people", "checkedOn": "2026-10-28" },
+          { "value": "87, from swapi.py4e.com", "source": "https://swapi.py4e.com/api/people/", "checkedOn": "2026-10-28" }
+        ]
+      },
+      {
+        "label": "Remote MCP server",
+        "cells": [
+          { "value": "Yes: /mcp, 4 tools", "source": "https://swapi.build/docs/mcp", "checkedOn": "2026-10-28" },
+          { "value": "None found", "source": "https://swapi.dev/documentation", "checkedOn": "2026-10-28" },
+          { "value": "None found", "source": "https://www.swapi.tech/documentation", "checkedOn": "2026-10-28" },
+          { "value": "None found", "source": "https://swapi.info/documentation", "checkedOn": "2026-10-28" },
+          { "value": "Yes: 4 Star Wars tools, plus the general tools of the gateway", "source": "https://gateway.pipeworx.io/swapi/mcp", "checkedOn": "2026-10-28" }
+        ]
+      },
+      {
+        "label": "MCP resources and prompts",
+        "cells": [
+          { "value": "A resource for every record; 1 prompt", "source": "https://swapi.build/docs/mcp", "checkedOn": "2026-10-28" },
+          { "value": "n/a (no MCP server found)", "source": "https://swapi.dev/documentation", "checkedOn": "2026-10-28" },
+          { "value": "n/a (no MCP server found)", "source": "https://www.swapi.tech/documentation", "checkedOn": "2026-10-28" },
+          { "value": "n/a (no MCP server found)", "source": "https://swapi.info/documentation", "checkedOn": "2026-10-28" },
+          { "value": "No Star Wars resources or prompts (only the gateway's general ones)", "source": "https://gateway.pipeworx.io/swapi/mcp", "checkedOn": "2026-10-28" }
+        ]
+      },
+      {
+        "label": "API key",
+        "cells": [
+          { "value": "Not required", "source": "https://swapi.build/api/people/1", "checkedOn": "2026-10-28" },
+          { "value": "Not required", "source": "https://swapi.dev/documentation#auth", "checkedOn": "2026-10-28" },
+          { "value": "Not required", "source": "https://www.swapi.tech/documentation", "checkedOn": "2026-10-28" },
+          { "value": "Not required", "source": "https://swapi.info/documentation", "checkedOn": "2026-10-28" },
+          { "value": "Not required (anonymous tier)", "source": "https://gateway.pipeworx.io/swapi/mcp", "checkedOn": "2026-10-28" }
+        ]
+      },
+      {
+        "label": "OpenAPI contract",
+        "cells": [
+          { "value": "Published: /openapi.json", "source": "https://swapi.build/openapi.json", "checkedOn": "2026-10-28" },
+          { "value": "Not published", "source": "https://swapi.dev/documentation", "checkedOn": "2026-10-28" },
+          { "value": "Not published", "source": "https://www.swapi.tech/openapi.json", "checkedOn": "2026-10-28" },
+          { "value": "Not published", "source": "https://swapi.info/documentation", "checkedOn": "2026-10-28" },
+          { "value": "n/a (MCP only)", "source": "https://gateway.pipeworx.io/swapi/mcp", "checkedOn": "2026-10-28" }
+        ]
+      },
+      {
+        "label": "Open source and license",
+        "cells": [
+          { "value": "Yes, Apache 2.0", "source": "https://github.com/eldermoraes/swapi.build/blob/main/LICENSE", "checkedOn": "2026-10-28" },
+          { "value": "Yes, BSD 3-Clause", "source": "https://github.com/Juriy/swapi/blob/master/LICENCE", "checkedOn": "2026-10-28" },
+          { "value": "Yes, BSD 3-Clause", "source": "https://github.com/semperry/swapi/blob/main/LICENSE", "checkedOn": "2026-10-28" },
+          { "value": "Yes, MIT", "source": "https://github.com/SivaramPg/swapi.info/blob/main/LICENSE", "checkedOn": "2026-10-28" },
+          { "value": "Yes, MIT", "source": "https://github.com/pipeworx-io/mcp-swapi/blob/main/LICENSE", "checkedOn": "2026-10-28" }
+        ]
+      },
+      {
+        "label": "Public status page",
+        "cells": [
+          { "value": "None; public monitor history", "source": "https://github.com/eldermoraes/swapi.build/actions/workflows/uptime.yml", "checkedOn": "2026-10-28" },
+          { "value": "None found", "source": "https://swapi.dev/documentation", "checkedOn": "2026-10-28" },
+          { "value": "None found", "source": "https://www.swapi.tech/documentation", "checkedOn": "2026-10-28" },
+          { "value": "Yes: status.swapi.info", "source": "https://status.swapi.info", "checkedOn": "2026-10-28" },
+          { "value": "Yes: pipeworx.io/status, for all Pipeworx services", "source": "https://pipeworx.io/status", "checkedOn": "2026-10-28" }
+        ]
+      }
+    ]
+  }
+}

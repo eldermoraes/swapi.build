@@ -84,6 +84,7 @@ public class ServerRendering {
                 case "home" -> Optional.of(pages.home());
                 case "docs" -> pages.docs();
                 case "mcp" -> Optional.of(pages.mcp(siteRoot));
+                case "faq" -> Optional.of(pages.faq());
                 case "about" -> Optional.of(pages.about());
                 default -> Optional.empty();
             };

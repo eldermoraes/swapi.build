@@ -34,7 +34,7 @@ class SeoMetadataRegistryTest {
     void theSitemapHasThePagesTheListsAndTheSixFilms() {
         SeoMetadataRegistry registry = new SeoMetadataRegistry(realEntities());
         List<String> paths = sitemapPaths(registry);
-        assertEquals(20, paths.size(), paths.toString());
+        assertEquals(21, paths.size(), paths.toString());
         for (int id = 1; id <= 6; id++) {
             assertTrue(paths.contains("/resource/films/" + id), paths.toString());
         }
@@ -56,7 +56,8 @@ class SeoMetadataRegistryTest {
                 new FilmsPlus(seventh), new PlanetService(), new SpecieService(), new StarshipService(), new VehicleService()));
 
         List<String> paths = sitemapPaths(registry);
-        assertEquals(21, paths.size(), paths.toString());
+        // Changes on purpose in 2.15.0: 21 → 22, /faq entered the sitemap.
+        assertEquals(22, paths.size(), paths.toString());
         assertTrue(paths.contains("/resource/films/7"), paths.toString());
 
         SeoMetadata page = registry.forPath("/resource/films/7");

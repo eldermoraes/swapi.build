@@ -10,6 +10,7 @@ describe('getRoute', () => {
     ['/docs/', { page: 'docs' }],
     ['/docs/mcp', { page: 'mcp' }],
     ['/docs/webmcp', { page: 'webmcp' }],
+    ['/faq', { page: 'faq' }],
     ['/about', { page: 'about' }],
     ['/privacy', { page: 'privacy' }],
     ['/terms', { page: 'terms' }],
@@ -26,6 +27,7 @@ describe('getRoute', () => {
 
   it.each([
     '/docs/nope',
+    '/faq/x',
     '/about/x',
     '/privacy/x',
     '/stats/x',

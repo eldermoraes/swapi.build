@@ -38,7 +38,8 @@ class SeoSiteFileTest {
     void theFileIsReadWithTheSixTypes() {
         assertEquals(TYPES, site.resources().stream().map(SeoSiteFile.ResourceType::type).collect(Collectors.toSet()));
         assertEquals(6, site.resources().size());
-        assertEquals(8, site.pages().size());
+        // Changes on purpose in 2.15.0: 8 → 9 pages, /faq.
+        assertEquals(9, site.pages().size());
     }
 
     @Test
@@ -104,14 +105,14 @@ class SeoSiteFileTest {
         assertEquals(Set.of("films"), indexable);
     }
 
-    // Slice E1 (2.11.0): the server draws the <main> of exactly these four pages.
+    // Slice E1 (2.11.0): the server draws the <main> of exactly these pages; /faq since 2.15.0.
     @Test
-    void ssrMarksExactlyTheFourFixedPages() {
+    void ssrMarksExactlyTheFiveFixedPages() {
         Set<String> ssr = site.pages().stream()
                 .filter(SeoSiteFile.Page::ssr)
                 .map(SeoSiteFile.Page::page)
                 .collect(Collectors.toSet());
-        assertEquals(Set.of("home", "docs", "mcp", "about"), ssr);
+        assertEquals(Set.of("home", "docs", "mcp", "faq", "about"), ssr);
     }
 
     // The short name of a page or a type, for the BreadcrumbList and the home rows.

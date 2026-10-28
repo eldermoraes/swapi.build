@@ -1,7 +1,11 @@
 package com.eldermoraes.seo.ssr;
 
+import com.eldermoraes.seo.FaqFile;
+import com.eldermoraes.seo.ForbiddenClaims;
+import com.eldermoraes.seo.KnownEntities;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.response.Response;
+import jakarta.inject.Inject;
 import jakarta.json.Json;
 import jakarta.json.JsonObject;
 import jakarta.json.JsonReader;
@@ -154,6 +158,114 @@ class ServerRenderedPagesTest {
         String body = given().accept("text/html").when().get("/not-a-real-page").then().statusCode(404).extract().asString();
         assertTrue(body.contains(ServerRendering.EMPTY_MAIN));
         assertFalse(body.contains("data-ssr-"));
+    }
+
+    // 2.15.0 (slice G2): /faq, drawn from seo/faq.json.
+    private static final FaqFile FAQ = FaqFile.load();
+
+    @Inject
+    KnownEntities known;
+
+    @Test
+    void faqHasTheQuestionsAndTheComparison() {
+        String main = main("/faq");
+        assertTrue(main.startsWith("<main id=\"main-content\" tabindex=\"-1\" data-ssr-page=\"faq\">"), main);
+        for (FaqFile.Question q : FAQ.questions()) {
+            assertTrue(main.contains("<section class=\"about-section faq-question\" id=\"" + q.id() + "\">"), q.id());
+            assertTrue(main.contains("<h2>" + escaped(q.question()) + "</h2>"), q.question());
+        }
+        assertTrue(main.contains("<section class=\"about-section faq-compare\" id=\"compare\">"), main);
+        assertTrue(main.contains("<h2>How does swapi.build compare?</h2>"), main);
+        for (String column : FAQ.comparison().columns()) {
+            assertTrue(main.contains("<th scope=\"col\">" + escaped(column) + "</th>"), column);
+        }
+        for (FaqFile.Row row : FAQ.comparison().rows()) {
+            assertTrue(main.contains("<tr><th scope=\"row\">" + escaped(row.label()) + "</th>"), row.label());
+        }
+        assertFalse(main.contains("preview.example"), "nothing of the host on the FAQ");
+        assertFalse(main.contains("<script"), "no JavaScript on the FAQ");
+    }
+
+    @Test
+    void faqCountsComeFromTheData() {
+        String main = main("/faq");
+        assertFalse(main.contains("{count:"), main);
+        for (String type : new String[]{"films", "people", "planets", "species", "starships", "vehicles"}) {
+            int count = known.ids(type).size();
+            assertTrue(count > 0, type);
+            assertTrue(main.contains(count + " " + type), count + " " + type);
+        }
+        // One row per count (review of slice G2), each cell with its own source.
+        assertTrue(main.contains("<tr><th scope=\"row\">Films</th><td>" + known.ids("films").size()
+                + " (Episodes I-VI)</td>"), main);
+        assertTrue(main.contains("<tr><th scope=\"row\">People</th><td>" + known.ids("people").size() + "</td>"), main);
+    }
+
+    @Test
+    void faqCreditsTheOriginalSwapi() {
+        String main = main("/faq");
+        assertTrue(main.contains("Paul Hallett"), main);
+        assertTrue(main.contains("Juriy Bura"), main);
+        assertTrue(main.contains("<a href=\"https://swapi.dev\" target=\"_blank\" rel=\"noopener\">The original SWAPI</a>"), main);
+    }
+
+    @Test
+    void faqShowsTheCheckedOnDate() {
+        String main = main("/faq");
+        String day = FAQ.checkedOn().format(java.time.format.DateTimeFormatter.ofPattern("d MMMM yyyy", java.util.Locale.ENGLISH));
+        assertTrue(main.contains("Checked on <time datetime=\"" + FAQ.checkedOn() + "\">" + day + "</time>."), main);
+    }
+
+    @Test
+    void faqSourcesAreLinks() {
+        String main = main("/faq");
+        String notes = main.substring(main.indexOf("<ul class=\"faq-sources\">"));
+        for (FaqFile.Row row : FAQ.comparison().rows()) {
+            for (int i = 0; i < row.cells().size(); i++) {
+                String link = "<a href=\"" + escaped(row.cells().get(i).source()) + "\" target=\"_blank\" rel=\"noopener\">"
+                        + escaped(FAQ.comparison().columns().get(i)) + "</a>";
+                assertTrue(notes.contains(link), link);
+            }
+        }
+    }
+
+    // Availability is never a number in the table (plan of slice G, decision 2):
+    // the row says whether each API has a public status page, and the one number,
+    // swapi.build's own, is in the prose of one answer, with its method.
+    @Test
+    void faqAvailabilityIsAStatusPageRowNotANumber() {
+        String main = main("/faq");
+        String table = main.substring(main.indexOf("<table"), main.indexOf("</table>"));
+        assertTrue(table.contains("<th scope=\"row\">Public status page</th><td>None; public monitor history</td>"), table);
+        assertFalse(table.contains("%"), table);
+        assertFalse(table.toLowerCase(java.util.Locale.ROOT).contains("uptime"), table);
+        assertFalse(table.contains("checks"), table);
+        String answer = main.substring(main.indexOf("id=\"is-it-up\""), main.indexOf("id=\"use-the-code\""));
+        assertTrue(answer.matches("(?s).*\\d+ of \\d+ scheduled checks of GET /api/people/1 passed between .*"), answer);
+        assertTrue(answer.contains("best-effort"), answer);
+        assertTrue(answer.contains("href=\"https://github.com/eldermoraes/swapi.build/actions/workflows/uptime.yml\""), answer);
+    }
+
+    // No page drawn on the server, and no template it is drawn from, promises
+    // uptime or claims to be first, alone or unique; the FAQ, which talks about
+    // other APIs, also says nothing about them being down (ForbiddenClaims).
+    @Test
+    void noPageMakesAForbiddenClaim() throws java.io.IOException {
+        for (String path : new String[]{"/", "/docs", "/docs/mcp", "/faq", "/about", "/resource/films/1", "/resource/people/1"}) {
+            assertEquals(java.util.List.of(), ForbiddenClaims.everywhere(main(path)), path);
+        }
+        assertEquals(java.util.List.of(), ForbiddenClaims.aboutThirdParties(main("/faq").replaceAll("<[^>]*>", " ")), "/faq");
+        try (java.util.stream.Stream<java.nio.file.Path> files = java.nio.file.Files.walk(java.nio.file.Path.of("src/main/resources/templates/ssr"))) {
+            for (java.nio.file.Path file : files.filter(f -> f.toString().endsWith(".html")).toList()) {
+                assertEquals(java.util.List.of(), ForbiddenClaims.everywhere(java.nio.file.Files.readString(file)), file.toString());
+            }
+        }
+    }
+
+    /** The text as the default escaping of a .html template writes it. */
+    private static String escaped(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 
     private static String main(String path) {

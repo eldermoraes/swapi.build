@@ -44,6 +44,16 @@
       "priority": "0.8"
     },
     {
+      "path": "/faq",
+      "page": "faq",
+      "label": "FAQ",
+      "ssr": true,
+      "title": "SWAPI FAQ: free Star Wars API, MCP server and alternatives | swapi.build",
+      "description": "Answers about swapi.build, the free Star Wars API and remote MCP server, and a dated, sourced comparison with swapi.dev, swapi.tech, swapi.info and Pipeworx.",
+      "changefreq": "monthly",
+      "priority": "0.7"
+    },
+    {
       "path": "/about",
       "page": "about",
       "label": "About",

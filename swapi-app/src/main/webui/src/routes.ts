@@ -6,6 +6,7 @@ export type Page =
   | 'docs'
   | 'mcp'
   | 'webmcp'
+  | 'faq'
   | 'about'
   | 'privacy'
   | 'terms'
@@ -29,6 +30,7 @@ const FIXED_PAGES: readonly Page[] = [
   'docs',
   'mcp',
   'webmcp',
+  'faq',
   'about',
   'privacy',
   'terms',

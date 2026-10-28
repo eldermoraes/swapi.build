@@ -66,6 +66,17 @@ class MarkdownFromHtmlTest {
                 md("<p><a href=\"/docs\">Docs</a> <a href=\"/resource/people/1\">Luke</a> <a href=\"/\">Home</a></p>"));
     }
 
+    // 2.15.0 (review of slice G2): a copy has no ids, so a link to a fragment of a
+    // page with a copy points to the copy without it, keeping the query; a page
+    // with no copy keeps its fragment (the HTML has the id).
+    @Test
+    void aFragmentLinkToACopyDropsTheFragment() {
+        assertEquals("[Comparison](https://preview.example/docs.md) [Search](https://preview.example/docs.md?q=1) "
+                        + "[Films](https://preview.example/resource/films#top)\n",
+                md("<p><a href=\"/docs#compare\">Comparison</a> <a href=\"/docs?q=1#search\">Search</a> "
+                        + "<a href=\"/resource/films#top\">Films</a></p>"));
+    }
+
     @Test
     void externalLinksStayAsTheyAre() {
         assertEquals("[Quarkus](https://quarkus.io)\n",

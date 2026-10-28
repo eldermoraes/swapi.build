@@ -369,6 +369,29 @@
   padding-top: 1.5rem;
 }
 
+/* FAQ (2.15.0): the answers reuse .about-section; the comparison is a .sw-table
+   that scrolls sideways inside .sw-table-wrap on a phone. No JavaScript. */
+.faq-links,
+.faq-sources {
+  margin: 0 0 0.75rem 1.25rem;
+  color: var(--sw-text-sub);
+  line-height: 1.75;
+}
+
+.faq-compare h3 {
+  font-family: var(--sw-font-display);
+  font-size: 0.85rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sw-gold);
+  margin: 1.25rem 0 0.5rem;
+}
+
+.faq-compare {
+  border-top: 1px solid var(--sw-hairline);
+  padding-top: 1.5rem;
+}
+
 /* Responsive */
 @media (max-width: 640px) {
   .item-list {

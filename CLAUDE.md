@@ -109,6 +109,18 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   `.md`, the home's is `/index.html.md`), with the same indexing as its HTML (the
   `noindex` and the canonical of its `SeoMetadata`). A copy is never chosen by the
   `Accept` header. Decoration that is not content is marked `data-md="skip"`.
+- **The FAQ text lives in `seo/faq.json`** (2.15.0, `FaqFile`), never in the
+  template: no HTML in the file, and counts of the data are markers
+  (`{count:people}`). Every fact about another API is a comparison cell with a
+  value, an https source and the day it was checked; a value without a source
+  is "not published" or "none found", never an estimate. Availability is not
+  compared: the table has a "Public status page" row, and swapi.build's own
+  monitor count is prose in one answer, recalculated when the FAQ changes. Never
+  repeat what one third party says about another, and never say or suggest that
+  another API is not working (`ForbiddenClaims` in the tests).
+  `FaqFileTest.shippedFactsAreAtMost180DaysOld` stops a release when a fact is
+  older than 180 days, on purpose: the fix is to check the facts again and update
+  their dates (`docs/RELEASE.md`).
 - **Container tooling is `podman`** (`/opt/podman/bin`), not `docker`. The podman
   machine needs 8 GB for local native builds.
 - **MCP serves stateful and stateless clients on the same `/mcp` endpoint.**

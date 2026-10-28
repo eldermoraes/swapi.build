@@ -77,7 +77,7 @@ class ServerRenderedRecordTest {
         assertTrue(body.contains("<meta name=\"robots\" content=\"noindex,follow\" />"), body);
         assertTrue(body.contains("<link rel=\"canonical\" href=\"https://preview.example/resource/people\" />"), body);
         String sitemap = given().when().get("/sitemap.xml").then().statusCode(200).extract().asString();
-        assertEquals(20, sitemap.split("<loc>", -1).length - 1);
+        assertEquals(21, sitemap.split("<loc>", -1).length - 1);
         assertFalse(sitemap.contains("/resource/people/1<"), sitemap);
     }
 

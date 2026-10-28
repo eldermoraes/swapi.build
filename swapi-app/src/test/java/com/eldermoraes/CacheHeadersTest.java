@@ -180,7 +180,7 @@ class CacheHeadersTest {
     // A new page must match quarkus.http.filter.spa.matches (SeoSiteFileTest checks
     // every page of the file), or it only loses cache.
     private static final List<String> SPA_ROUTES = List.of(
-            "/", "/docs", "/docs/mcp", "/docs/webmcp", "/about", "/privacy", "/terms", "/stats",
+            "/", "/docs", "/docs/mcp", "/docs/webmcp", "/faq", "/about", "/privacy", "/terms", "/stats",
             "/resource/planets", "/resource/people/1", "/resource/films/1");
 
     @Test

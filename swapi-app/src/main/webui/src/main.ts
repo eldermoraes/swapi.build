@@ -77,6 +77,26 @@ function writeHead(
 
 const container = document.getElementById('main-content')!;
 const pageLifecycle = new AbortController();
+
+// The document (path and query) the page shows (2.15.0). A link or a Back and
+// Forward that only changes the #fragment does not fetch it again: the page
+// scrolls to the fragment, or the browser restores the scroll on its own.
+let shownDocument: string | null = window.location.pathname + window.location.search;
+
+/** Scrolls to the element the #fragment of the address names; false when there is none. */
+function scrollToFragment(): boolean {
+  let id: string;
+  try {
+    id = decodeURIComponent(window.location.hash.slice(1));
+  } catch {
+    return false;
+  }
+  if (!id) return false;
+  const target = document.getElementById(id);
+  if (!target || !container.contains(target)) return false;
+  target.scrollIntoView();
+  return true;
+}
 // The fetch of the document of a server-rendered page; a new navigation, or an
 // action of the explorer on the page still shown, aborts it.
 let documentLoad: AbortController | null = null;
@@ -192,12 +212,17 @@ async function showServerPage(
       showLoadFailure(container, path);
       if (source.via === 'link') history.replaceState(null, '', source.from);
       updateActiveNav(getRoute(headPath).page);
+      // The page shown is still the one before; after Back or Forward the
+      // address is not it, so the next navigation fetches whatever it names.
+      shownDocument =
+        source.via === 'link' ? window.location.pathname + window.location.search : null;
       return;
     default:
       // 'reload' (a full load is on its way) or 'aborted' (a newer navigation).
       return;
   }
-  window.scrollTo(0, 0);
+  // A link to /faq#compare lands on the comparison, not on the top (2.15.0).
+  if (result !== 'ok' || !scrollToFragment()) window.scrollTo(0, 0);
   container.focus({ preventScroll: true });
   announce(spokenTitle(title));
 }
@@ -257,6 +282,7 @@ async function navigate(source: NavigationSource) {
   const generation = ++navigationGeneration;
 
   const path = window.location.pathname;
+  shownDocument = path + window.location.search;
   const first = firstNavigation;
   // The route is resolved before the head is touched, and the head is written
   // once: on a server 404 the client never shows "People #9999" with the list's
@@ -355,6 +381,14 @@ document.addEventListener(
       return;
 
     e.preventDefault();
+    // Only the #fragment changes (2.15.0): the page shown stays, no request, no
+    // redraw; the address takes the fragment and the page scrolls to it.
+    const target = new URL(href, window.location.href);
+    if (target.hash && target.pathname + target.search === shownDocument) {
+      if (target.hash !== window.location.hash) history.pushState(null, '', target.hash);
+      scrollToFragment();
+      return;
+    }
     // A second click on the link whose navigation is still running (2.12.0
     // review): ignored. Taken as a new navigation, its `from` would be the
     // address the first click pushed, and a failure would put that address
@@ -372,9 +406,18 @@ document.addEventListener(
   { signal: pageLifecycle.signal },
 );
 
-window.addEventListener('popstate', () => void navigate({ via: 'history' }), {
-  signal: pageLifecycle.signal,
-});
+window.addEventListener(
+  'popstate',
+  () => {
+    // Back or Forward between two fragments of the page shown (2.15.0): the
+    // browser restores the scroll; nothing to fetch or redraw.
+    if (window.location.pathname + window.location.search === shownDocument) return;
+    void navigate({ via: 'history' });
+  },
+  {
+    signal: pageLifecycle.signal,
+  },
+);
 navigate({ via: 'start' });
 
 if (import.meta.hot) {

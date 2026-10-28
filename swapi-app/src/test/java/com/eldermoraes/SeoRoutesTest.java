@@ -107,6 +107,19 @@ class SeoRoutesTest {
         Assertions.assertTrue(body.contains("[Usage stats](https://preview.example/stats)"), body);
     }
 
+    // 2.15.0: the FAQ, by its copy, in the Docs section (before ## Examples).
+    @Test
+    void llmsTxtLinksTheFaq() {
+        String body = given()
+                .header("X-Forwarded-Proto", "https")
+                .header("X-Forwarded-Host", "preview.example")
+                .when().get("/llms.txt").then().statusCode(200).extract().body().asString();
+        String line = "- [FAQ and comparison](https://preview.example/faq.md): free, no key, data scope, and a dated"
+                + " comparison with other Star Wars APIs\n";
+        int at = body.indexOf(line);
+        Assertions.assertTrue(at > body.indexOf("## Docs\n") && at < body.indexOf("## Examples\n"), body);
+    }
+
     // 2.14.0: the HTML of a page with a Markdown copy says where the copy is, in
     // an HTTP header (relative: nothing of the host to poison).
     @Test
@@ -115,6 +128,7 @@ class SeoRoutesTest {
                 {"/", "</index.html.md>; rel=\"alternate\"; type=\"text/markdown\""},
                 {"/docs", "</docs.md>; rel=\"alternate\"; type=\"text/markdown\""},
                 {"/docs/mcp", "</docs/mcp.md>; rel=\"alternate\"; type=\"text/markdown\""},
+                {"/faq", "</faq.md>; rel=\"alternate\"; type=\"text/markdown\""},
                 {"/about", "</about.md>; rel=\"alternate\"; type=\"text/markdown\""},
                 {"/resource/films/1", "</resource/films/1.md>; rel=\"alternate\"; type=\"text/markdown\""},
                 {"/resource/people/1", "</resource/people/1.md>; rel=\"alternate\"; type=\"text/markdown\""},
@@ -204,13 +218,14 @@ class SeoRoutesTest {
                         not(containsString("<!doctype html>"))));
     }
 
-    // The first batch (2.10.0): 8 pages + 6 lists + the 6 films. No record of a
-    // type not yet enabled, and no lastmod (guard: there is no real date of change
-    // per address, and the build date would be a lie).
+    // The first batch (2.10.0): 8 pages + 6 lists + the 6 films; 9 pages since
+    // 2.15.0 (/faq). No record of a type not yet enabled, and no lastmod (guard:
+    // there is no real date of change per address, and the build date would be a lie).
     @Test
     void sitemapListsOnlyIndexableTypes() {
         String xml = given().when().get("/sitemap.xml").then().statusCode(200).extract().body().asString();
-        Assertions.assertEquals(20, xml.split("<loc>", -1).length - 1, xml);
+        Assertions.assertEquals(21, xml.split("<loc>", -1).length - 1, xml);
+        Assertions.assertTrue(xml.contains("/faq</loc>"), xml);
         Assertions.assertFalse(java.util.regex.Pattern.compile("/resource/people/\\d").matcher(xml).find(), xml);
         Assertions.assertFalse(xml.contains("<lastmod>"), xml);
     }

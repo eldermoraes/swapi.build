@@ -30,6 +30,13 @@
       "canonicalPath": "/docs/webmcp"
     },
     {
+      "path": "/faq",
+      "title": "SWAPI FAQ: free Star Wars API, MCP server and alternatives | swapi.build",
+      "description": "Answers about swapi.build, the free Star Wars API and remote MCP server, and a dated, sourced comparison with swapi.dev, swapi.tech, swapi.info and Pipeworx.",
+      "robots": "index,follow",
+      "canonicalPath": "/faq"
+    },
+    {
       "path": "/about",
       "title": "About: a SWAPI alternative built with Quarkus | swapi.build",
       "description": "Learn why swapi.build exists, how it is built with Quarkus and GraalVM, and how to contribute.",
