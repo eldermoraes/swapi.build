@@ -21,6 +21,7 @@ public class People extends SWObject {
     @Schema(description = "URL of the planet resource this person was born on") private String homeworld;
     @Schema(description = "URLs of the film resources this person appeared in") private List<String> films;
     @Schema(description = "URLs of the species resources this person belongs to") private List<String> species;
+    @Schema(description = "URLs of the vehicle resources this person has piloted") private List<String> vehicles;
     @Schema(description = "URLs of the starship resources this person has piloted") private List<String> starships;
     @Schema(description = "ISO 8601 timestamp of when this resource was created")
     private String created;
@@ -132,6 +133,19 @@ public class People extends SWObject {
 
     public void setSpecies(List<String> species) {
         this.species = species;
+    }
+
+    public List<String> getVehicles() {
+        if (vehicles != null && getBaseUrl() != null) {
+            return vehicles.stream()
+                    .map(vehicle -> getBaseUrl() + vehicle)
+                    .toList();
+        }
+        return vehicles;
+    }
+
+    public void setVehicles(List<String> vehicles) {
+        this.vehicles = vehicles;
     }
 
     public List<String> getStarships() {

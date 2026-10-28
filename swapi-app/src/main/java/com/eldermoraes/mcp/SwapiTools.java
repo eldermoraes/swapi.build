@@ -162,7 +162,7 @@ public class SwapiTools {
             @ToolArg(description = "Numeric record id: the last segment of the entity's url field "
                     + "(1 in .../api/people/1).") int id,
             @ToolArg(description = "Optional. Relations to embed, one level deep, under a final \"expanded\" "
-                    + "key: PEOPLE homeworld, films, species, starships; FILMS characters, planets, starships, "
+                    + "key: PEOPLE homeworld, films, species, vehicles, starships; FILMS characters, planets, starships, "
                     + "vehicles, species; PLANETS residents, films; SPECIES homeworld, people, films; STARSHIPS "
                     + "and VEHICLES pilots, films; or [\"*\"] alone for all. Up to 8 names; an unknown name "
                     + "returns a tool error.", required = false) List<String> expand) {

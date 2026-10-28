@@ -232,7 +232,8 @@ class SwapiExpandTest {
 
     @Test
     void unknownRelationIsAToolErrorListingTheValidNames() {
-        assertEquals("Unknown relation 'nope' for people. Valid: homeworld, films, species, starships, or *.",
+        // Changes on purpose (fix-people-vehicles): people gained vehicles.
+        assertEquals("Unknown relation 'nope' for people. Valid: homeworld, films, species, vehicles, starships, or *.",
                 error("PEOPLE", 1, List.of("nope")));
         assertEquals("Unknown relation 'homeworld' for films. Valid: characters, planets, starships, vehicles, "
                 + "species, or *.", error("FILMS", 1, List.of("homeworld")));

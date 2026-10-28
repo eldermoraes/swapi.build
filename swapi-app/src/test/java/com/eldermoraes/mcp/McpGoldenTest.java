@@ -109,6 +109,9 @@ class McpGoldenTest {
             assertEquals(call.error(), r.isError(), call.file());
             assertEquals(1, r.content().size(), call.file());
             String text = r.content().get(0).asText().text();
+            if (!UPDATE && call.file().contains("people") && !r.isError()) {
+                text = withoutPeopleVehicles(call.file(), text);
+            }
             if (!compare(call.file() + ".txt", text)) {
                 differ.add(call.file());
             }
@@ -164,6 +167,21 @@ class McpGoldenTest {
             }
         }
         assertTrue(wrong.isEmpty(), "changed since 2.12.1: " + wrong);
+    }
+
+    // The one addition after 2.12.1 (fix-people-vehicles): every people record
+    // gained "vehicles", the last key in JSON-B's alphabetical order, as on
+    // swapi.dev. The goldens stay the 2.12.1 text: each people record must carry
+    // the key, and without it the text must be byte for byte the golden.
+    private static final java.util.regex.Pattern PEOPLE_VEHICLES =
+            java.util.regex.Pattern.compile(",\"vehicles\":\\[[^\\]]*\\]}");
+
+    private static String withoutPeopleVehicles(String file, String text) {
+        long records = java.util.regex.Pattern.compile("\"url\":\"[^\"]*/api/people/\\d+\"").matcher(text).results()
+                .count();
+        long vehicles = PEOPLE_VEHICLES.matcher(text).results().count();
+        assertEquals(records, vehicles, file + ": every people record carries vehicles");
+        return PEOPLE_VEHICLES.matcher(text).replaceAll("}");
     }
 
     private static boolean compare(String name, String actual) throws IOException {

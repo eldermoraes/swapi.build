@@ -18,8 +18,8 @@ import java.util.function.Function;
  * edited; the name or title is the heading, and a film's opening_crawl has its
  * own paragraph.
  *
- * People have no vehicles here: the data file has them but the API does not
- * expose them, and the page shows what the API shows.
+ * People list their vehicles since fix-people-vehicles: the data file always had
+ * them, the API now serves them, and the page shows what the API shows.
  *
  * The relation getters prefix RequestBaseUrl: only RecordViews calls them, inside
  * the block that sets and restores it.
@@ -110,6 +110,7 @@ public final class RecordFields {
                     new Relation("homeworld", "Homeworld", "planets", true, e -> one(((People) e).getHomeworld())),
                     new Relation("films", "Films", "films", false, e -> many(((People) e).getFilms())),
                     new Relation("species", "Species", "species", false, e -> many(((People) e).getSpecies())),
+                    new Relation("vehicles", "Vehicles", "vehicles", false, e -> many(((People) e).getVehicles())),
                     new Relation("starships", "Starships", "starships", false, e -> many(((People) e).getStarships())));
             case "films" -> List.of(
                     new Relation("characters", "Characters", "people", false, e -> many(((Film) e).getCharacters())),
