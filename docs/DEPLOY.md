@@ -35,8 +35,10 @@ Publishing a GitHub Release (`docs/RELEASE.md`, step 7) runs
    `swapi-update` switches the link before it knows the new version answers,
    and a binary that does not start would take the whole site down.
 3. **`deploy`**: waits for **manual approval** (environment `production`), then
-   connects to the host over SSH as the `deploy` user and sends
-   `update <tag> <sha256>`. On the host, the forced command `swapi-deploy-gate`
+   joins the maintainer's tailnet as an ephemeral node tagged `tag:ci`
+   (`tailscale/github-action`, pinned by commit), connects to the host's
+   Tailscale IP over SSH as the `deploy` user and sends
+   `update <tag> <sha256>` (see [2.12 Tailscale](#212-tailscale-the-deploy-path)). On the host, the forced command `swapi-deploy-gate`
    checks that request and runs `sudo swapi-update <tag> <sha256>` (section
    2.5), which downloads the binary from the Release, checks the hash against
    both sources, switches `/opt/swapi/current`, restarts swapi and fails if it
@@ -56,8 +58,11 @@ What the deploy needs, all outside the repository's files:
 | Name | Kind | Holds |
 |---|---|---|
 | `ORACLE_DEPLOY_KEY` | Actions secret | Private half of an ed25519 key used only by this workflow. Its public half sits in `~deploy/.ssh/authorized_keys` on the host (section 2.11). |
-| `ORACLE_KNOWN_HOSTS` | Actions secret | One `known_hosts` line, `<host IP> ssh-ed25519 AAAA...`, built from the host's `/etc/ssh/ssh_host_ed25519_key.pub`. The job connects with `StrictHostKeyChecking=yes`, so a changed host key stops the deploy. |
-| `SWAPI_ORIGIN_IP` | Actions variable | The host's public IP (also read by the uptime monitor). |
+| `ORACLE_KNOWN_HOSTS` | Actions secret | One `known_hosts` line, `<host IP> ssh-ed25519 AAAA...`, built from the host's `/etc/ssh/ssh_host_ed25519_key.pub`. The job connects with `StrictHostKeyChecking=yes`, so a changed host key stops the deploy. The line stays keyed by the **public** IP: the job connects to the Tailscale IP with `HostKeyAlias=<public IP>`. |
+| `SWAPI_ORIGIN_IP` | Actions variable | The host's public IP (also read by the uptime monitor). The deploy uses it only as the name of the host key. |
+| `TS_OAUTH_CLIENT_ID` | Secret of the `production` environment | Client ID of the Tailscale OAuth client that creates the runner's ephemeral `tag:ci` node (section 2.12). |
+| `TS_OAUTH_SECRET` | Secret of the `production` environment | Client secret of that OAuth client. |
+| `ORACLE_TS_HOST` | Variable of the `production` environment | The host's Tailscale IPv4 (`tailscale ip -4` on the host, in `100.64.0.0/10`). An IP rather than the MagicDNS name, so the job does not depend on the tailnet's DNS. |
 | `production` | Environment | Required reviewer: the maintainer. Approval in the Actions UI or through the REST API (`docs/RELEASE.md`, step 8). |
 
 **Redeploying a Release that already has its binary** (a reinstall, a
@@ -444,8 +449,10 @@ same window.
 
 #### 2.2 SSH
 
-Port 22 stays open to the internet, key-only, with fail2ban (already
-installed).
+Key-only, with fail2ban (already installed). The automated deploy reaches
+port 22 through Tailscale (section 2.12); once that path is proven, port 22
+leaves the public Security List (section 2.10) and SSH is reached only
+through the tailnet.
 
 1. Generate a new ed25519 key on the maintainer's machine, used for this host
    only. Append the public key to `~ubuntu/.ssh/authorized_keys`, **test a
@@ -897,6 +904,9 @@ The privacy page states this 30-day limit.
 
 Security List of the VCN: ingress TCP 22, 80 and 443 only. Keep the ICMP rules
 Oracle adds by default (type 3 code 4 is needed for path MTU discovery).
+TCP 22 goes once the deploy has gone through Tailscale at least once (section
+2.12); 80 and 443 stay public. Tailscale itself needs no ingress rule: it
+connects outward (direct UDP through NAT traversal, or a DERP relay).
 
 #### 2.11 The `deploy` user (automated deploys)
 
@@ -958,6 +968,72 @@ against this repository with
 **Rotating the deploy key:** generate a new ed25519 key pair, replace the line
 in `authorized_keys` (never add a second one), update `ORACLE_DEPLOY_KEY`, and
 delete the old private key.
+
+#### 2.12 Tailscale (the deploy path)
+
+The host is a node of the maintainer's tailnet, hostname `oracle-swapi`. The
+`deploy` job joins the same tailnet for the length of the job, as an
+**ephemeral** node tagged `tag:ci` created by an OAuth client (the default for
+OAuth clients: the node is removed shortly after the job ends), and opens SSH
+to the host's Tailscale IP. sshd, the `deploy` user, the forced command and the
+pinned host key (section 2.11) are unchanged; only the address changes.
+
+The action is `tailscale/github-action`, pinned by commit with its version in a
+comment. To move to a newer version, take the commit of its tag
+(`git ls-remote --tags https://github.com/tailscale/github-action`), prefer a
+version at least two weeks old, and keep the comment in step.
+
+On `release: published`, GitHub runs the workflow file **of the tagged
+commit**: the first release whose tag contains this path is the first deploy
+through Tailscale. A redeploy from the Actions tab (`workflow_dispatch`) runs
+the file of the branch chosen there (`main` by default).
+
+**Maintainer's steps, in the Tailscale admin console and on GitHub** (once;
+credentials are born as secrets and never pass through a chat):
+
+1. **Tag owner.** In Access controls, add `tag:ci` to `tagOwners` of the
+   tailnet policy file, keeping what is already there:
+
+   ```json
+   "tagOwners": {
+     "tag:ci": []
+   }
+   ```
+
+2. **Access rule, only if the policy is not the default allow-all.** Let
+   `tag:ci` reach the host on port 22, and nothing else:
+
+   ```json
+   "grants": [
+     { "src": ["tag:ci"], "dst": ["<Tailscale IP of oracle-swapi>"], "ip": ["tcp:22"] }
+   ]
+   ```
+
+   With the default policy (everyone reaches everything) no rule is needed for
+   the deploy to work, but a `tag:ci` node then reaches every device of the
+   tailnet; this grant, in place of the allow-all one, is what limits it.
+
+3. **OAuth client.** Settings, Trust credentials,
+   new OAuth credential with the scope **Keys > Auth Keys > Write** and the tag
+   `tag:ci` (the current Tailscale guide for GitHub runners also selects
+   **Devices > Core > Write**). The secret is shown once: copy it straight into
+   step 4.
+
+4. **GitHub, environment `production`** (Settings, Environments,
+   `production`), not repository-wide, so they are only readable after the
+   approval of the deploy:
+   - secret `TS_OAUTH_CLIENT_ID`: the client ID;
+   - secret `TS_OAUTH_SECRET`: the client secret;
+   - variable `ORACLE_TS_HOST`: the host's Tailscale IPv4 (`tailscale ip -4`
+     on the host, or the Machines page of the admin console).
+
+5. **Host key expiry.** On the Machines page, `oracle-swapi`, **Disable key
+   expiry**: otherwise the host leaves the tailnet when its node key expires
+   (180 days by default) and the deploy, with public 22 closed, has no way in.
+
+6. **Proof, then close.** Redeploy the current release from the Actions tab
+   (see [Automated deploy](#automated-deploy)); when the `deploy` job is green,
+   remove TCP 22 from the Security List (section 2.10).
 
 ### 3. Rehearsal on `oracle.swapi.build` (same window)
 
@@ -1126,6 +1202,8 @@ curl -fsS https://swapi.build/openapi.json | grep -o '"version"[^,]*'
 | swapi restarts in a loop | `journalctl -u swapi`; an out-of-memory kill shows as `oom-kill` in `journalctl -k`. The ceilings are deliberate: they protect the bot. |
 | The uptime monitor fails on DNS | Someone changed the records, or the VM was recreated: see [Step 0](#step-0-host-lost-recreated-or-account-closed-any-time). |
 | The bot is slow or down | `free -m` and `systemctl status invite-role-bot`. If swapi or Caddy are the cause, their ceilings are too high: lower `MemoryMax`, never touch the bot first. |
+| `deploy` job: `Join the tailnet` fails (OAuth error, `requested tags are invalid or not permitted`) | `TS_OAUTH_CLIENT_ID` or `TS_OAUTH_SECRET` is missing from the `production` environment or wrong, the OAuth client lacks the auth keys write scope, or `tag:ci` is not in `tagOwners` / not on the OAuth client (section 2.12). |
+| `deploy` job: `ssh: connect to host 100.x.y.z port 22: Connection timed out` | The runner joined but cannot reach the host: `oracle-swapi` is offline in the admin console (tailscaled stopped, or its node key expired), `ORACLE_TS_HOST` is not its current Tailscale IP, or the policy has no grant from `tag:ci` to the host on `tcp:22` (section 2.12). |
 | `deploy` job: `Host key verification failed` | The host key changed (VM recreated or SSH reinstalled) or `ORACLE_KNOWN_HOSTS` is wrong. Read the key on the host (section 2.11) and compare before updating the secret: an unexplained change is a reason to stop, not to overwrite. |
 | `deploy` job: `Permission denied (publickey)` | `ORACLE_DEPLOY_KEY` does not match `~deploy/.ssh/authorized_keys`, or sshd's `AllowUsers` does not include `deploy` (`sudo sshd -T \| grep -i allowusers`). |
 | `deploy` job: `swapi-deploy-gate: refused` | The workflow sent something other than `update vX.Y.Z <sha256>` (an empty hash from a skipped build, a non-release tag). Fix the workflow; never loosen the gate. |
