@@ -3,7 +3,8 @@ name: Native binary and deploy
 # The release pipeline (docs/DEPLOY.md, "Automated deploy"): full test suite →
 # linux/amd64 native executable attached, with its SHA-256, to the GitHub
 # Release → manual approval (environment `production`) → install on the
-# self-hosted origin over SSH → production probes on both names.
+# self-hosted origin over SSH, through the Tailscale tailnet (port 22 is not
+# open to the internet) → production probes on both names.
 #
 # - release: published, not the tag push: the Release is created by hand after
 #   the tag (docs/RELEASE.md), so a tag trigger would race a Release that does
@@ -230,20 +231,39 @@ jobs:
       cancel-in-progress: false
     env:
       SHA256: ${{ needs.build.outputs.sha256 || inputs.sha256 }}
+      # The public IP is still the name of the host key in ORACLE_KNOWN_HOSTS
+      # (HostKeyAlias below); the connection itself goes to ORACLE_TS_HOST.
       ORIGIN_IP: ${{ vars.SWAPI_ORIGIN_IP }}
+      # The host's Tailscale IPv4 (100.64.0.0/10), an environment variable of
+      # `production`. An IP, not a MagicDNS name: the job does not depend on
+      # the tailnet's DNS.
+      TS_HOST: ${{ vars.ORACLE_TS_HOST }}
     steps:
       - name: Validate the inputs
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a release tag: '$TAG'"; exit 1; }
           [[ "$SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "no valid sha256 from the build job: '$SHA256'"; exit 1; }
           [[ "$ORIGIN_IP" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || { echo "vars.SWAPI_ORIGIN_IP is not an IPv4 address"; exit 1; }
+          [[ "$TS_HOST" =~ ^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])(\.[0-9]{1,3}){2}$ ]] || { echo "vars.ORACLE_TS_HOST is not a Tailscale IPv4 address (100.64.0.0/10)"; exit 1; }
 
       - uses: actions/checkout@v4
         with:
           ref: refs/tags/${{ env.TAG }}
 
+      # Joins the tailnet as an ephemeral node tagged tag:ci (OAuth client;
+      # the node is removed shortly after the job ends). Pinned by commit: the
+      # step runs with the OAuth secret in a job that holds the deploy key.
+      - name: Join the tailnet
+        uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
       # The host key is pinned by the ORACLE_KNOWN_HOSTS secret; an unknown or
-      # changed key aborts the connection (StrictHostKeyChecking=yes).
+      # changed key aborts the connection (StrictHostKeyChecking=yes). Its line
+      # is keyed by the public IP; HostKeyAlias makes ssh look it up there even
+      # though it connects to the Tailscale IP.
       - name: SSH key and pinned host key
         env:
           DEPLOY_KEY: ${{ secrets.ORACLE_DEPLOY_KEY }}
@@ -270,9 +290,10 @@ jobs:
             -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" \
             -o GlobalKnownHostsFile=/dev/null \
             -o HostKeyAlgorithms=ssh-ed25519 \
+            -o HostKeyAlias="$ORIGIN_IP" \
             -o ConnectTimeout=20 \
             -o ServerAliveInterval=15 \
-            "deploy@$ORIGIN_IP" "update $TAG $SHA256"
+            "deploy@$TS_HOST" "update $TAG $SHA256"
 
       - name: Remove the SSH key
         if: always()
