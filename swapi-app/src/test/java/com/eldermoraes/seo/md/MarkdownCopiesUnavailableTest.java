@@ -51,6 +51,19 @@ class MarkdownCopiesUnavailableTest {
         Assertions.assertEquals("Markdown copy unavailable\n", response.body().asString());
     }
 
+    // #58: an unavailable copy is not a representation to confirm.
+    @Test
+    void unavailableCopyHasNoValidatorAndIsNeverNotModified() {
+        for (String path : List.of("/docs.md", "/llms-full.txt")) {
+            for (Response response : List.of(given().when().get(path),
+                    given().header("If-None-Match", "*").when().get(path))) {
+                Assertions.assertEquals(503, response.statusCode(), path);
+                Assertions.assertEquals(List.of(), response.headers().getValues("ETag"), path);
+                Assertions.assertEquals(List.of("no-cache"), response.headers().getValues("Cache-Control"), path);
+            }
+        }
+    }
+
     @Test
     void theOtherCopiesStillAnswer() {
         given().when().get("/about.md").then().statusCode(200).body(containsString("Why build another one?"));

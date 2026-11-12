@@ -104,6 +104,8 @@ class MarkdownCopiesFailureTest {
         Assertions.assertEquals(503, response.statusCode(), path);
         Assertions.assertTrue(response.contentType().startsWith("text/plain"), path + ": " + response.contentType());
         Assertions.assertEquals(List.of("no-cache"), response.headers().getValues("Cache-Control"), path);
+        // #58: a failure is not a representation to confirm.
+        Assertions.assertEquals(List.of(), response.headers().getValues("ETag"), path);
     }
 
     /** The message as written to the log (errorf: a printf format and its arguments). */
@@ -142,6 +144,9 @@ class MarkdownCopiesFailureTest {
         assertUnavailable(response, "/resource/people/2.md");
         Assertions.assertEquals("Markdown copy unavailable\n", response.body().asString());
         assertLogged("Markdown copy of /resource/people/2 failed: answering 503", "converter broken on purpose");
+        // #58: and is never confirmed as fresh.
+        assertUnavailable(given().header("If-None-Match", "*").when().get("/resource/people/2.md"),
+                "/resource/people/2.md with If-None-Match");
         // HEAD takes the same road.
         Assertions.assertEquals(List.of("no-cache"),
                 given().when().head("/resource/people/2.md").headers().getValues("Cache-Control"));

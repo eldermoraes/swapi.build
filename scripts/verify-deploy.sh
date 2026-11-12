@@ -22,6 +22,8 @@
 #                                           page's indexing; the HTML Link alternate;
 #                                           /llms-full.txt with the five copies and the record
 #                                           index, noindex, 20-100 KB; their poisoning pairs),
+#                                           the validators (#58: a strong ETag on a page, a copy
+#                                           and /llms-full.txt, and 304 for If-None-Match),
 #                                           the trailing-slash 301, and the Caddy headers
 #                                           (HSTS, no Server, zstd/gzip compression)
 #        verify-deploy.sh redirect <from-host> <to-host>
@@ -689,6 +691,59 @@ if printf '%s' "$llms" | grep -qF "$BASE/llms-full.txt" && printf '%s' "$llms" |
   pass "llms.txt points to $BASE/llms-full.txt and $BASE/docs/mcp.md"
 else
   fail "llms.txt links" "$BASE/llms-full.txt and $BASE/docs/mcp.md" "missing"
+fi
+
+# --- Validators (#58) --------------------------------------------------------
+# A page, a Markdown copy and /llms-full.txt carry a strong ETag (a digest of
+# the bytes of the body), and a GET or HEAD with it in If-None-Match answers
+# 304 with no body, the same ETag, the Cache-Control of the address and
+# Vary: Origin; another tag gets the whole 200. Asked without Accept-Encoding,
+# so the proxy does not compress and the tag is the application's.
+# header_values <header dump> <name>: every value of that header, joined by ",".
+header_values() {
+  printf '%s\n' "$1" | awk -F': *' -v name="$2" 'tolower($1)==name{sub(/^[^:]*: */, ""); print}' | paste -sd, -
+}
+# etag_probe <path> <cache-control>
+etag_probe() {
+  local p="$1" policy="$2" etag answer got head other
+  etag=$("${CURL[@]}" -o /dev/null -w '%header{etag}' "$BASE$p")
+  # The header lines are read from the dump, every one of each name joined by
+  # a comma: two Cache-Control lines fail, and a proxy that adds its own Vary
+  # line to the 304 (Caddy: Accept-Encoding) does not hide Origin.
+  answer=$("${CURL[@]}" -o /dev/null -D - -H "If-None-Match: ${etag:-\"none\"}" \
+    -w '%{http_code} %{size_download}\n' "$BASE$p" | tr -d '\r')
+  got="${answer##*$'\n'} $(header_values "$answer" etag) | $(header_values "$answer" cache-control) | $(header_values "$answer" vary)"
+  head=$("${CURL[@]}" -o /dev/null -I -H "If-None-Match: ${etag:-\"none\"}" -w '%{http_code}' "$BASE$p")
+  other=$("${CURL[@]}" -o /dev/null -H 'If-None-Match: "not-the-tag"' -w '%{http_code} %header{etag}' "$BASE$p")
+  if [[ "$etag" == \"*\" ]] && [[ "$got" == "304 0 $etag | $policy | "*"Origin"* ]] \
+     && [ "$head" = "304" ] && [ "$other" = "200 $etag" ]; then
+    pass "$p: ETag $etag, If-None-Match -> 304 without a body (GET and HEAD), another tag -> 200"
+  else
+    fail "$p validator" "a strong ETag; with it: 304 0 <etag> | $policy | Origin (GET) and 304 (HEAD); another tag: 200 <etag>" \
+      "ETag ${etag:-missing}; with it: $got (GET), $head (HEAD); another tag: $other"
+  fi
+}
+etag_probe /docs 'public, max-age=0, must-revalidate, s-maxage=300'
+etag_probe /resource/films/1 'public, max-age=0, must-revalidate, s-maxage=300'
+etag_probe /docs.md 'public, max-age=300, s-maxage=86400'
+etag_probe /resource/films/1.md 'public, max-age=300, s-maxage=86400'
+etag_probe /llms-full.txt 'public, max-age=300, s-maxage=86400'
+# An error is not a representation to confirm: no ETag, and never a 304.
+got=$("${CURL[@]}" -o /dev/null -H 'If-None-Match: *' -w '%{http_code} %header{etag}' "$BASE/resource/people/9999")
+[ "$got" = "404 " ] && pass "/resource/people/9999 with If-None-Match: * -> 404 without an ETag" \
+  || fail "/resource/people/9999 validator" "404 and no ETag" "$got"
+# Informational, never fails: the same road with compression asked for, as a
+# browser does. A proxy that compresses must give a strong tag per encoding;
+# Caddy's encode appends "-<encoding>" to it and takes that off If-None-Match
+# before the application sees it. A 200 here means the proxy does not undo its
+# own change, so browsers still download the page on every revalidation.
+enc=$("${CURL[@]}" -o /dev/null -H 'Accept-Encoding: zstd, gzip' -w '%header{etag} %header{content-encoding}' "$BASE/docs")
+enc_tag="${enc%% *}"
+if [ -z "${enc#* }" ]; then
+  echo "INFO  /docs with Accept-Encoding: zstd, gzip: no Content-Encoding (the proxy does not compress), nothing to check"
+else
+  enc_code=$("${CURL[@]}" -o /dev/null -H 'Accept-Encoding: zstd, gzip' -H "If-None-Match: ${enc_tag:-\"none\"}" -w '%{http_code}' "$BASE/docs")
+  echo "INFO  /docs with Accept-Encoding: zstd, gzip: ETag ${enc_tag:-missing}, Content-Encoding ${enc#* }; If-None-Match with it -> $enc_code (304 = a compressed revalidation works)"
 fi
 
 # --- Cold start (informational, never fails) ---------------------------------
