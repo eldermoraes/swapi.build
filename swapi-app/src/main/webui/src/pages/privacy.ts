@@ -4,7 +4,7 @@ export function renderPrivacy(container: HTMLElement): void {
       <h1 class="sw-page-title">Privacy Policy</h1>
 
       <section class="about-section">
-        <p><em>Last updated: October 20, 2026</em></p>
+        <p><em>Last updated: November 12, 2026</em></p>
         <p>
           <strong>The short version: swapi.build has no accounts, sets no cookies, and stores nothing
           about you. Page visits are counted without cookies and without personal data, and the
@@ -81,7 +81,8 @@ export function renderPrivacy(container: HTMLElement): void {
           Hosting on Oracle Cloud infrastructure, on a server the maintainer operates; DNS by
           Cloudflare (DNS-only, no proxying: your requests to the site, the API and the MCP endpoint
           never pass through Cloudflare). Cloudflare also provides the page-visit measurement described
-          above, which only receives what that script reports. No data is sold or shared with anyone.
+          above, which only receives what that script reports. The fonts are served by swapi.build
+          itself: no page loads anything from a font service. No data is sold or shared with anyone.
         </p>
       </section>
 

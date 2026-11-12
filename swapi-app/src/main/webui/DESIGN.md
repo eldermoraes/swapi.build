@@ -60,8 +60,18 @@ mangles a condensed face.
 Each font token lists a metric-matched fallback face right after the web font
 (`'Pathway Gothic One Fallback'`, `'Inter Fallback'`, `'JetBrains Mono Fallback'`,
 defined in `tokens.css`): a local font scaled to the web font's widths and
-metrics, so the page does not move when the Google Fonts swap in
+metrics, so the page does not move when the web fonts swap in
 (`font-fallbacks.test.ts`). A new web font gets its own fallback face.
+
+The site serves its own fonts: the three families are woff2 files in
+`src/fonts/` (the latin subset; Inter and JetBrains Mono are variable, one file
+for all their weights), each with its SIL Open Font License beside it, declared
+as `@font-face` in `tokens.css` with `font-display: swap` and a relative `url()`,
+so Vite fingerprints them under `/assets/`. Never link a font service or any
+other host from `index.html` or a stylesheet: the privacy page says the site
+loads none, and `no-third-party-hosts.test.ts` fails if one comes back. A new
+web font is a new file there, with its licence, its face and its fallback face
+(`web-fonts.test.ts`).
 
 ## 3. Colour roles
 

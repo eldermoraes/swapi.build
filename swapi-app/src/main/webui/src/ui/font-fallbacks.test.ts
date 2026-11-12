@@ -3,7 +3,7 @@ import tokens from '../styles/tokens.css?raw';
 
 /**
  * Metric-matched fallback faces (2.11.0). The four pages drawn on the server
- * paint before the Google Fonts arrive (display=swap); a fallback with other
+ * paint before the web fonts arrive (font-display: swap); a fallback with other
  * widths wraps the header menu onto two lines on a phone and the swap moves the
  * whole page (home CLS 0.0052 -> 0.1858 on 360 px before this). Each web font
  * is followed in its stack by a local face scaled to its widths and metrics.
