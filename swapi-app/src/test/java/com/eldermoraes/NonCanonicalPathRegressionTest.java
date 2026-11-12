@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class NonCanonicalPathRegressionTest {
 
     private static final String EDGE_CACHE =
-            "public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400";
+            "public, max-age=300, s-maxage=300, stale-while-revalidate=86400";
 
     /** The canonical addresses, each written with the aliases this issue refuses. */
     @ParameterizedTest

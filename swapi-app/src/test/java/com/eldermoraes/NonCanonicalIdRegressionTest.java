@@ -99,7 +99,7 @@ class NonCanonicalIdRegressionTest {
         get("/api/" + type + "/0" + id)
                 .statusCode(404)
                 .header("Cache-Control",
-                        equalTo("public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400"))
+                        equalTo("public, max-age=300, s-maxage=300, stale-while-revalidate=86400"))
                 .header("X-Content-Type-Options", "nosniff");
     }
 
