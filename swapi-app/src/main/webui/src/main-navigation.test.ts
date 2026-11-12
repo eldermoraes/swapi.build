@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { APP_LOAD_TIMEOUT, loadAppModules } from './test-support/app-modules';
 import aboutMain from '../../../test/resources/ssr/about.html?raw';
 import homeMain from '../../../test/resources/ssr/home.html?raw';
 import apiBody from '../../../test/resources/ssr/record-films-1.api.json?raw';
@@ -49,6 +50,8 @@ function respond(input: RequestInfo | URL): Promise<Response> {
   }
   return Promise.resolve(new Response(JSON.stringify([film]), { status: 200 }));
 }
+
+beforeAll(loadAppModules, APP_LOAD_TIMEOUT);
 
 // 2.10.0: from the list (first load, no write), a click on a record writes the
 // head once, after the record arrives, already with its name: never "Films #1".

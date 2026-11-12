@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { APP_LOAD_TIMEOUT, loadAppModules } from './test-support/app-modules';
 
 const seo = vi.hoisted(() => ({ apply: vi.fn() }));
 
@@ -13,6 +14,8 @@ function nextFrames(): Promise<void> {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
   );
 }
+
+beforeAll(loadAppModules, APP_LOAD_TIMEOUT);
 
 describe('first load of a page the server answered with 404', () => {
   afterEach(() => {

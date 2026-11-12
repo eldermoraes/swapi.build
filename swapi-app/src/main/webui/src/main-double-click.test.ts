@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { APP_LOAD_TIMEOUT, loadAppModules } from './test-support/app-modules';
 
 function settle(): Promise<void> {
   return new Promise((resolve) =>
@@ -7,6 +8,8 @@ function settle(): Promise<void> {
 }
 
 const film = { title: 'A New Hope', url: 'http://localhost:3000/api/films/1' };
+
+beforeAll(loadAppModules, APP_LOAD_TIMEOUT);
 
 // 2.12.0 review: a second click on the same link while its navigation is in
 // flight must not take the address it just pushed as the one to go back to.

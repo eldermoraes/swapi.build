@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { APP_LOAD_TIMEOUT, loadAppModules } from './test-support/app-modules';
 
 function settle(): Promise<void> {
   return new Promise((resolve) =>
@@ -7,6 +8,8 @@ function settle(): Promise<void> {
 }
 
 const film = { title: 'A New Hope', url: 'http://localhost:3000/api/films/1' };
+
+beforeAll(loadAppModules, APP_LOAD_TIMEOUT);
 
 // Changes on purpose in 2.12.0 (slice E2). Until 2.11.0 the record came from
 // /api and its failure drew "Resource unavailable" with the fallback head of

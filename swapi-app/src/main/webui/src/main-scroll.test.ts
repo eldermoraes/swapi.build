@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { APP_LOAD_TIMEOUT, loadAppModules } from './test-support/app-modules';
 import aboutMain from '../../../test/resources/ssr/about.html?raw';
 import homeMain from '../../../test/resources/ssr/home.html?raw';
 import recordMain from '../../../test/resources/ssr/record-films-1.html?raw';
@@ -62,6 +63,8 @@ async function travel(direction: 'back' | 'forward'): Promise<void> {
 function heading(): string | undefined {
   return document.querySelector('#main-content h1')?.textContent ?? undefined;
 }
+
+beforeAll(loadAppModules, APP_LOAD_TIMEOUT);
 
 describe('Back and Forward restore the scroll position', () => {
   /** Where the viewport is; the reader scrolls by writing it. */
