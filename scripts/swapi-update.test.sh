@@ -265,6 +265,12 @@ prints "it says the version is not answering" "swapi v2.1.0 is not answering. Ro
 prints "it prints the rollback command with the previous version" \
   "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
 
+# names_rollback <description> <version>: the last run printed the rollback
+# command to this version.
+names_rollback() {
+  prints "$1" "  ln -sfn $ROOT/$2 $ROOT/current && systemctl restart swapi"
+}
+
 # The rollback hint names the version that served before the tag, never the
 # tag itself, and no `ln` at all when none is recorded or it is gone.
 NO_PREVIOUS='No version to roll back to: none is recorded for this tag, or the recorded one is gone.'
@@ -352,16 +358,13 @@ host v2.0.0 v1.9.0
 does_not_answer "a tag that does not answer, again" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
 does_not_answer "another tag after it that does not answer" \
   v2.2.0 "v1.9.0 v2.0.0 v2.1.0 v2.2.0"
-prints "its hint names the last working version, not the failed tag" \
-  "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
+names_rollback "its hint names the last working version, not the failed tag" v2.0.0
 does_not_answer "a third failed tag in a row" \
   v2.3.0 "v1.9.0 v2.0.0 v2.1.0 v2.2.0 v2.3.0"
-prints "a third failed tag still names the last working version" \
-  "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
+names_rollback "a third failed tag still names the last working version" v2.0.0
 does_not_answer "a retry of the second failed tag" \
   v2.2.0 "v1.9.0 v2.0.0 v2.1.0 v2.2.0 v2.3.0"
-prints "the retry of a tag reached from another failed tag names it too" \
-  "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
+names_rollback "the retry of a tag reached from another failed tag names it too" v2.0.0
 rm -f "$TMP/down"
 deploys "a tag that answers after three failed ones prunes them" \
   v2.4.0 "v2.0.0 v2.4.0"
@@ -409,8 +412,7 @@ deploys "a working upgrade, again" v2.1.0 "v2.0.0 v2.1.0"
 does_not_answer "a failed tag after it, again" v2.2.0 "v2.0.0 v2.1.0 v2.2.0"
 does_not_answer "the working version again, not answering this time" \
   v2.1.0 "v2.0.0 v2.1.0 v2.2.0"
-prints "its hint names the version before it, not the failed tag" \
-  "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
+names_rollback "its hint names the version before it, not the failed tag" v2.0.0
 
 # A failed first install: nothing ever answered, so nothing to roll back to.
 host ""

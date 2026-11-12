@@ -657,12 +657,12 @@ if [ -L /opt/swapi/current ]; then previous=$(readlink -f /opt/swapi/current || 
 # answering carries a `failed` mark and is never a rollback target: its own
 # target is taken over instead, so a run of failed tags all name the version
 # that served before the first one.
-target=$previous
+record=$previous
 if [ -n "$previous" ] && [ -e "$previous/failed" ]; then
-  target=$(cat "$previous/previous" 2>/dev/null || true)
+  record=$(cat "$previous/previous" 2>/dev/null || true)
 fi
-if [ "$target" != "/opt/swapi/$tag" ]; then
-  printf '%s\n' "$target" > "/opt/swapi/$tag/previous"
+if [ "$record" != "/opt/swapi/$tag" ]; then
+  printf '%s\n' "$record" > "/opt/swapi/$tag/previous"
 fi
 rollback=$(cat "/opt/swapi/$tag/previous" 2>/dev/null || true)
 ln -sfn "/opt/swapi/$tag" /opt/swapi/current
@@ -713,10 +713,11 @@ version on a redeploy, accepted any `v*.*.*` glob as a tag, checked the
 health once, three seconds after the restart, and on a redeploy or a retry
 printed a rollback to the tag itself; a host that still has it keeps all four
 behaviours until the block is installed again. A copy older than the fix of
-issue #115 also treated a tag that did not answer as a working version: another tag after it
-named the failed tag in its rollback command and, once it answered, kept the
-failed tag and removed the last working version. A tag that failed under that
-copy carries no `failed` mark, so the new copy still treats it as working.
+issue #115 also treated a tag that did not answer as a working version:
+another tag after it named the failed tag in its rollback command and, once it
+answered, kept the failed tag and removed the last working version. A tag that
+failed under that copy carries no `failed` mark, so the new copy still treats
+it as working.
 
 After an upgrade, `/opt/swapi/` holds the new version and its rollback
 version: the one that was active before it, or, when that one did not answer,
@@ -736,7 +737,12 @@ a tag deployed while `current` points at a failed version records that
 version's own record instead, so after any number of failed tags in a row the
 command still names, and pruning still keeps, the version that served before
 the first of them. A version without the mark (installed by the old copy, or
-put back by hand) is recorded as it is. When there is no record (a first
+put back by hand) is recorded as it is. The mark is read when a record is
+written, not when it is used: a version recorded while it worked and that
+fails a later redeploy keeps its place in the records written before. A failed
+version brought back to work by hand keeps its mark until `swapi-update` runs
+it again and it answers; before that, the next tag treats it as failed. When
+there is no record (a first
 install, a failed first install, or a tag installed by the old copy) or the
 recorded version is no longer on disk (pruned since), it prints no `ln`
 command, says so, and points to `swapi-update` with an older tag.
