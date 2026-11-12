@@ -31,7 +31,7 @@ public abstract class RecordService<T extends SWObject> {
 
     private final String suffixStart;
     private final List<T> records;
-    private final Function<T, String> searched;
+    private final Function<T, String> searchText;
     private final Function<T, String> address;
 
     /**
@@ -40,15 +40,15 @@ public abstract class RecordService<T extends SWObject> {
      * so the application does not start with a type it cannot serve.
      *
      * @param listType the List&lt;T&gt; that JSON-B reads the file as
-     * @param searched the text of a record that a search matches
+     * @param searchText the text of a record that a search matches
      * @param address  the address of a record (its getUrl)
      */
     @SuppressWarnings("unchecked") // a segment is only ever loaded as the list type of its own service
-    protected RecordService(String segment, Type listType, Function<T, String> searched, Function<T, String> address) {
+    protected RecordService(String segment, Type listType, Function<T, String> searchText, Function<T, String> address) {
         this.suffixStart = "/" + segment + "/";
         this.records = (List<T>) LOADED.computeIfAbsent(segment,
                 s -> DataFile.<T>load("data/" + s + ".json", listType));
-        this.searched = searched;
+        this.searchText = searchText;
         this.address = address;
     }
 
@@ -72,7 +72,7 @@ public abstract class RecordService<T extends SWObject> {
     /** The records whose name (or title) contains the text, in any case. */
     public List<T> search(String text) {
         return records.stream()
-                .filter(record -> searched.apply(record).toLowerCase().contains(text.toLowerCase()))
+                .filter(record -> searchText.apply(record).toLowerCase().contains(text.toLowerCase()))
                 .collect(Collectors.toList());
     }
 
