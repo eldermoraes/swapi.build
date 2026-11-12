@@ -18,14 +18,14 @@
 >   there is no edge in front of the origin and no Cloudflare rate-limit rule
 >   for `/mcp`.
 > - **"Stateless only".** `/mcp` serves stateful and stateless clients on the
->   same endpoint, on purpose; only the legacy HTTP+SSE transport is rejected.
-> - **Tool surface and action plan.** The plan below is not a backlog; the MCP
->   surface that exists is described in `CLAUDE.md`.
+>   same endpoint, on purpose; the legacy HTTP+SSE transport is rejected.
 >
-> Two edits were made to the original text on 2026-11-12: the "Reusable brief"
-> section that closed the document was removed (it packed the facts above into
-> an instruction), and wording that characterized the availability of another
-> API was removed.
+> The action plan at the end is not a backlog; the MCP surface that exists is
+> described in `CLAUDE.md`.
+>
+> The original text was edited on 2026-11-12: the "Reusable brief" section that
+> closed the document was removed (it packed the facts above into an
+> instruction), and two passages of finding 2 were shortened.
 
 **Date:** 2026-07-31
 **Question:** does it make sense to also expose the API as an MCP Server, as a gateway for demos with LLMs?
