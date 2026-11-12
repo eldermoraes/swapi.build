@@ -5,7 +5,7 @@ import { APP_LOAD_TIMEOUT, appModulePaths, loadAppModules } from './app-modules'
 // (/src/main.ts). Not this file: its comments and cases name ./main on purpose.
 const sources = Object.fromEntries(
   Object.entries(
-    import.meta.glob(['../**/*.{ts,tsx}', '!../**/*.d.ts', '!./app-modules.test.ts'], {
+    import.meta.glob(['../**/*.ts', '!../**/*.d.ts', '!./app-modules.test.ts'], {
       query: '?raw',
       import: 'default',
       eager: true,
@@ -14,16 +14,17 @@ const sources = Object.fromEntries(
 );
 
 const MAIN = '/src/main.ts';
-const TEST_FILE = /\.(test|spec)\.tsx?$/;
-// What evaluates another module: import('./x'), vi.importActual('./x'),
+const TEST_FILE = /\.(test|spec)\.ts$/;
+const HOOK = 'beforeAll(loadAppModules, APP_LOAD_TIMEOUT);';
+// What evaluates another module: import('./x'), vi.importActual('./x'), vi.importMock('./x'),
 // import ... from './x', export ... from './x' and import './x'. Any quotes.
 const IMPORT_SPECIFIER =
-  /(?:\b(?:import|importActual)\(\s*|\bfrom\s*|^\s*import\s*)(['"`])(\.\.?\/[^'"`]*)\1/gm;
+  /(?:\b(?:import|importActual|importMock)\(\s*|\bfrom\s*|^\s*import\s*)(['"`])(\.\.?\/[^'"`]*)\1/gm;
 // At column 0: top level, and not in a comment.
 const LOADS_APP = /^beforeAll\(loadAppModules, APP_LOAD_TIMEOUT\);$/m;
 const TOP_LEVEL_SUITE_OR_HOOK = /^(describe|suite|it|test|beforeAll|beforeEach)\b/m;
 
-/** The modules of `modules` that `path` imports, resolved exactly as Vite would. */
+/** The modules of `modules` that `path` imports (relative specifiers: .ts, .js, none, /index.ts). */
 function importsOf(path: string, modules: Record<string, string>): string[] {
   const found: string[] = [];
   for (const [, , specifier] of modules[path].matchAll(IMPORT_SPECIFIER)) {
@@ -33,7 +34,6 @@ function importsOf(path: string, modules: Record<string, string>): string[] {
       target,
       target.replace(/\.js$/, '.ts'),
       `${target}.ts`,
-      `${target}.tsx`,
       `${target}/index.ts`,
     ];
     const resolved = candidates.find((candidate) => candidate in modules);
@@ -46,7 +46,7 @@ function importsOf(path: string, modules: Record<string, string>): string[] {
  * The test files of `modules` from which main.ts is reachable, each with the
  * import chain that reaches it (test file first, main.ts last).
  */
-function testFilesThatLoadTheApp(modules: Record<string, string>): Map<string, string[]> {
+function testFilesThatReachMain(modules: Record<string, string>): Map<string, string[]> {
   const loading = new Map<string, string[]>();
   for (const test of Object.keys(modules).filter((path) => TEST_FILE.test(path))) {
     const via = new Map<string, string>([[test, test]]);
@@ -70,21 +70,20 @@ function testFilesThatLoadTheApp(modules: Record<string, string>): Map<string, s
 /** What each test file must fix: empty when every test file that reaches ./main loads the app first. */
 function appLoadProblems(modules: Record<string, string>): string[] {
   const problems: string[] = [];
-  for (const [path, chain] of testFilesThatLoadTheApp(modules)) {
+  for (const [path, chain] of testFilesThatReachMain(modules)) {
     const source = modules[path];
     const load = source.search(LOADS_APP);
     if (load !== -1 && !TOP_LEVEL_SUITE_OR_HOOK.test(source.slice(0, load))) continue;
     problems.push(
       `${path} loads the app (${chain.join(' -> ')}) ` +
         (load === -1 ? 'without loading it first' : 'after a suite, test or hook') +
-        ': add "beforeAll(loadAppModules, APP_LOAD_TIMEOUT);" at the top level, ' +
+        `: add "${HOOK}" at the top level, ` +
         'before its first describe, test or hook, importing both from src/test-support/app-modules.ts (#109)',
     );
   }
   return problems;
 }
 
-const HOOK = 'beforeAll(loadAppModules, APP_LOAD_TIMEOUT);';
 const OPENS = "it('opens', async () => {});\n";
 
 /** Problems of an in-memory tree that holds main.ts and `files`. */
@@ -97,7 +96,7 @@ function problemsOf(files: Record<string, string>): string[] {
 // (10 s) budget, and the suite timed out when several ran at once.
 describe('loading the app in a test', () => {
   it('every test file that reaches ./main loads the app first, before its tests and hooks', () => {
-    expect([...testFilesThatLoadTheApp(sources).keys()]).toContain('/src/main.test.ts');
+    expect([...testFilesThatReachMain(sources).keys()]).toContain('/src/main.test.ts');
     expect(appLoadProblems(sources)).toEqual([]);
   });
 
@@ -141,17 +140,22 @@ describe('loading the app in a test', () => {
       ]);
     });
 
-    it('a test that imports ./main itself, with any quotes, through vi.importActual too', () => {
-      for (const load of ["import('./main')", 'import("./main.ts")', 'vi.importActual(`./main`)']) {
+    it('a test that imports ./main itself, with any quotes, through vi.importActual or vi.importMock too', () => {
+      for (const load of [
+        "import('./main')",
+        'import("./main.ts")',
+        'vi.importActual(`./main`)',
+        "vi.importMock('./main.js')",
+      ]) {
         expect(problemsOf({ '/src/a.test.ts': `${OPENS}await ${load};\n` })).toHaveLength(1);
       }
     });
 
     it('a hook that comes after a suite, test or hook, or sits in a comment', () => {
       const test = "it('opens', () => import('./main'));\n";
-      expect(problemsOf({ '/src/a.test.ts': `${test}${HOOK}\n` })).toEqual([
-        expect.stringContaining('after a suite, test or hook'),
-      ]);
+      expect(
+        problemsOf({ '/src/a.test.ts': `describe('app', () => {});\n${HOOK}\n${test}` }),
+      ).toEqual([expect.stringContaining('after a suite, test or hook')]);
       expect(problemsOf({ '/src/a.test.ts': `// ${HOOK}\n${test}` })).toEqual([
         expect.stringContaining('without loading it first'),
       ]);
