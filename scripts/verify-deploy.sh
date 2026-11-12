@@ -166,7 +166,9 @@ echo "$body" | grep -q "$BASE/api/people/1" && pass "REST embeds https URLs on t
   || fail "REST embedded URLs" "contain $BASE/api/people/1" "missing"
 
 # --- Usage counters (2.6.0+) -------------------------------------------------
-# The REST probe above was just counted, so /api/people/{id} is in the window.
+# The REST probe above was just counted, so /api/people/{id} is in the window,
+# unless a view built in the last 60 s is served (StatsViewMemo; docs/DEPLOY.md,
+# "View lifetime").
 stats=$("${CURL[@]}" -w '\n%{http_code}' "$BASE/api/stats")
 code="${stats##*$'\n'}"
 if [ "$code" = "200" ] && echo "$stats" | grep -q '"countingSince"' \
@@ -198,7 +200,8 @@ assert isinstance(e, (int, float)) and not isinstance(e, bool) and 0 <= e < 1
   fi
 done
 
-# Server times (2.8.0+): the REST probe above was timed under its template too.
+# Server times (2.8.0+): the REST probe above was timed under its template too
+# (same 60 s view caveat as above).
 perf=$("${CURL[@]}" "$BASE/api/stats?period=24h")
 if echo "$perf" | python3 -c '
 import json, sys

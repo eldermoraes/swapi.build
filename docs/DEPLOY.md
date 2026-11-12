@@ -251,7 +251,7 @@ toolchain, a CLI); it closes the moved-tag path only.
   with the phrase, the canonical `https://<host>/faq` and the comparison as a
   table (lines that start with `| `). `/about` says `stays up for live
   demos` and never `never go offline`. Any `FAIL` here after a deploy is an
-  immediate rollback to 2.14.0.
+  immediate rollback to the previous version.
 - **Validators (#58)**: `/docs`, `/resource/films/1`, `/docs.md`,
   `/resource/films/1.md` and `/llms-full.txt` each carry a strong `ETag` (a
   digest of the bytes of the body: it changes with the content, the host and
@@ -373,7 +373,8 @@ fake hosts on `127.0.0.1` (one for `www`, one for the apex) and proves that a
 correct redirect passes and a wrong status, a wrong host, a dropped query, a
 redirect to somewhere else or an empty `<main>` at the destination fails.
 
-The redirect lives on the host, in the `Caddyfile` (section 4). It was
+The redirect lives on the host, in the `Caddyfile` (section 2.7; history in
+section 4). It was
 applied there and verified with the probe on 2026-10-26 (18:25 BRT).
 
 ## Troubleshooting (application)
@@ -684,14 +685,15 @@ The block above is the only source of the script, and
 `scripts/swapi-update.test.sh` runs it in CI against a temporary directory. The
 host has its own copy: after any change to the block, the maintainer installs
 it again as `/usr/local/sbin/swapi-update` (owner root, mode 755). Until then
-the host runs the old script.
+the host runs the old script. Before 2026-11-12 that copy removed the rollback
+version on a redeploy, accepted any `v*.*.*` glob as a tag, and checked the
+health once, three seconds after the restart; a host that still has it keeps
+all three behaviours until the block is installed again.
 
 After an upgrade, `/opt/swapi/` holds the new version and the one that was
 active before it. A redeploy of the active version (a reinstall, the proof of
 the deploy path, or a retry of a tag that did not answer) removes nothing, so
 the version to roll back to is still there; the next upgrade prunes as usual.
-Before 2026-11-12 the script removed it in that case: a host that still has the
-old copy loses its rollback version on a redeploy.
 
 Rolling back a version is `sudo ln -sfn /opt/swapi/<previous tag> /opt/swapi/current`
 and `sudo systemctl restart swapi`.
@@ -699,10 +701,7 @@ and `sudo systemctl restart swapi`.
 The script refuses a tag that is not `vX.Y.Z` (three numeric parts of 1 to 4
 digits, nothing before or after), the shape `swapi-deploy-gate` accepts
 (section 2.11), before it downloads anything: a pre-release name or a path
-never becomes a download address or a directory under `/opt/swapi/`. Before
-2026-11-12 the check was a glob that let those through, and the health check
-below was a single request three seconds after the restart: a host that still
-has the old copy keeps both until the script is installed again.
+never becomes a download address or a directory under `/opt/swapi/`.
 
 `swapi-update` does not keep the previous version running while it checks the
 new one: it switches the link and restarts the service **before** it knows the
@@ -844,8 +843,8 @@ advertises) and served again in between, with `max-age` reduced by its age
 (`StatsViewMemo`). The numbers are therefore up to 60 s behind the counters. For
 the probes this means a view built just before the REST probe does not hold that
 probe's request yet: with a week of history the checks pass anyway; on a host
-with no `/api/people/{id}` request in the last 24 hours, the `performance` check
-of `verify-deploy.sh` can fail if someone opened the home page in the minute
+with no `/api/people/{id}` request in the last 24 hours, the `/api/stats` and
+`performance` checks of `verify-deploy.sh` can fail if someone opened the home page in the minute
 before, and passes when repeated a minute later.
 
 The counters live in memory and, when the unit has a state directory, are also
@@ -1279,7 +1278,7 @@ active version removes nothing (section 2.5; the host copy of the script must
 be the current one).
 
 ```bash
-ls /opt/swapi/                                   # v<current>, v<previous>; more after a redeploy or a retry
+ls /opt/swapi/                                   # v<current>, v<previous>; one more after a failed upgrade
 sudo ln -sfn /opt/swapi/<previous tag> /opt/swapi/current
 sudo systemctl restart swapi
 curl -fsS https://swapi.build/openapi.json | grep -o '"version"[^,]*'

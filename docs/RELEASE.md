@@ -137,7 +137,8 @@ A version bump changes `info.version` in the public spec, so it must reach
 production. Publishing the Release (step 7) triggers **Native binary and
 deploy** (`native-binary.yml`). Pushing the tag alone deploys nothing.
 
-1. `test` runs the full suite on the tag; `build` builds the native binary,
+1. `test` runs the backend suite on the tag (Vitest ran in `ci.yml` on the
+   merged commit); `build` builds the native binary,
    attaches `application` and `application.sha256` to the Release and prints
    the hash in the run summary.
 2. `deploy` waits for **manual approval** (environment `production`). Approve
