@@ -230,7 +230,9 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   application sees it, so the line should end in `304`. A `200` there means
   the Caddy on the host does not undo its suffix: nothing breaks, but a
   browser (which always asks for compression) then downloads the page on
-  every revalidation, as before #58.
+  every revalidation, as before #58. Without compression on the proxy the line
+  says there is nothing to check. A `FAIL` in the validator lines is a rollback
+  to the previous release.
 - **Cold start**: the time of one request, informational only.
 - **MCP stateless**: a `tools/call` of `sw_get` with the 2026-07-28 headers and
   `_meta` returns `isError: false` and URLs on the host. `server/discover` and

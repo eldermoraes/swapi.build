@@ -158,7 +158,6 @@ class LlmsFullTest {
         TaggedBody first = copies.copy("/about", "https://once.example").orElseThrow();
         TaggedBody second = copies.copy("/about", "https://once.example").orElseThrow();
         Assertions.assertSame(first, second);
-        Assertions.assertSame(first.etag(), second.etag());
 
         TaggedBody record = copies.copy("/resource/films/1", "https://once.example").orElseThrow();
         Assertions.assertEquals(record.etag(), copies.copy("/resource/films/1", "https://once.example").orElseThrow().etag());

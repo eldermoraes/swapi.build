@@ -60,8 +60,9 @@ public final class TaggedBody {
     /**
      * Whether an If-None-Match field names this body (RFC 9110, 13.1.2), so a
      * GET or HEAD is answered 304. The comparison is weak: the opaque tags are
-     * equal, with or without W/ on the one received. "*" names any body. A line
-     * that is not a list of entity tags names nothing.
+     * equal, with or without W/ on the one received. "*" names any body. Each
+     * line is judged alone: one that is not a list of entity tags names nothing,
+     * and does not stop another line from naming the body.
      *
      * @param ifNoneMatch every line of the header, in the order received
      */

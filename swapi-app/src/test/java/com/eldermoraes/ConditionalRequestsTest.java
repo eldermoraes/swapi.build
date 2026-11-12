@@ -165,6 +165,15 @@ class ConditionalRequestsTest {
         }
     }
 
+    // There is no Last-Modified, so If-Modified-Since alone confirms nothing.
+    @ParameterizedTest
+    @ValueSource(strings = {"/docs", "/docs.md", "/llms-full.txt"})
+    void ifModifiedSinceIsIgnored(String path) {
+        Response response = preview().header("If-Modified-Since", "Fri, 01 Jan 2100 00:00:00 GMT").when().get(path);
+        Assertions.assertEquals(200, response.statusCode(), path);
+        Assertions.assertEquals(List.of(digestTag(response.asByteArray())), response.headers().getValues("ETag"), path);
+    }
+
     // An error or a redirect is not a representation to confirm.
     @ParameterizedTest
     @ValueSource(strings = {"/does-not-exist", "/resource/people/9999", "/resource/droids", "/docs/webmcp.md",

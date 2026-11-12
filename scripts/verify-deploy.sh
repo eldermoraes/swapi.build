@@ -733,8 +733,13 @@ got=$("${CURL[@]}" -o /dev/null -H 'If-None-Match: *' -w '%{http_code} %header{e
 # before the application sees it. A 200 here means the proxy does not undo its
 # own change, so browsers still download the page on every revalidation.
 enc=$("${CURL[@]}" -o /dev/null -H 'Accept-Encoding: zstd, gzip' -w '%header{etag} %header{content-encoding}' "$BASE/docs")
-enc_code=$("${CURL[@]}" -o /dev/null -H 'Accept-Encoding: zstd, gzip' -H "If-None-Match: ${enc%% *}" -w '%{http_code}' "$BASE/docs")
-echo "INFO  /docs with Accept-Encoding: zstd, gzip: ETag ${enc%% *}, Content-Encoding ${enc#* }; If-None-Match with it -> $enc_code (304 = a compressed revalidation works)"
+enc_tag="${enc%% *}"
+if [ -z "${enc#* }" ]; then
+  echo "INFO  /docs with Accept-Encoding: zstd, gzip: no Content-Encoding (the proxy does not compress), nothing to check"
+else
+  enc_code=$("${CURL[@]}" -o /dev/null -H 'Accept-Encoding: zstd, gzip' -H "If-None-Match: ${enc_tag:-\"none\"}" -w '%{http_code}' "$BASE/docs")
+  echo "INFO  /docs with Accept-Encoding: zstd, gzip: ETag ${enc_tag:-missing}, Content-Encoding ${enc#* }; If-None-Match with it -> $enc_code (304 = a compressed revalidation works)"
+fi
 
 # --- Cold start (informational, never fails) ---------------------------------
 t=$("${CURL[@]}" -o /dev/null -w '%{time_total}' "$BASE/api/people/1")

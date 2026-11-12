@@ -68,8 +68,19 @@ class WebAnalyticsBeaconTest {
         String beacon = "  <script defer src=\"https://static.cloudflareinsights.com/beacon.min.js\" "
                 + "data-cf-beacon='{\"token\": \"" + TOKEN + "\"}'></script>\n  </body>";
         Assertions.assertTrue(body.contains(beacon), path);
-        Assertions.assertEquals(TaggedBody.of(body).etag(), response.header("ETag"), path);
-        Assertions.assertNotEquals(TaggedBody.of(body.replace(beacon, "</body>")).etag(), response.header("ETag"), path);
+        Assertions.assertEquals(digestTag(response.asByteArray()), response.header("ETag"), path);
+    }
+
+    // Computed here, not with TaggedBody: the test must not ask the code under
+    // test what the tag of these bytes is.
+    private static String digestTag(byte[] body) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(body);
+            return '"' + java.util.Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(java.util.Arrays.copyOf(digest, 16)) + '"';
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @ParameterizedTest
