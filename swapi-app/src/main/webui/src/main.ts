@@ -42,7 +42,11 @@ function announce(message: string) {
 function updateActiveNav(page: Page) {
   const active = activeNavHref(page);
   document.querySelectorAll('.nav-link').forEach((link) => {
-    link.classList.toggle('active', active !== null && link.getAttribute('href') === active);
+    const isActive = active !== null && link.getAttribute('href') === active;
+    link.classList.toggle('active', isActive);
+    // The underline is for the eye; this says "current page" to a screen reader.
+    if (isActive) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
   });
 }
 
