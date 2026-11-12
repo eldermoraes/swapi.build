@@ -107,10 +107,12 @@ public class SiteShell {
 
     /**
      * The preview image (og-image.png). Outside dev mode it is one buffer for
-     * every response: writing a Buffer does not consume it. Empty when the
-     * build has no image.
+     * every response: writing a Buffer does not consume it. Vert.x has no
+     * read-only Buffer, so this stays inside the package: the one caller
+     * (SeoRoutes) only writes it to the response, and nothing may change it.
+     * Empty when the build has no image.
      */
-    public Optional<Buffer> previewImage() {
+    Optional<Buffer> previewImage() {
         Buffer buffer = image;
         if (buffer == null) {
             Optional<byte[]> bytes = imageSource.get();

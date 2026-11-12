@@ -74,18 +74,18 @@ public class SeoMetadataRegistry {
     private volatile List<SeoMetadata> sitemap;
 
     private List<SeoMetadata> walkSitemapRoutes() {
-        List<SeoMetadata> sitemap = new ArrayList<>(routes);
+        List<SeoMetadata> candidates = new ArrayList<>(routes);
         for (SeoSiteFile.ResourceType resource : site.resources()) {
             if (resource.detail().indexable()) {
                 for (int id : entities.ids(resource.type())) {
                     SeoMetadata record = resourceDetail("/resource/" + resource.type() + "/" + id);
                     if (record != null) {
-                        sitemap.add(record);
+                        candidates.add(record);
                     }
                 }
             }
         }
-        return sitemap.stream().filter(SeoMetadata::sitemap).toList();
+        return candidates.stream().filter(SeoMetadata::sitemap).toList();
     }
 
     /**
