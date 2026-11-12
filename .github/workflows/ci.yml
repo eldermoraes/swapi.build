@@ -52,7 +52,8 @@ jobs:
 
       # Which jobs of native-binary.yml run for a release, a dispatch, a
       # redeploy and a pull request, decided from the job conditions: a pull
-      # request runs the suite once (here), a red suite never builds or deploys.
+      # request runs the suite once (here), and a red suite on a release never
+      # builds or deploys.
       - name: Release pipeline trigger tests
         run: scripts/native-binary-triggers.test.sh
 

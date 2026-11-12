@@ -7,15 +7,18 @@
 # - a job runs when its `if` is true;
 # - an `if` without a status function (success(), always(), cancelled(),
 #   failure()) gets an implicit success(), which is false as soon as one of
-#   the job's `needs` did not succeed, a skipped one included.
+#   the jobs it needs, directly or through another job, did not succeed, a
+#   skipped one included.
 #
 # What it guards (issue #61): a pull request runs the full suite once (in
 # ci.yml, never again in the `test` job here) and still gets the native build;
-# a release still runs the suite before the build; a red suite never builds
-# or deploys; a redeploy only deploys; a pull request never deploys.
+# a release or a dispatch still runs the suite before the build, and a red
+# suite there never builds or deploys; a redeploy only deploys; a pull
+# request never deploys.
 #
 # Only job-level conditions are modelled, not the `if` of a step. An
 # expression the model does not know fails the test instead of guessing.
+# Ruby, not python3 like the other guards: its standard library reads YAML.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -126,10 +129,13 @@ def jobs_that_run(workflow, event:, sha256: nil, failing: nil, cancelled: false)
     stopped = cancelled && !needs.empty?
     context = { 'github.event_name' => event, 'inputs.sha256' => sha256 }
     needs.each { |need| context["needs.#{need}.result"] = results.fetch(need) }
-    succeeded = !stopped && needs.all? { |need| results.fetch(need) == 'success' }
+    # The status functions look at every job before this one in the chain.
+    before = needs.dup
+    before.each { |need| before.concat(Array(jobs.fetch(need)['needs']) - before) }
+    succeeded = !stopped && before.all? { |need| results.fetch(need) == 'success' }
     status = {
       'success' => succeeded,
-      'failure' => !stopped && needs.any? { |need| results.fetch(need) == 'failure' },
+      'failure' => !stopped && before.any? { |need| results.fetch(need) == 'failure' },
       'cancelled' => stopped,
       'always' => true
     }
@@ -143,11 +149,12 @@ def jobs_that_run(workflow, event:, sha256: nil, failing: nil, cancelled: false)
   results.reject { |_, result| result == 'skipped' }.keys
 end
 
-# A step that runs the full suite: a Maven package that does not skip tests.
+# A step that runs the full suite: a Maven build that reaches the test phase
+# and does not skip the tests.
 def suite_steps(workflow, job_names)
   job_names.flat_map { |name| workflow.fetch('jobs').fetch(name).fetch('steps') }
            .map { |step| step['run'].to_s }
-           .select { |run| run =~ /mvnw\b.*\bpackage\b/m && run !~ /-DskipTests/ }
+           .select { |run| run =~ /mvnw\b.*\b(test|package|verify|install)\b/m && run !~ /-DskipTests/ }
 end
 
 # YAML 1.1 reads the key `on` as the boolean true.
@@ -189,6 +196,8 @@ check.call('dispatch without sha256 and a red suite: no build, no deploy',
            %w[test], jobs_that_run(native, event: 'workflow_dispatch', sha256: '', failing: 'test'))
 check.call('dispatch with sha256 (redeploy): only the deploy',
            %w[deploy], jobs_that_run(native, event: 'workflow_dispatch', sha256: HASH))
+check.call('redeploy cancelled: no deploy',
+           [], jobs_that_run(native, event: 'workflow_dispatch', sha256: HASH, cancelled: true))
 
 # --- pull_request ------------------------------------------------------------
 on_pull_request = jobs_that_run(native, event: 'pull_request')
@@ -196,10 +205,15 @@ check.call('pull request: the native build without the suite job, and no deploy'
            %w[build], on_pull_request)
 check.call('pull request with a red build: still no deploy',
            %w[build], jobs_that_run(native, event: 'pull_request', failing: 'build'))
-check.call('pull request: ci.yml runs on every one (no path filter)',
+check.call('pull request cancelled: no build',
+           [], jobs_that_run(native, event: 'pull_request', cancelled: true))
+check.call('pull request: the native build is triggered by what goes into the binary',
+           %w[.github/workflows/native-binary.yml scripts/native-smoke.sh swapi-app/pom.xml
+              swapi-app/src/main/java/** swapi-app/src/main/resources/**],
+           (triggers(native)['pull_request'] || {})['paths'])
+check.call('pull request: ci.yml runs on every one (no filter)',
            [true, []],
-           [triggers(ci).key?('pull_request'),
-            (triggers(ci)['pull_request'] || {}).keys & %w[paths paths-ignore branches branches-ignore]])
+           [triggers(ci).key?('pull_request'), (triggers(ci)['pull_request'] || {}).keys])
 check.call('pull request: the full suite runs once across ci.yml and native-binary.yml',
            1,
            suite_steps(ci, jobs_that_run(ci, event: 'pull_request')).size +
