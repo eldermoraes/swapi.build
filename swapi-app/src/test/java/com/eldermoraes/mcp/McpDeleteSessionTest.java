@@ -61,6 +61,10 @@ class McpDeleteSessionTest {
         return HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(10)).DELETE();
     }
 
+    private HttpResponse<String> deleteSession(URI uri, String session) throws Exception {
+        return send(delete(uri).header("Mcp-Session-Id", session).build());
+    }
+
     private static HttpResponse<String> send(HttpRequest request) throws Exception {
         try (HttpClient client = HttpClient.newHttpClient()) {
             return client.send(request, HttpResponse.BodyHandlers.ofString());
@@ -92,7 +96,7 @@ class McpDeleteSessionTest {
         String session = openSession();
         assertTrue(sessions.has(session), "the session exists right after the initialize");
 
-        HttpResponse<String> teardown = send(delete(mcp).header("Mcp-Session-Id", session).build());
+        HttpResponse<String> teardown = deleteSession(mcp, session);
 
         assertEquals(204, teardown.statusCode(), teardown.body());
         assertFalse(sessions.has(session), "the session is still in the heap after its DELETE");
@@ -102,7 +106,7 @@ class McpDeleteSessionTest {
     void aKnownSessionIsFreedThroughTheTrailingSlashToo() throws Exception {
         String session = openSession();
 
-        HttpResponse<String> teardown = send(delete(mcpWithTrailingSlash).header("Mcp-Session-Id", session).build());
+        HttpResponse<String> teardown = deleteSession(mcpWithTrailingSlash, session);
 
         assertEquals(204, teardown.statusCode(), teardown.body());
         assertFalse(sessions.has(session), "the session is still in the heap after its DELETE");
@@ -111,9 +115,9 @@ class McpDeleteSessionTest {
     @Test
     void aSecondDeleteOfTheSameSessionIsStillNoContent() throws Exception {
         String session = openSession();
-        assertEquals(204, send(delete(mcp).header("Mcp-Session-Id", session).build()).statusCode());
+        assertEquals(204, deleteSession(mcp, session).statusCode());
 
-        assertEquals(204, send(delete(mcp).header("Mcp-Session-Id", session).build()).statusCode());
+        assertEquals(204, deleteSession(mcp, session).statusCode());
     }
 
     @Test
@@ -121,20 +125,20 @@ class McpDeleteSessionTest {
         String leaving = openSession();
         String staying = openSession();
 
-        assertEquals(204, send(delete(mcp).header("Mcp-Session-Id", leaving).build()).statusCode());
+        assertEquals(204, deleteSession(mcp, leaving).statusCode());
 
         assertFalse(sessions.has(leaving), "the deleted session is still in the heap");
         assertTrue(sessions.has(staying), "the DELETE of one session took another one with it");
 
         // Unknown, malformed and absent ids take nothing either.
-        assertEquals(204, send(delete(mcp).header("Mcp-Session-Id", "no-such-session").build()).statusCode());
-        assertEquals(204, send(delete(mcp).header("Mcp-Session-Id", "../%00 not;an=id,\"at all\"").build())
+        assertEquals(204, deleteSession(mcp, "no-such-session").statusCode());
+        assertEquals(204, deleteSession(mcp, "../%00 not;an=id,\"at all\"")
                 .statusCode());
-        assertEquals(204, send(delete(mcp).header("Mcp-Session-Id", "x".repeat(4000)).build()).statusCode());
+        assertEquals(204, deleteSession(mcp, "x".repeat(4000)).statusCode());
         assertEquals(204, send(delete(mcp).build()).statusCode());
         assertTrue(sessions.has(staying), "a DELETE that named no session of this process freed one");
 
-        assertEquals(204, send(delete(mcp).header("Mcp-Session-Id", staying).build()).statusCode());
+        assertEquals(204, deleteSession(mcp, staying).statusCode());
     }
 
     // A stateless MCP-Protocol-Version makes the extension's own DELETE answer
@@ -158,7 +162,8 @@ class McpDeleteSessionTest {
     @Test
     void aDeletedSessionIdKeepsWorking() throws Exception {
         String session = openSession();
-        assertEquals(204, send(delete(mcp).header("Mcp-Session-Id", session).build()).statusCode());
+        assertEquals(204, deleteSession(mcp, session).statusCode());
+        List<String> heldBefore = heldSessions();
 
         HttpResponse<String> call = send(post("""
                 {"jsonrpc":"2.0","id":2,"method":"tools/call",
@@ -167,6 +172,7 @@ class McpDeleteSessionTest {
 
         assertEquals(200, call.statusCode(), call.body());
         assertTrue(call.body().contains("Luke Skywalker"), call.body());
-        assertFalse(heldSessions().contains(session), "the deleted session came back: " + heldSessions());
+        assertFalse(sessions.has(session), "the deleted session came back");
+        assertEquals(heldBefore, heldSessions(), "the request after the DELETE left a session");
     }
 }

@@ -144,8 +144,10 @@ public class McpTransportFilter {
             // session in this process, and without this it stayed until the
             // idle timeout (issue #46), so the one the request names is freed
             // here. remove() does nothing for an id the process does not hold
-            // (unknown, malformed), and it only takes an entry out of a map:
-            // no I/O, fine on the event loop.
+            // (unknown, malformed). For one it holds, it takes the entry out
+            // of the map, closes the connection (a status flip), cancels its
+            // ping timer if any and drops its pending cancellations: all in
+            // memory, no I/O, fine on the event loop.
             // The extension's own DELETE (2.0.3, terminateSession) is not
             // used on purpose: it answers 200 for a known id, 404 for any
             // other and 405 with a stateless MCP-Protocol-Version, and it logs
