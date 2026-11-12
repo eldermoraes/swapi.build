@@ -87,7 +87,11 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   commit of a version line, never at the bump commit.
 - **Successful GETs return HTTP 200; nonexistent ids return 404.** This holds for
   the site pages too: an unknown page or entity answers 404 (`SeoRoutes`), and
-  Quinoa's SPA routing stays off.
+  Quinoa's SPA routing stays off. A conditional request is the exception: a
+  page, a Markdown copy and `/llms-full.txt` carry a strong `ETag` (a digest of
+  the bytes sent, `TaggedBody`), and a GET or HEAD whose `If-None-Match` names
+  it answers 304 with no body (#58). A 404, a 503 or a redirect never carries
+  an `ETag`, and `/api` has no validators.
 - **Page metadata has one source**: `swapi-app/src/main/resources/seo/site.json`,
   read by `SeoMetadataRegistry` and by `seo.ts`/`routes.ts`; the client never
   rewrites the head on the first load. Record addresses become indexable one type
