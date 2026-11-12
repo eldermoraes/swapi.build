@@ -121,3 +121,11 @@ jobs:
         run: |
           npm ci
           npm test
+
+      # ESLint, the type-check and Prettier in check mode, over the whole
+      # package: the sources, the config files and the .cjs scripts. One package
+      # script, so a local `npm run check` is exactly what this step runs. It
+      # reuses the Node version and the `npm ci` of the step above.
+      - name: Frontend lint, types and formatting
+        working-directory: swapi-app/src/main/webui
+        run: npm run check
