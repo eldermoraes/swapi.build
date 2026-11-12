@@ -9,28 +9,35 @@ import { vi } from 'vitest';
 export const APP_LOAD_TIMEOUT = 60_000;
 
 // Every module of the app except main.ts, which starts the app when it is
-// evaluated, and the tests. main.ts imports only modules from this list, plus
-// style.css, so a module main.ts starts to import is warmed the day it lands.
+// evaluated, and the tests. Everything main.ts loads is reached from this list
+// (site.json through site.ts, the stylesheets through style.css), so a module
+// main.ts starts to import is warmed the day it lands.
 const appModules = import.meta.glob([
   '../**/*.ts',
-  '../style.css',
+  '../**/*.css',
   '!../main.ts',
   '!../**/*.test.ts',
   '!../**/*.d.ts',
   '!./**',
 ]);
 
+/** What {@link loadAppModules} loads (app-modules.test.ts checks the list). */
+export const appModulePaths = Object.keys(appModules);
+
 /**
  * Loads the app's modules once, then forgets them, so the first
  * `import('./main')` of a test file is not charged with transforming them.
  * Call it as `beforeAll(loadAppModules, APP_LOAD_TIMEOUT)` at the top of every
- * test file that imports `./main` (app-modules.test.ts enforces it).
+ * test file that imports `./main`, before its tests and other hooks
+ * (app-modules.test.ts enforces it).
  *
- * It changes nothing a test sees: `vi.resetModules()` drops the instances it
- * evaluated (mocks declared with `vi.mock` stay, as they do for any
- * `vi.resetModules()`), so `./main` and everything it imports are evaluated
- * again on their next import, and the `<style>` that `style.css` adds is taken
- * out again. Only the transformed code stays cached in the worker.
+ * A test sees nothing of it, as long as main.ts stays the only module that acts
+ * when it is evaluated (no listener, timer, `history` call or global elsewhere):
+ * `vi.resetModules()` drops the instances it evaluated (mocks declared with
+ * `vi.mock` stay, as they do for any `vi.resetModules()`), so `./main` and
+ * everything it imports are evaluated again on their next import, and the
+ * `<style>` elements the stylesheets add are taken out (the next import of a
+ * stylesheet adds its own again). Only the transformed code stays cached.
  */
 export async function loadAppModules(): Promise<void> {
   const before = new Set<Node>([...document.head.childNodes, ...document.body.childNodes]);
