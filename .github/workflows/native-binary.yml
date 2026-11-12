@@ -186,8 +186,8 @@ jobs:
       # 2.11.0+: nobody ran the binary before this, and swapi-update restarts the
       # host before it knows the new version answers (docs/DEPLOY.md). Started
       # here on the runner (glibc 2.39 >= the 2.35 it needs), it must serve
-      # /api/people/1, /openapi.json and the four server-rendered pages
-      # (scripts/native-smoke.sh). A failure stops the job: nothing is attached
+      # /api/people/1, /openapi.json, the server-rendered pages, the Markdown
+      # copies and MCP (scripts/native-smoke.sh). A failure stops the job: nothing is attached
       # and the deploy never begins. Runs on pull requests too, like the build.
       - name: Native smoke
         run: |

@@ -48,4 +48,6 @@ swapi-app/.quinoa/
 swapi-app/src/main/webui/node_modules/
 swapi-app/src/main/webui/dist/
 swapi-app/src/main/webui/.quinoa/
-.vercel
+
+# macOS
+.DS_Store
