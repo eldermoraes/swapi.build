@@ -8,9 +8,11 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -132,6 +134,23 @@ class FaqFileTest {
         assertEquals(List.of(), ForbiddenClaims.aboutThirdParties("MCP only; the Markdown download comes first"));
     }
 
+    /**
+     * A fact about another API is a comparison cell, with its source and date:
+     * an answer that restated one would keep the old value after a re-check.
+     * The questions may name them ("How is it different from swapi.dev?").
+     */
+    @Test
+    void noAnswerNamesAnotherApiOfTheComparison() {
+        for (FaqFile.Question q : SHIPPED.questions()) {
+            for (String paragraph : q.answer()) {
+                for (String name : List.of("swapi.dev", "swapi.tech", "swapi.info", "Pipeworx")) {
+                    assertFalse(paragraph.toLowerCase(Locale.ROOT).contains(name.toLowerCase(Locale.ROOT)),
+                            q.id() + " names " + name + ": " + paragraph);
+                }
+            }
+        }
+    }
+
     @Test
     void countsAreMarkersFilledFromTheData() {
         Map<String, Integer> counts = Map.of("people", 82, "films", 6);
@@ -140,7 +159,23 @@ class FaqFileTest {
         String data = SHIPPED.questions().stream().filter(q -> q.id().equals("data")).findFirst().orElseThrow()
                 .answer().getFirst();
         assertTrue(data.contains("{count:people} people"), data);
-        assertFalse(data.matches("(?s).*\\b\\d+ (films|planets|species|starships|vehicles)\\b.*"), data);
+        for (FaqFile.Question q : SHIPPED.questions()) {
+            for (String prose : Stream.concat(Stream.of(q.question()), q.answer().stream()).toList()) {
+                assertFalse(prose.matches("(?s).*\\b\\d+ (films|people|planets|species|starships|vehicles)\\b.*"),
+                        q.id() + ": " + prose);
+            }
+        }
+    }
+
+    /**
+     * "Checked on" above the table is the oldest cell date: after a partial
+     * re-check, the newest would say the whole table is fresher than it is.
+     */
+    @Test
+    void theTopDateIsTheOldestCellDate() {
+        FaqFile partial = FaqFile.load("seo/faq-partial-recheck.json");
+        assertEquals(LocalDate.parse("2026-01-01"), partial.checkedOn(), "one cell checked again a month later");
+        assertEquals(LocalDate.parse("2026-10-28"), SHIPPED.checkedOn());
     }
 
     @ParameterizedTest
@@ -152,6 +187,9 @@ class FaqFileTest {
             "seo/invalid-faq-html.json, questions[0].answer[1]: has < or >",
             "seo/invalid-faq-marker.json, questions[0].answer[0]: {count:droids} is not {count:<type>}",
             "seo/invalid-faq-link.json, questions[0].links[0].path: \"javascript:alert(1)\" must be a path on this site or an https URL",
+            "seo/invalid-faq-names-other-api.json, questions[0].answer[1]: names \"Pipeworx\"",
+            "seo/invalid-faq-literal-count.json, questions[0].answer[0]: \"82 people\" is a count of records written as a literal",
+            "seo/invalid-faq-top-date.json, checkedOn: \"2026-01-01\" is not the oldest cell date: \"2025-12-30\" at comparison.rows[0].cells[2]",
             "seo/missing-faq.json, seo/missing-faq.json is missing from the classpath",
     })
     void invalidFilesFailWithTheKey(String file, String expected) {

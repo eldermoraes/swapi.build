@@ -18,6 +18,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.function.ToIntFunction;
 import java.util.regex.Matcher;
@@ -47,6 +48,8 @@ public final class FaqFile {
     private static final Pattern ID = Pattern.compile("[a-z0-9]+(?:-[a-z0-9]+)*");
     private static final Pattern MARKER = Pattern.compile("\\{([^{}]*)}");
     private static final Pattern COUNT = Pattern.compile("count:([a-z]+)");
+    private static final Pattern LITERAL_COUNT = Pattern.compile(
+            "\\b\\d+ (" + String.join("|", KnownEntities.TYPES) + ")\\b");
 
     public record Link(String text, String path) {
     }
@@ -185,14 +188,15 @@ public final class FaqFile {
             if (!ID.matcher(id).matches() || !ids.add(id) || id.equals("compare")) {
                 throw invalid(source, at + ".id", "\"" + id + "\" must be lowercase words joined by -, unique and not \"compare\"");
             }
-            String question = text(q, "question", source, at);
+            String question = prose(text(q, "question", source, at), source, at + ".question");
             List<String> answer = new ArrayList<>();
             JsonArray answerArray = array(q, "answer", source, at);
             if (answerArray.isEmpty()) {
                 throw invalid(source, at + ".answer", "must have at least one paragraph");
             }
             for (int p = 0; p < answerArray.size(); p++) {
-                answer.add(text(answerArray.get(p), source, at + ".answer[" + p + "]"));
+                String paragraphAt = at + ".answer[" + p + "]";
+                answer.add(prose(text(answerArray.get(p), source, paragraphAt), source, paragraphAt));
             }
             List<Link> links = new ArrayList<>();
             JsonValue linkValue = q.get("links");
@@ -222,6 +226,7 @@ public final class FaqFile {
         for (int i = 0; i < columnArray.size(); i++) {
             columns.add(text(columnArray.get(i), source, "comparison.columns[" + i + "]"));
         }
+        answersNameNoOtherApi(questions, columns, source);
         List<Row> rows = new ArrayList<>();
         JsonArray rowArray = array(c, "rows", source, "comparison");
         if (rowArray.isEmpty()) {
@@ -249,7 +254,75 @@ public final class FaqFile {
             }
             rows.add(new Row(label, List.copyOf(cells)));
         }
+        topDateIsTheOldestCellDate(checkedOn, rows, source);
         return new FaqFile(checkedOn, questions, new Comparison(List.copyOf(columns), List.copyOf(rows)));
+    }
+
+    /**
+     * A fact about another API is a comparison cell, with its source and its
+     * date, never prose: an answer that restated one would keep the old value
+     * when the cell is checked again. So no answer names an API of the other
+     * columns (the column up to its " (": "Pipeworx (swapi MCP)" is "Pipeworx");
+     * it points at the comparison instead. A question may name one: it states
+     * no fact.
+     */
+    private static void answersNameNoOtherApi(List<Question> questions, List<String> columns, String source) {
+        List<String> others = columns.stream().skip(1).map(FaqFile::apiName).toList();
+        for (int i = 0; i < questions.size(); i++) {
+            List<String> answer = questions.get(i).answer();
+            for (int p = 0; p < answer.size(); p++) {
+                String lower = answer.get(p).toLowerCase(Locale.ROOT);
+                for (String other : others) {
+                    if (lower.contains(other.toLowerCase(Locale.ROOT))) {
+                        throw invalid(source, "questions[" + i + "].answer[" + p + "]", "names \"" + other
+                                + "\": a fact about another API is a cell of the comparison, never prose");
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * The date shown above the table is the oldest cell date, so it cannot
+     * disagree with the cells: after a partial re-check, the newest would say
+     * the whole table is fresher than it is.
+     */
+    private static void topDateIsTheOldestCellDate(LocalDate checkedOn, List<Row> rows, String source) {
+        LocalDate oldest = null;
+        String where = null;
+        for (int r = 0; r < rows.size(); r++) {
+            List<Cell> cells = rows.get(r).cells();
+            for (int c = 0; c < cells.size(); c++) {
+                if (oldest == null || cells.get(c).checkedOn().isBefore(oldest)) {
+                    oldest = cells.get(c).checkedOn();
+                    where = "comparison.rows[" + r + "].cells[" + c + "]";
+                }
+            }
+        }
+        if (!checkedOn.equals(oldest)) {
+            throw invalid(source, "checkedOn", "\"" + checkedOn + "\" is not the oldest cell date: \"" + oldest
+                    + "\" at " + where);
+        }
+    }
+
+    /**
+     * A question or an answer paragraph: a count of records is a marker, never
+     * a literal ("82 people"), whoever's records they are. This project's come
+     * from the data when the page is drawn; another API's belong in a cell.
+     */
+    private static String prose(String text, String source, String key) {
+        Matcher m = LITERAL_COUNT.matcher(text);
+        if (m.find()) {
+            throw invalid(source, key, "\"" + m.group() + "\" is a count of records written as a literal: use {count:"
+                    + m.group(1) + "}");
+        }
+        return text;
+    }
+
+    /** The name of the API of a column: the column without its parenthesis. */
+    private static String apiName(String column) {
+        int parenthesis = column.indexOf(" (");
+        return parenthesis < 0 ? column : column.substring(0, parenthesis);
     }
 
     /** A reader-facing string: no HTML, and every {marker} is a {count:type} of a known type. */
