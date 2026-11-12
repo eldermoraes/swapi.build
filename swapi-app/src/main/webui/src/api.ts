@@ -1,3 +1,5 @@
+import { isTimeout, TIMEOUT_MESSAGE, withTimeout } from './fetch-timeout';
+
 const BASE = '/api';
 
 let currentController: AbortController | null = null;
@@ -33,7 +35,9 @@ async function request<T>(url: string, signal?: AbortSignal): Promise<ApiRespons
   }
   const requestSignal = signal ?? controller!.signal;
   try {
-    const res = await fetch(url, { signal: requestSignal });
+    // The time limit aborts only the fetch: `requestSignal` stays the caller's,
+    // so a cancellation below is still told apart from a timeout.
+    const res = await fetch(url, { signal: withTimeout(requestSignal) });
     if (!res.ok) {
       throw new ApiError(`HTTP ${res.status}: ${res.statusText}`, res.status, 'http');
     }
@@ -43,6 +47,7 @@ async function request<T>(url: string, signal?: AbortSignal): Promise<ApiRespons
   } catch (err) {
     if (requestSignal.aborted) throw requestSignal.reason;
     if (err instanceof ApiError || err instanceof SyntaxError) throw err;
+    if (isTimeout(err)) throw new ApiError(TIMEOUT_MESSAGE, 0, 'network');
     throw new ApiError('Network error — check your connection', 0, 'network');
   } finally {
     if (controller && currentController === controller) currentController = null;
