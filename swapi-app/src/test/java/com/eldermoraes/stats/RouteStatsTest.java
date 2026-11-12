@@ -185,6 +185,54 @@ class RouteStatsTest {
         assertEquals(1, view.previous().total());
     }
 
+    // --- How far the last bucket has filled (#54) -----------------------------
+
+    @Test
+    void lastBucketElapsedIsTheShareOfTheHourOrDayThatHasPassed() {
+        clock.now = Instant.parse("2026-10-19T12:30:00Z");
+        assertEquals(0.5, stats.view(StatsPeriod.LAST_24_HOURS, Granularity.HOUR).lastBucketElapsed());
+        assertEquals(0.5, stats.view(StatsPeriod.LAST_7_DAYS, Granularity.HOUR).lastBucketElapsed());
+
+        clock.now = Instant.parse("2026-10-19T06:00:00Z");
+        assertEquals(0.25, stats.view(StatsPeriod.LAST_7_DAYS, Granularity.DAY).lastBucketElapsed());
+        assertEquals(0.25, stats.view(StatsPeriod.LAST_30_DAYS, Granularity.DAY).lastBucketElapsed());
+    }
+
+    @Test
+    void lastBucketElapsedIsZeroWhenTheBucketStartsAndNeverReachesOne() {
+        clock.now = Instant.parse("2026-10-19T00:00:00Z");
+        assertEquals(0.0, stats.view(StatsPeriod.LAST_7_DAYS, Granularity.DAY).lastBucketElapsed());
+        assertEquals(0.0, stats.view(StatsPeriod.LAST_24_HOURS, Granularity.HOUR).lastBucketElapsed());
+
+        clock.now = Instant.parse("2026-10-19T23:59:59.999Z");
+        assertEquals(0.9999, stats.view(StatsPeriod.LAST_7_DAYS, Granularity.DAY).lastBucketElapsed());
+        assertEquals(0.9997, stats.view(StatsPeriod.LAST_24_HOURS, Granularity.HOUR).lastBucketElapsed());
+    }
+
+    @Test
+    void flatTrafficReadJustAfterMidnightComparesCloseToZeroOnceThePreviousWindowIsScaled() {
+        // One request at the start of every hour for two weeks, read at 00:05 UTC.
+        Instant end = Instant.parse("2026-10-19T00:00:00Z");
+        for (Instant t = Instant.parse("2026-10-06T00:00:00Z"); !t.isAfter(end); t = t.plus(Duration.ofHours(1))) {
+            clock.now = t;
+            stats.record("/mcp");
+        }
+        clock.now = Instant.parse("2026-10-19T00:05:00Z");
+
+        RouteStats.StatsView view = stats.view(StatsPeriod.LAST_7_DAYS, Granularity.DAY);
+        // Six full days and the first request of the seventh, against seven full days:
+        // compared as they are, flat traffic reads as a drop of 14 %.
+        assertEquals(145, view.total());
+        assertEquals(168, view.previous().total());
+        assertEquals(0.0034, view.lastBucketElapsed());          // 5 of 1440 minutes
+
+        // The documented comparison: the previous window at the same elapsed time.
+        double comparable = view.previous().total() * (view.series().size() - 1 + view.lastBucketElapsed())
+                / view.series().size();
+        assertEquals(144.08, comparable, 0.01);                  // 168 x 6.0034 / 7
+        assertEquals(0.0, (view.total() - comparable) / comparable, 0.01, "within 1 % of no change");
+    }
+
     @Test
     void periodsRejectGranularitiesTheyCannotServe() {
         assertThrows(IllegalArgumentException.class, () -> stats.view(StatsPeriod.LAST_24_HOURS, Granularity.DAY));

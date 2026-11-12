@@ -39,8 +39,11 @@ public class StatsResource {
     @Operation(summary = "Request counts per route for the last 24 hours, 7 days or 30 days",
             description = "Totals per route template (for example /api/people/{id} or /mcp) and per group "
                     + "(rest, mcp, pages, seo, other), a trend per hour or per UTC day, and the same totals for "
-                    + "the window right before, for comparison. Counted with no IP address, no User-Agent and "
-                    + "no other data about the client. Without parameters: the last 7 days, per day.")
+                    + "the window right before, for comparison. The last hour or day of the window is still "
+                    + "filling while the window before is complete: lastBucketElapsed says how much of it has "
+                    + "passed, so the two can be compared at the same elapsed time. Counted with no IP address, "
+                    + "no User-Agent and no other data about the client. Without parameters: the last 7 days, "
+                    + "per day.")
     @APIResponse(responseCode = "200", description = "Request counts for the window",
             content = @Content(schema = @Schema(implementation = RouteStats.StatsView.class)))
     @APIResponse(responseCode = "400", description = "Unknown period or granularity, or a combination the "
