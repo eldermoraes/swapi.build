@@ -158,9 +158,14 @@ function bindPage(page: Page): void {
 /**
  * How a navigation started. A link click carries the full URL it left (path,
  * query and fragment), so a failed fetch can put the address back; Back and
- * Forward ('history') never have their history rewritten.
+ * Forward ('history') never have their history rewritten. `fromShown` is false
+ * when that URL was not the page on screen: the click came while a Back or
+ * Forward still waited for its page.
  */
-type NavigationSource = { via: 'start' } | { via: 'history' } | { via: 'link'; from: string };
+type NavigationSource =
+  | { via: 'start' }
+  | { via: 'history' }
+  | { via: 'link'; from: string; fromShown: boolean };
 
 // The navigation that waits for its page (the document of a server-rendered
 // page or of a record) while the page before is still on screen.
@@ -189,14 +194,21 @@ async function whileWaiting<T>(
  * A navigation did not show its page (it failed, or the reader acted on the
  * page still shown): the content and the head stay those of the page that was
  * there. After a link the address goes back to the full URL it left, which is
- * again the document shown; after Back or Forward the history is left alone
- * (rewriting it would lose an entry), so the address is not the page shown and
- * the next navigation fetches whatever it names.
+ * again the document shown (unless a Back or Forward had moved the address
+ * first); after Back or Forward the history is left alone (rewriting it would
+ * lose an entry). When the address is not the page shown, no document is taken
+ * for the one shown, so the next navigation fetches whatever it names.
  */
 function keepShownPage(source: NavigationSource): void {
-  if (source.via === 'link') history.replaceState(null, '', source.from);
   updateActiveNav(getRoute(headPath).page);
-  shownDocument = source.via === 'link' ? window.location.pathname + window.location.search : null;
+  if (source.via === 'link') {
+    history.replaceState(null, '', source.from);
+    if (source.fromShown) {
+      shownDocument = window.location.pathname + window.location.search;
+      return;
+    }
+  }
+  shownDocument = null;
 }
 
 /**
@@ -434,16 +446,18 @@ document.addEventListener(
     if (linkInFlight === href) return;
     // A click while another link's navigation waits for its page: the page
     // shown is still the one that link left, so a failure goes back there.
-    const before = waitingNavigation();
+    // While a Back or Forward waits, the address is already not the page shown.
+    const pending = waitingNavigation();
     const from =
-      before?.via === 'link'
-        ? before.from
+      pending?.via === 'link'
+        ? pending.from
         : window.location.pathname + window.location.search + window.location.hash;
+    const fromShown = pending?.via === 'link' ? pending.fromShown : pending === null;
     if (href !== window.location.pathname + window.location.search) {
       history.pushState(null, '', href);
     }
     linkInFlight = href;
-    void navigate({ via: 'link', from }).finally(() => {
+    void navigate({ via: 'link', from, fromShown }).finally(() => {
       if (linkInFlight === href) linkInFlight = null;
     });
   },

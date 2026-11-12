@@ -55,6 +55,13 @@ function hold(path: string, answer: () => Response): () => void {
   return release;
 }
 
+/** Answers `path` with a 503; every other request as `serve`. */
+function fail(path: string): void {
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input) =>
+    String(input) === path ? Promise.resolve(html('down', 503)) : serve(input),
+  );
+}
+
 function link(href: string): HTMLAnchorElement {
   const a = document.createElement('a');
   a.href = href;
@@ -85,7 +92,7 @@ function heading(): string | undefined {
   return document.querySelector('#main-content h1')?.textContent ?? undefined;
 }
 
-function alerts(): number {
+function alertCount(): number {
   return document.querySelectorAll('#main-content [role="alert"]').length;
 }
 
@@ -173,6 +180,17 @@ describe('the address and the page shown agree', () => {
     expect(address()).toBe('/about');
     expect(heading()).toContain('About');
     expect(document.title).toBe(aboutTitle);
+
+    // A list too: the tool pushes its address, and Back undoes it.
+    const list = JSON.parse(await tools.get('sw_list')!.execute({ resource: 'FILMS' }));
+    await settle();
+    expect(list.ok).toBe(true);
+    expect(address()).toBe('/resource/films');
+    expect(heading()).toBe('Films');
+
+    await travel('back');
+    expect(address()).toBe('/about');
+    expect(heading()).toContain('About');
   });
 
   it('a link interrupted by an action on the page: the address goes back to the page shown', async () => {
@@ -194,7 +212,7 @@ describe('the address and the page shown agree', () => {
     expect(heading()).toBe('The Star Wars API');
   });
 
-  it('a record link interrupted by typing in the search box: the list keeps its address, no stray entry', async () => {
+  it('a record link interrupted by typing in the search box: the list keeps its address and the search pushes nothing', async () => {
     await follow('/resource/films');
     expect(heading()).toBe('Films');
 
@@ -224,9 +242,7 @@ describe('the address and the page shown agree', () => {
     const release = hold('/about', () => html(aboutMain));
     link('/about').click();
     await settle();
-    vi.spyOn(globalThis, 'fetch').mockImplementation((input) =>
-      String(input) === '/resource/films/1' ? Promise.resolve(html('down', 503)) : serve(input),
-    );
+    fail('/resource/films/1');
     link('/resource/films/1').click();
     await settle();
     release();
@@ -234,24 +250,55 @@ describe('the address and the page shown agree', () => {
 
     expect(address()).toBe('/');
     expect(heading()).toBe('The Star Wars API');
-    expect(alerts()).toBe(1);
+    expect(alertCount()).toBe(1);
   });
 
   it('a record link that failed is not taken for the page shown: its fragment link loads it', async () => {
     await follow('/resource/films');
     expect(heading()).toBe('Films');
 
-    vi.spyOn(globalThis, 'fetch').mockImplementation((input) =>
-      String(input) === '/resource/films/1' ? Promise.resolve(html('down', 503)) : serve(input),
-    );
+    fail('/resource/films/1');
     document.querySelector<HTMLAnchorElement>('#main-content a.item-card')!.click();
     await settle();
     expect(address()).toBe('/resource/films');
-    expect(alerts()).toBe(1);
+    expect(alertCount()).toBe(1);
 
     vi.spyOn(globalThis, 'fetch').mockImplementation(serve);
     await follow('/resource/films/1#detail-content');
     expect(address()).toBe('/resource/films/1#detail-content');
     expect(heading()).toBe('A New Hope');
+  });
+
+  it('a link that fails while a Back still waits: the address Back took is not taken for the page shown', async () => {
+    await follow('/');
+    await follow('/about');
+    expect(heading()).toContain('About');
+
+    // An empty cache, so Back has to ask; the home does not answer yet.
+    const serverMain = await import('./server-main');
+    serverMain.resetServerMain({ documentPath: '/resource/films', assign: vi.fn() });
+    const release = hold('/', () => html(homeMain));
+    const popped = new Promise((resolve) =>
+      window.addEventListener('popstate', resolve, { once: true }),
+    );
+    history.back();
+    await popped;
+    await settle();
+    expect(address()).toBe('/');
+    expect(heading()).toContain('About');
+
+    fail('/resource/films/1');
+    link('/resource/films/1').click();
+    await settle();
+    release();
+    await settle();
+    expect(heading()).toContain('About');
+    expect(alertCount()).toBe(1);
+
+    // The home was never shown: a link to one of its fragments loads it.
+    vi.spyOn(globalThis, 'fetch').mockImplementation(serve);
+    await follow('/#top');
+    expect(address()).toBe('/#top');
+    expect(heading()).toBe('The Star Wars API');
   });
 });
