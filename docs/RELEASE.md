@@ -42,9 +42,10 @@ Infrastructure goes under `Changed`; development-dependency patches under
 
 ```bash
 cd swapi-app && ./mvnw test
+cd src/main/webui && npm test
 ```
 
-`ChangelogVersionTest` fails if steps 2 and 3 disagree. `OpenApiVersionTest` fails
+Maven never runs the frontend suite (Vitest); CI runs both. `ChangelogVersionTest` fails if steps 2 and 3 disagree. `OpenApiVersionTest` fails
 if the published `info.version` stops matching the pom.
 `FaqFileTest.shippedFactsAreAtMost180DaysOld` fails when a fact of the FAQ
 comparison (`seo/faq.json`) was checked more than 180 days ago, even in a release
