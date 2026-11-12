@@ -6,6 +6,7 @@ import io.quarkus.vertx.web.RouteFilter;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpHeaders;
 import io.vertx.core.http.HttpMethod;
+import io.vertx.core.http.HttpServerResponse;
 import io.vertx.ext.web.RoutingContext;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -50,6 +51,9 @@ public class SeoRoutes {
      * leaves with no-cache;</li>
      * <li>everything else: 404 with the document.</li>
      * </ol>
+     * A page, a Markdown copy and /llms-full.txt carry a strong ETag (#58,
+     * TaggedBody), and If-None-Match with it answers 304 (send); a 404, a 503 and
+     * a redirect carry none.
      * Pages are matched on the raw path (rc.request().path()), not on
      * rc.normalizedPath(), which percent-decodes: the browser keeps /resource/people/%31
      * as it is in location.pathname, so server and client agree it is not a page.
@@ -190,13 +194,16 @@ public class SeoRoutes {
      * page misleads the agent.
      */
     private void llmsFull(RoutingContext rc) {
-        Optional<String> body = copies.llmsFull(urls.siteRoot(rc));
+        Optional<TaggedBody> body = copies.llmsFull(urls.siteRoot(rc));
         if (body.isEmpty()) {
             unavailable(rc);
             return;
         }
-        rc.response().putHeader("X-Robots-Tag", "noindex");
-        text(rc, "text/plain; charset=utf-8", body.get());
+        rc.response()
+                .putHeader("X-Robots-Tag", "noindex")
+                .putHeader(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL)
+                .putHeader(HttpHeaders.VARY, "Origin");
+        send(rc, "text/plain; charset=utf-8", body.get());
     }
 
     /**
@@ -208,7 +215,7 @@ public class SeoRoutes {
      * record copy.
      */
     private void markdownCopy(RoutingContext rc, String page) {
-        Optional<String> body = copies.copy(page, urls.siteRoot(rc));
+        Optional<TaggedBody> body = copies.copy(page, urls.siteRoot(rc));
         if (body.isEmpty()) {
             unavailable(rc);
             return;
@@ -218,7 +225,6 @@ public class SeoRoutes {
         boolean noindex = route.robots().startsWith(SeoMetadata.NOINDEX);
         rc.addHeadersEndHandler(v -> {
             var headers = rc.response().headers();
-            headers.set(HttpHeaders.CONTENT_TYPE, MARKDOWN);
             headers.set(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL);
             headers.set(HttpHeaders.VARY, "Origin");
             headers.set("Link", canonical);
@@ -226,7 +232,23 @@ public class SeoRoutes {
                 headers.set("X-Robots-Tag", "noindex");
             }
         });
-        rc.response().end(body.get());
+        send(rc, MARKDOWN, body.get());
+    }
+
+    /**
+     * Ends a 200 whose body has a validator (#58): with its ETag and the body,
+     * or, when If-None-Match names the body (TaggedBody.isNamedBy), as a 304
+     * with the ETag and no body and no Content-Type. Every other header is the
+     * caller's and is the same on both, so a cache refreshes what it stored
+     * under the same policy. The route only gets here for GET and HEAD.
+     */
+    private static void send(RoutingContext rc, String contentType, TaggedBody body) {
+        HttpServerResponse response = rc.response().putHeader(HttpHeaders.ETAG, body.etag());
+        if (body.isNamedBy(rc.request().headers().getAll(HttpHeaders.IF_NONE_MATCH))) {
+            response.setStatusCode(304).end();
+        } else {
+            response.putHeader(HttpHeaders.CONTENT_TYPE, contentType).end(body.buffer());
+        }
     }
 
     /** A copy or /llms-full.txt that could not be built: 503, never cached. */
@@ -283,9 +305,8 @@ public class SeoRoutes {
         // 2.14.0: a page with a Markdown copy announces it (relative, like the HTML links).
         copies.copyPathOf(path).ifPresent(copy ->
                 rc.response().putHeader("Link", "<" + copy + ">; rel=\"alternate\"; type=\"text/markdown\""));
-        rc.response()
-                .putHeader(HttpHeaders.CONTENT_TYPE, "text/html; charset=utf-8")
-                .end(html);
+        // Not kept anywhere, so its validator is of this request's bytes (#58).
+        send(rc, "text/html; charset=utf-8", TaggedBody.of(html));
     }
 
     private void ogImage(RoutingContext rc) {
