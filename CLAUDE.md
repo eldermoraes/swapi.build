@@ -75,7 +75,10 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   `/stats` page. The counters are snapshotted to the systemd state directory
   (`STATE_DIRECTORY`, `/var/lib/swapi`) when the host provides one, and stay in
   memory only otherwise; the snapshot reader accepts only templates
-  `RouteNormalizer` produces. The privacy page describes both.
+  `RouteNormalizer` produces. The privacy page describes both. `/api/stats`
+  serves the view of each window again for up to 60 s (`StatsViewMemo`,
+  `swapi.stats.view-lifetime`; zero in the tests but `StatsViewLifetimeTest`),
+  with `max-age` reduced by the view's age.
 - **Self-hosted origin.** `native-binary.yml` attaches the linux/amd64 native
   binary to each published Release (UBI9 builder, glibc ≤ 2.35 checked); the
   host runbook, the deploy user and the rollback live in `docs/DEPLOY.md`,
@@ -122,11 +125,16 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   `.md`, the home's is `/index.html.md`), with the same indexing as its HTML (the
   `noindex` and the canonical of its `SeoMetadata`). A copy is never chosen by the
   `Accept` header. Decoration that is not content is marked `data-md="skip"`.
+  A paragraph shown with `white-space: pre-line` is marked `data-md="lines"`
+  (2.16.0) so its copy keeps the lines and paragraphs.
 - **The FAQ text lives in `seo/faq.json`** (2.15.0, `FaqFile`), never in the
   template: no HTML in the file, and counts of the data are markers
   (`{count:people}`). Every fact about another API is a comparison cell with a
   value, an https source and the day it was checked; a value without a source
-  is "not published" or "none found", never an estimate. Availability is not
+  is "not published" or "none found", never an estimate. `FaqFile` refuses at
+  load (2.16.0) an answer that names the API of another comparison column, a
+  question or answer that writes a count of records as a literal, and a top
+  `checkedOn` that is not the oldest cell date. Availability is not
   compared: the table has a "Public status page" row, and swapi.build's own
   monitor count is prose in one answer, recalculated when the FAQ changes. Never
   repeat what one third party says about another, and never say or suggest that
