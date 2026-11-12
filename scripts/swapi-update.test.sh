@@ -4,7 +4,8 @@
 # This test extracts that block and runs it locally, without the host: its
 # /opt/swapi becomes a temporary directory, and curl, systemctl, install, ldd
 # and sleep are fakes first on PATH. It checks which version directories are
-# left and where `current` points.
+# left and where `current` points, how long the health check waits, and which
+# tags are refused.
 set -euo pipefail
 
 RUNBOOK="$(cd "$(dirname "$0")/.." && pwd)/docs/DEPLOY.md"
@@ -37,7 +38,11 @@ ROOT="$TMP/opt/swapi"
 sed "s|/opt/swapi|$ROOT|g" "$TMP/extracted" > "$TMP/swapi-update"
 
 # Fakes. curl serves the "Release" from $TMP/release and answers the health
-# check unless $TMP/down exists; install ignores owner, group and mode.
+# check unless $TMP/down exists or the check is one of the first N, N being
+# the content of $TMP/failing-checks; a failed check says why on stderr, as
+# curl -sS does. It writes one line per health check, the --max-time it was
+# given, to $TMP/checks, and creates $TMP/downloaded on a download. sleep writes the seconds it was asked for to $TMP/slept. install
+# ignores owner, group and mode.
 mkdir -p "$TMP/bin" "$TMP/release"
 printf 'a native binary\n' > "$TMP/release/application"
 HASH="$(cd "$TMP/release" && sha256sum application | cut -d' ' -f1)"
@@ -45,19 +50,28 @@ printf '%s  application\n' "$HASH" > "$TMP/release/application.sha256"
 
 cat > "$TMP/bin/curl" <<EOF
 #!/usr/bin/env bash
-out=/dev/null; url=
+out=/dev/null; url=; limit=none
 while [ \$# -gt 0 ]; do
   case "\$1" in
     -o) out="\$2"; shift 2 ;;
-    --proto | --max-time) shift 2 ;;
+    --proto) shift 2 ;;
+    --max-time) limit="\$2"; shift 2 ;;
     -*) shift ;;
     *) url="\$1"; shift ;;
   esac
 done
 case "\$url" in
-  https://github.com/*/application) cp "$TMP/release/application" "\$out" ;;
-  https://github.com/*/application.sha256) cp "$TMP/release/application.sha256" "\$out" ;;
-  http://127.0.0.1:*) [ ! -e "$TMP/down" ] ;;
+  https://github.com/*/application)
+    : > "$TMP/downloaded"; cp "$TMP/release/application" "\$out" ;;
+  https://github.com/*/application.sha256)
+    : > "$TMP/downloaded"; cp "$TMP/release/application.sha256" "\$out" ;;
+  http://127.0.0.1:*)
+    printf '%s\n' "\$limit" >> "$TMP/checks"
+    failing="\$(cat "$TMP/failing-checks" 2>/dev/null || echo 0)"
+    if [ -e "$TMP/down" ] || [ "\$(wc -l < "$TMP/checks")" -le "\$failing" ]; then
+      echo "curl: (7) Failed to connect" >&2
+      exit 7
+    fi ;;
   *) exit 22 ;;
 esac
 EOF
@@ -73,15 +87,19 @@ while [ $# -gt 0 ]; do
 done
 if [ "$directory" = 1 ]; then mkdir -p "${paths[@]}"; else cp "${paths[0]}" "${paths[1]}"; fi
 EOF
-for name in systemctl ldd sleep; do
+for name in systemctl ldd; do
   printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/$name"
 done
+cat > "$TMP/bin/sleep" <<EOF
+#!/bin/sh
+printf '%s\n' "\$1" >> "$TMP/slept"
+EOF
 chmod +x "$TMP/bin"/*
 
 # host <active version> <other version>...: a host with these versions on disk.
 # An empty first argument means no `current` link (before the first install).
 host() {
-  rm -rf "$ROOT" "$TMP/down"
+  rm -rf "$ROOT" "$TMP/down" "$TMP/failing-checks"
   mkdir -p "$ROOT"
   active="$1"
   for version in "$@"; do
@@ -90,7 +108,10 @@ host() {
   [ -z "$active" ] || ln -s "$ROOT/$active" "$ROOT/current"
 }
 
-update() { PATH="$TMP/bin:$PATH" sh "$TMP/swapi-update" "$1" "$HASH" > "$TMP/output" 2>&1; }
+update() {
+  rm -f "$TMP/checks" "$TMP/slept" "$TMP/downloaded"
+  PATH="$TMP/bin:$PATH" sh "$TMP/swapi-update" "$1" "$HASH" > "$TMP/output" 2>&1
+}
 
 # The version directories, sorted, on one line.
 versions() {
@@ -134,6 +155,59 @@ does_not_answer() {
   fi
 }
 
+# column <file>: the lines of a file on one line, "" when it does not exist.
+column() { tr '\n' ' ' < "$1" 2>/dev/null | sed 's/ $//' || true; }
+
+# waited <description> <expected health checks>: the last run checked this
+# many times, waited one second before each check and gave each one 2 seconds.
+waited() {
+  seconds='' limits='' count=0
+  while [ "$count" -lt "$2" ]; do
+    seconds="$seconds${seconds:+ }1"
+    limits="$limits${limits:+ }2"
+    count=$((count + 1))
+  done
+  if [ "$(column "$TMP/slept")" = "$seconds" ] && [ "$(column "$TMP/checks")" = "$limits" ]; then
+    pass "$1"
+  else
+    fail "$1: waits '$(column "$TMP/slept")' (expected '$seconds'), limits '$(column "$TMP/checks")' (expected '$limits')"
+    sed 's/^/      /' "$TMP/output"
+  fi
+}
+
+# prints <description> <line>: the output of the last run has this line.
+prints() {
+  if grep -qxF -- "$2" "$TMP/output"; then
+    pass "$1"
+  else
+    fail "$1: no line '$2'"
+    sed 's/^/      /' "$TMP/output"
+  fi
+}
+
+# accepts <description> <tag>: the script deploys it on an empty host.
+accepts() {
+  host ""
+  deploys "accepts $1" "$2" "$2"
+}
+
+# refuses <description> <tag>: exit 2 with the message, before any download,
+# and the host is left as it was (v2.0.0 active, v1.9.0 before it).
+refuses() {
+  host v2.0.0 v1.9.0
+  status=0
+  update "$2" || status=$?
+  if [ "$status" != 2 ]; then
+    fail "refuses $1: exit $status (expected 2)"
+  elif ! grep -q '^not a release tag: ' "$TMP/output"; then
+    fail "refuses $1: no 'not a release tag' message"
+  elif [ -e "$TMP/downloaded" ]; then
+    fail "refuses $1: it downloaded something"
+  else
+    left "refuses $1" "v1.9.0 v2.0.0" v2.0.0
+  fi
+}
+
 host v2.0.0 v1.0.0 v1.9.0
 deploys "an upgrade keeps the new version and the one before it" v2.1.0 "v2.0.0 v2.1.0"
 
@@ -152,6 +226,63 @@ does_not_answer "a version that does not answer removes nothing" v2.1.0 "v1.9.0 
 does_not_answer "a retry that does not answer removes nothing" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
 rm -f "$TMP/down"
 deploys "a retry that answers keeps the last working version" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
+
+# The health check: up to 10 checks, a second apart, 2 seconds each.
+host v2.0.0 v1.9.0
+deploys "a version that answers at once is deployed" v2.1.0 "v2.0.0 v2.1.0"
+waited "a version that answers at once is checked once, after one second" 1
+
+host v2.0.0 v1.9.0
+echo 4 > "$TMP/failing-checks"
+deploys "a version that answers on the fifth check is deployed" v2.1.0 "v2.0.0 v2.1.0"
+waited "the script stops checking when the version answers" 5
+
+host v2.0.0 v1.9.0
+echo 9 > "$TMP/failing-checks"
+deploys "a version that answers on the last check is deployed" v2.1.0 "v2.0.0 v2.1.0"
+
+host v2.0.0 v1.9.0
+: > "$TMP/down"
+does_not_answer "a version that never answers is not deployed" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
+waited "a version that never answers is checked 10 times, 30 s at most" 10
+if [ "$(grep -c '^curl: ' "$TMP/output")" = 1 ]; then
+  pass "it shows the error of the last check, once"
+else
+  fail "it shows the error of the last check, once: $(grep -c '^curl: ' "$TMP/output") line(s)"
+fi
+prints "it says the version is not answering" "swapi v2.1.0 is not answering. Roll back with:"
+prints "it prints the rollback command with the previous version" \
+  "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
+
+# The tag: v plus three numeric parts of 1 to 4 digits, as the deploy gate.
+accepts "a release tag" v2.5.3
+accepts "multi-digit version parts" v10.20.300
+accepts "zeros" v0.0.0
+accepts "parts of four digits" v1234.1234.1234
+accepts "leading zeros, as the gate does" v01.002.0003
+
+refuses "a tag without the v" 2.5.3
+refuses "an uppercase V" V2.5.3
+refuses "two parts" v2.5
+refuses "four parts" v2.5.3.1
+refuses "a pre-release suffix" v2.5.3-rc1
+refuses "letters after the digits" v1a.2b.3c
+refuses "a letter as a part" v2.x.3
+refuses "an empty part" v2..3
+refuses "an empty first part" v.5.3
+refuses "an empty last part" v2.5.
+refuses "non-ASCII digits" v٢.5.3
+refuses "a part of five digits" v12345.0.0
+refuses "a last part of five digits" v2.5.12345
+refuses "a path after the tag" v2.5.3/../../tmp
+refuses "a path inside the tag" v2.5/../v2.0.0
+refuses "a trailing dot" v2.5.3.
+refuses "a trailing space" "v2.5.3 "
+refuses "a leading space" " v2.5.3"
+refuses "a line break after the tag" "v2.5.3
+x"
+refuses "a second v" vv2.5.3
+refuses "a glob" 'v*.*.*'
 
 echo
 if [ "$FAILURES" -eq 0 ]; then
