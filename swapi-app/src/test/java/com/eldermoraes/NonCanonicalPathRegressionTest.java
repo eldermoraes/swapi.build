@@ -118,6 +118,16 @@ class NonCanonicalPathRegressionTest {
         assertEquals("No people found with id 01", answer.body);
     }
 
+    // A dot segment after the id leaves no id as the last segment: #55 refuses
+    // it first, with its own message. Pinned on the wire, where it is sent.
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/people/1/.", "/api/people/1/x/.."})
+    void dotSegmentAfterTheIdIs404(String alias) throws IOException {
+        Answer answer = send("GET", alias);
+        assertEquals(404, answer.status, alias);
+        assertTrue(answer.header("content-type").startsWith("text/plain"), alias);
+    }
+
     @Test
     void countersKeepOnlyTemplatesTheNormalizerProduces() throws IOException {
         for (String alias : new String[] {"/api//people/1", "/api/%70eople/1", "/api/people;x=1/1",
