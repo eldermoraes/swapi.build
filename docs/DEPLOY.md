@@ -548,7 +548,15 @@ install and for every later version:
 set -eu
 tag="${1:?usage: swapi-update <tag> <sha256 from the run summary>}"
 expected="${2:?usage: swapi-update <tag> <sha256 from the run summary>}"
-case "$tag" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "not a release tag: $tag"; exit 2 ;; esac
+# A release tag is vX.Y.Z, each part 1 to 4 digits, and nothing else: the shape
+# swapi-deploy-gate accepts. What follows the v must be digits and dots only,
+# with no empty part, no part of 5 digits and exactly two dots.
+case "${tag#v}" in
+  "$tag" | *[!0-9.]* | .* | *. | *..* | *.*.*.* | *[0-9][0-9][0-9][0-9][0-9]*) shape=no ;;
+  *.*.*) shape=yes ;;
+  *) shape=no ;;
+esac
+[ "$shape" = yes ] || { echo "not a release tag: $tag"; exit 2; }
 base="https://github.com/eldermoraes/swapi.build/releases/download/$tag"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -568,8 +576,19 @@ install -o root -g root -m 755 "$tmp/application" "/opt/swapi/$tag/application"
 previous=$(readlink -f /opt/swapi/current || true)
 ln -sfn "/opt/swapi/$tag" /opt/swapi/current
 systemctl restart swapi
-sleep 3
-if ! curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:5432/api/people/1; then
+# The site is down while this waits: at most 10 checks, one second apart, 2
+# seconds each (about 10 seconds when nothing listens, 30 at the very most).
+answering=no
+checks=0
+while [ "$answering" = no ] && [ "$checks" -lt 10 ]; do
+  checks=$((checks + 1))
+  sleep 1
+  if error=$(curl -fsS --max-time 2 -o /dev/null http://127.0.0.1:5432/api/people/1 2>&1); then
+    answering=yes
+  fi
+done
+if [ "$answering" = no ]; then
+  echo "$error" >&2                                # what the last check said
   echo "swapi $tag is not answering. Roll back with:"
   echo "  ln -sfn ${previous:-<previous version dir>} /opt/swapi/current && systemctl restart swapi"
   exit 1
@@ -602,11 +621,20 @@ old copy loses its rollback version on a redeploy.
 Rolling back a version is `sudo ln -sfn /opt/swapi/<previous tag> /opt/swapi/current`
 and `sudo systemctl restart swapi`.
 
+The script refuses a tag that is not `vX.Y.Z` (three numeric parts of 1 to 4
+digits, nothing before or after), the shape `swapi-deploy-gate` accepts
+(section 2.11), before it downloads anything: a pre-release name or a path
+never becomes a download address or a directory under `/opt/swapi/`.
+
 `swapi-update` does not keep the previous version running while it checks the
 new one: it switches the link and restarts the service **before** it knows the
-new version answers. If the new version does not start, the whole site (pages,
-`/api`, `/mcp`) is down from the restart until someone runs the rollback command
-the script printed. That is why the build runs **Native smoke** before the
+new version answers. After the restart it asks for `/api/people/1` up to 10
+times, one second apart, 2 seconds for each answer, and stops at the first
+one: a normal start is reported about a second after the restart, and a
+version that does not start is reported "is not answering" after about 10
+seconds (30 at the very most, if every check hangs). If the new version does
+not start, the whole site (pages, `/api`, `/mcp`) is down from the restart
+until someone runs the rollback command the script printed. That is why the build runs **Native smoke** before the
 binary is attached (see [Automated deploy](#automated-deploy)).
 
 #### 2.6 `swapi.service`
