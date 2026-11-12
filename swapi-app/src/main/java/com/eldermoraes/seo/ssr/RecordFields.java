@@ -21,8 +21,8 @@ import java.util.function.Function;
  * People list their vehicles since fix-people-vehicles: the data file always had
  * them, the API now serves them, and the page shows what the API shows.
  *
- * The relation getters prefix RequestBaseUrl: only RecordViews calls them, inside
- * the block that sets and restores it.
+ * The relation getters prefix RequestBaseUrl: RecordViews and (2.13.0+) the
+ * MCP RecordExpansion call them, each inside a block that sets and restores it.
  */
 public final class RecordFields {
 

@@ -42,7 +42,18 @@ public final class RouteNormalizer {
         if (rawPath == null || rawPath.isEmpty()) {
             return Optional.of(OTHER);
         }
-        String path = rawPath.split("[?#]", 2)[0];
+        // Cut by hand: split("[?#]") would compile a regex on every request.
+        String path = rawPath;
+        for (int i = 0; i < path.length(); i++) {
+            char c = path.charAt(i);
+            if (c == '?' || c == '#') {
+                path = path.substring(0, i);
+                break;
+            }
+        }
+        if (path.isEmpty()) {
+            return Optional.of(OTHER);
+        }
         if (path.length() > 1 && path.endsWith("/")) {
             path = path.substring(0, path.length() - 1);
         }

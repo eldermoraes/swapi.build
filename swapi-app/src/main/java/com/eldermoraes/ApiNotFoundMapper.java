@@ -50,7 +50,8 @@ public class ApiNotFoundMapper implements ExceptionMapper<NotFoundException> {
                 .map(s -> s.getPath())
                 .filter(s -> !s.isEmpty())
                 .toList();
-        if (segments.size() >= 2) {
+        // Exactly /api/<type>/<id>: a deeper path is not an unknown id.
+        if (segments.size() == 2) {
             String form = MESSAGE_FORMS.get(segments.get(0));
             if (form != null) {
                 return "No " + form + " found with id " + segments.get(1);

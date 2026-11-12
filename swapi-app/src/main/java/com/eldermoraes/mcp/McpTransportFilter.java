@@ -92,8 +92,9 @@ public class McpTransportFilter {
     private static final int RESOURCE_NOT_FOUND = -32002;
 
     // Legacy 2024-11-05 transport: the SSE stream and the POSTs to
-    // /mcp/messages/<id> must land on the same instance, and in this topology
-    // they do not. Rejecting explicitly beats doing the handshake and dying silently.
+    // /mcp/messages/<id> need session-affine state, which this server never
+    // keeps (a restart drops it). Rejecting explicitly beats doing the
+    // handshake and dying silently.
     private static final String LEGACY_GONE = """
             {"error":"The legacy HTTP+SSE transport (spec 2024-11-05) is not \
             supported. Use the Streamable HTTP endpoint at /mcp."}""";

@@ -34,7 +34,7 @@ public class PlanetService  implements SWService {
                  InputStream is = url.openStream()) {
 
                 if (is == null) {
-                    System.err.println("Could not get data from planet.json");
+                    System.err.println("Could not get data from planets.json");
                     planetList = new ArrayList<>();
                     return;
                 }
@@ -47,7 +47,7 @@ public class PlanetService  implements SWService {
                 planetList = new ArrayList<>();
             }
         } else{
-            System.err.println("Could not find planet.json in resources");
+            System.err.println("Could not find planets.json in resources");
         }
     }
 

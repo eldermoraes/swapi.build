@@ -1,7 +1,6 @@
 package com.eldermoraes.specie;
 
 import com.eldermoraes.SWService;
-import com.eldermoraes.planet.Planet;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.json.bind.Jsonb;
 import jakarta.json.bind.JsonbBuilder;

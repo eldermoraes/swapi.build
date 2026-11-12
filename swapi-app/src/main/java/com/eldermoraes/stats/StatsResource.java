@@ -62,6 +62,9 @@ public class StatsResource {
         }
         return RestResponse.ResponseBuilder.ok(stats.view(p, g))
                 .header(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL)
+                // Opting out of CacheControlFilter also drops its Vary: CORS
+                // echoes the request Origin, so a cacheable answer varies by it.
+                .header(HttpHeaders.VARY, "Origin")
                 .build();
     }
 
