@@ -159,7 +159,7 @@ export function elapsedBuckets(view: StatsView): number | null {
  * covered, spread evenly over the previous window. Unchanged when the server
  * does not say how far the last bucket has filled.
  */
-function comparable(previous: number, view: StatsView): number {
+function scaleToElapsed(previous: number, view: StatsView): number {
   const elapsed = elapsedBuckets(view);
   return elapsed === null ? previous : (previous * elapsed) / view.series.length;
 }
@@ -201,7 +201,7 @@ export function rankRows(view: StatsView, mode: View): RankRow[] {
       label: g.label,
       group: g.id,
       count: view.groups[g.id] ?? 0,
-      previous: comparable(view.previous.groups[g.id] ?? 0, view),
+      previous: scaleToElapsed(view.previous.groups[g.id] ?? 0, view),
       share: share(view.groups[g.id] ?? 0),
     })).sort((a, b) => b.count - a.count);
   }
@@ -212,7 +212,7 @@ export function rankRows(view: StatsView, mode: View): RankRow[] {
       label: route,
       group: view.routeGroups[route] ?? 'other',
       count,
-      previous: comparable(view.previous.routes[route] ?? 0, view),
+      previous: scaleToElapsed(view.previous.routes[route] ?? 0, view),
       share: share(count),
     }))
     .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
@@ -256,7 +256,7 @@ function kpis(view: StatsView, mode: View): string {
       ${tile(
         'Requests',
         numbers.format(view.total),
-        `${formatChange(view.total, comparable(view.previous.total, view))} vs ${period.previous}${scaled}`,
+        `${formatChange(view.total, scaleToElapsed(view.previous.total, view))} vs ${period.previous}${scaled}`,
       )}
       ${tile(
         mode === 'groups' ? 'Top group' : 'Top route',

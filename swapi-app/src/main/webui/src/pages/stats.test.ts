@@ -226,6 +226,16 @@ describe('the comparison with the previous window', () => {
     expect(el.querySelector('[data-row="/mcp"] .stats-change')!.textContent).toBe('±0%');
   });
 
+  it('compares with six of the seven previous days in the first second of a day', () => {
+    const v = flatAtTheStartOfADay();
+    v.lastBucketElapsed = 0;
+    v.total = 600; // nothing counted yet today; the previous 700 scale to 600
+    v.routes = { '/mcp': 600 };
+    const el = render(v, 'routes');
+    expect(notes(el)[0]).toBe('±0% vs the previous 7 days, scaled to 6.0 days');
+    expect(el.querySelector('[data-row="/mcp"] .stats-change')!.textContent).toBe('±0%');
+  });
+
   it('shows no change for a flat group either', () => {
     const el = render(flatAtTheStartOfADay(), 'groups');
     expect(el.querySelector('[data-row="mcp"] .stats-change')!.textContent).toBe('±0%');
