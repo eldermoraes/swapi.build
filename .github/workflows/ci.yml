@@ -3,7 +3,9 @@ name: CI
 # Until 2026-08-10 the suite only ran inside the release pipeline (then
 # deploy.yml, triggered by a v* tag). An error only surfaced in the middle of a
 # release already in flight. This workflow runs the same gate on PRs and pushes
-# to main; the release pipeline (native-binary.yml) runs it again on the tag.
+# to main; the release pipeline (native-binary.yml) runs it again on the tag,
+# and only there: on a pull request its test job is skipped, so this workflow
+# is the one run of the suite and must keep its pull_request trigger unfiltered.
 on:
   push:
     branches: [main]
@@ -47,6 +49,13 @@ jobs:
       # injection and malformed tags or hashes are refused. Runs without the host.
       - name: Deploy gate tests
         run: scripts/swapi-deploy-gate.test.sh
+
+      # Which jobs of native-binary.yml run for a release, a dispatch, a
+      # redeploy and a pull request, decided from the job conditions: a pull
+      # request runs the suite once (here), and a red suite on a release never
+      # builds or deploys.
+      - name: Release pipeline trigger tests
+        run: scripts/native-binary-triggers.test.sh
 
       # The repo is still connected to the old Vercel project; without
       # git.deploymentEnabled false every push starts a Vercel deployment.
