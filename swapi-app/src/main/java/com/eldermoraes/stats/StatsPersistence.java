@@ -24,8 +24,10 @@ import java.util.function.Consumer;
  * {@code STATE_DIRECTORY} (docs/DEPLOY.md, "Usage counters"). With it, the
  * counters are restored at startup, saved every 10 minutes when they changed,
  * and saved on shutdown, so a deploy loses at most nothing and a crash at most
- * 10 minutes. Without it, or if it is not writable, the app keeps the counters
- * in memory only and says so once in the log; nothing else changes.
+ * 10 minutes. A snapshot larger than the next start would accept is written
+ * all the same and reported in the log. Without it, or if it is not writable,
+ * the app keeps the counters in memory only and says so once in the log;
+ * nothing else changes.
  */
 @Singleton
 public class StatsPersistence {
@@ -42,9 +44,13 @@ public class StatsPersistence {
     Consumer<String> warn = LOG::warn;
     Consumer<String> info = LOG::info;
 
+    /** The largest snapshot a start accepts; smaller only in tests. */
+    long snapshotLimit = SnapshotFile.MAX_BYTES;
+
     private SnapshotFile snapshot;
     private long savedChanges = -1;
     private boolean failing;
+    private boolean oversized;
 
     void onStart(@Observes StartupEvent event) {
         start();
@@ -77,7 +83,7 @@ public class StatsPersistence {
                     + "memory only and restart from zero on every restart");
             return;
         }
-        snapshot = new SnapshotFile(path, warn);
+        snapshot = new SnapshotFile(path, warn, snapshotLimit);
         snapshot.read().ifPresent(data -> {
             stats.restore(data);
             info.accept("usage counters restored from " + snapshot.path() + " (" + data.hours().size()
@@ -97,12 +103,13 @@ public class StatsPersistence {
             return;
         }
         try {
-            snapshot.write(stats.export());
+            long written = snapshot.write(stats.export());
             savedChanges = changes;
             if (failing) {
                 info.accept("usage counters snapshot written again to " + snapshot.path());
                 failing = false;
             }
+            reportSize(written);
         } catch (IOException | RuntimeException e) {
             // One warning per failure streak, not one every 10 minutes.
             if (!failing) {
@@ -111,6 +118,25 @@ public class StatsPersistence {
                 failing = true;
             }
         }
+    }
+
+    /**
+     * Says when a snapshot was written larger than a start accepts, so the
+     * file the next start will refuse is never written in silence. One warning
+     * per run of oversized snapshots, not one every 10 minutes, and one line
+     * when a snapshot fits again. Only the path and two sizes go to the log.
+     */
+    private void reportSize(long written) {
+        boolean tooLarge = written > snapshot.maxBytes();
+        if (tooLarge && !oversized) {
+            warn.accept("usage counters snapshot " + snapshot.path() + " was written with " + written
+                    + " bytes, more than the " + snapshot.maxBytes() + " bytes a start accepts: a restart now "
+                    + "would ignore it and start from zero");
+        } else if (!tooLarge && oversized) {
+            info.accept("usage counters snapshot " + snapshot.path() + " fits again in the "
+                    + snapshot.maxBytes() + " bytes a start accepts (" + written + " bytes)");
+        }
+        oversized = tooLarge;
     }
 
     /** True when the counters survive a restart. */

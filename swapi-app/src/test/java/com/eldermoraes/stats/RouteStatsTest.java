@@ -525,7 +525,7 @@ class RouteStatsTest {
     }
 
     /**
-     * The worst case: every one of the 45 route templates timed in every hour
+     * The worst case: every one of the route templates timed in every hour
      * of the 7-day hourly view. Before #53 one build allocated 32.6 MB, six
      * histogram copies per cell; summed in place it stays under a megabyte or
      * two, whatever the traffic was. The ceiling is far from both on purpose.
@@ -534,9 +534,10 @@ class RouteStatsTest {
     void buildingTheLargestViewAllocatesLittle() {
         com.sun.management.ThreadMXBean threads = allocationCounter();
         for (int hour = 0; hour < 7 * 24; hour++) {
-            for (int route = 0; route < 45; route++) {
-                stats.record("/api/route" + route);
-                stats.recordDuration("/api/route" + route, (1 + (hour * 31 + route * 17) % 500) * MS);
+            int n = 0;
+            for (String route : RouteNormalizer.templates()) {
+                stats.record(route);
+                stats.recordDuration(route, (1 + (hour * 31 + n++ * 17) % 500) * MS);
             }
             clock.advance(Duration.ofHours(1));
         }
@@ -553,7 +554,8 @@ class RouteStatsTest {
         }
         long perBuild = (threads.getThreadAllocatedBytes(id) - before) / builds;
 
-        assertEquals(45, stats.view(StatsPeriod.LAST_7_DAYS, Granularity.HOUR).performance().routes().size());
+        assertEquals(RouteNormalizer.TEMPLATE_COUNT,
+                stats.view(StatsPeriod.LAST_7_DAYS, Granularity.HOUR).performance().routes().size());
         assertTrue(perBuild < 4L * 1024 * 1024, "one 7-day hourly view allocated " + perBuild + " bytes");
     }
 

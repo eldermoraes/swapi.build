@@ -6,6 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -188,5 +189,78 @@ class StatsPersistenceTest {
         p.save();
         assertTrue(Files.exists(dir.resolve(SnapshotFile.FILE_NAME)));
         assertTrue(infos.getLast().contains("written again"));
+    }
+
+    // #60: the size limit was checked only when reading, so the app could write,
+    // in silence, a file the next start would refuse.
+    @Test
+    void snapshotLargerThanTheReadLimitIsWrittenAndReportedOncePerRun() throws IOException {
+        RouteStats before = new RouteStats(clock);
+        StatsPersistence first = persistence(before, Optional.of(dir.toString()));
+        first.snapshotLimit = 120;                           // one route fits (97 bytes), two do not (159)
+        first.start();
+        before.record("/mcp");
+        before.record("/api/films");
+        first.save();
+
+        Path file = dir.resolve(SnapshotFile.FILE_NAME);
+        assertTrue(Files.readString(file).contains("d 2026-10-19 /api/films 1"), "written in full all the same");
+        assertEquals(1, warnings.size(), warnings::toString);
+        String warning = warnings.getFirst();
+        assertTrue(warning.contains(file.toString()), warning);
+        assertTrue(warning.contains(Files.size(file) + " bytes"), warning);
+        assertTrue(warning.contains("120 bytes"), warning);
+        assertEquals("usage counters snapshot " + file + " was written with 159 bytes, more than the 120 bytes "
+                + "a start accepts: a restart now would ignore it and start from zero", warning,
+                "the path and two sizes, never what was counted");
+
+        before.record("/mcp");
+        first.save();                                        // still too large: the same run
+        assertEquals(1, warnings.size(), warnings::toString);
+
+        // What the warning announces: the next process refuses the file.
+        RouteStats after = new RouteStats(clock);
+        StatsPersistence second = persistence(after, Optional.of(dir.toString()));
+        second.snapshotLimit = 120;
+        second.start();
+        assertTrue(after.day(LocalDate.parse("2026-10-19")).isEmpty());
+        assertEquals(2, warnings.size(), warnings::toString);
+        assertTrue(warnings.getLast().contains("larger than 120 bytes"), warnings::toString);
+    }
+
+    @Test
+    void snapshotThatFitsAgainEndsTheRunAndTheNextOneWarnsAgain() throws IOException {
+        RouteStats stats = new RouteStats(clock);
+        StatsPersistence p = persistence(stats, Optional.of(dir.toString()));
+        p.snapshotLimit = 120;
+        p.start();
+        stats.record("/mcp");
+        stats.record("/api/films");
+        p.save();
+        assertEquals(1, warnings.size(), warnings::toString);
+
+        clock.advance(Duration.ofDays(RouteStats.RETAINED_DAYS + 1));   // both buckets age out
+        stats.record("/mcp");
+        p.save();
+        assertEquals(1, warnings.size(), warnings::toString);
+        assertTrue(infos.getLast().contains("fits again"), infos::toString);
+        assertTrue(Files.size(dir.resolve(SnapshotFile.FILE_NAME)) <= 120);
+
+        stats.record("/api/films");
+        p.save();
+        assertEquals(2, warnings.size(), "a new run of oversized snapshots: " + warnings);
+    }
+
+    @Test
+    void snapshotWithinTheReadLimitIsNotReported() {
+        RouteStats stats = new RouteStats(clock);
+        StatsPersistence p = persistence(stats, Optional.of(dir.toString()));
+        p.snapshotLimit = 120;
+        p.start();
+        stats.record("/mcp");
+        p.save();
+
+        assertTrue(warnings.isEmpty(), warnings::toString);
+        assertTrue(infos.isEmpty(), infos::toString);
     }
 }

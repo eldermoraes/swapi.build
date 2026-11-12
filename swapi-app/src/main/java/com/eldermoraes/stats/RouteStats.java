@@ -33,11 +33,14 @@ import java.util.concurrent.atomic.LongAdder;
  * ({@link #record}) and once for its time ({@link #recordDuration}). Hours are
  * kept for {@link #RETAINED_HOURS} (the 7-day hourly view and the 7 days before
  * it, for the comparison), days for {@link #RETAINED_DAYS} (the 30-day view and
- * the 30 days before it). Memory is bounded twice: the route set is closed (45
- * templates), and older buckets are dropped. With every route busy every hour
- * that is 45 x (336 + 60) = 17,820 counters and as many {@link TimingCell}s of
- * about 0.5 KB each with their map entry, so under 9 MB in the worst case; in
- * practice a small fraction of that, since most routes are idle most hours.
+ * the 30 days before it). Memory is bounded twice: the route set is closed (59
+ * templates, {@link RouteNormalizer#TEMPLATE_COUNT}), and older buckets are
+ * dropped. With every route busy in every retained hour and day that is
+ * 59 x (336 + 60) = 23,364 counters and as many {@link TimingCell}s. Measured
+ * on the JVM with its map entry and key, a counter is about 0.1 KB and a cell
+ * about 0.5 KB ({@link #TIMING_CELL_BYTES}): 23,364 x 0.1 KB = 2.3 MB and
+ * 23,364 x 0.5 KB = 11.7 MB, so about 14 MB in the worst case; in practice a
+ * small fraction of that, since most routes are idle most hours.
  *
  * The counters live in memory. {@link StatsPersistence} copies them to a file
  * when the host gives the app a writable state directory, so a restart (a
