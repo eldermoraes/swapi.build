@@ -97,6 +97,31 @@ class NonCanonicalIdRegressionTest {
                 .header("X-Content-Type-Options", "nosniff");
     }
 
+    // The ids that were never a record keep their 404 and their message; the
+    // id is repeated as written, so "+9999" no longer reads "9999".
+    @ParameterizedTest
+    @CsvSource(textBlock = TYPES)
+    void idsThatWereAlready404KeepTheContract(String type, String form, String id) {
+        for (String written : List.of("9999", "abc", "1.5", "2147483648", "0", "-1", "+9999", "1234567890")) {
+            get("/api/" + type + "/" + written)
+                    .statusCode(404)
+                    .contentType("text/plain")
+                    .body(equalTo("No " + form + " found with id " + written));
+        }
+    }
+
+    // A doubled slash before the type still reaches the route (another
+    // matter, not part of #55); the alias after it is refused all the same,
+    // with the message of its type.
+    @ParameterizedTest
+    @CsvSource(textBlock = TYPES)
+    void aliasAfterADoubledSlashIs404(String type, String form, String id) {
+        get("/api//" + type + "/0" + id)
+                .statusCode(404)
+                .contentType("text/plain")
+                .body(equalTo("No " + form + " found with id 0" + id));
+    }
+
     // HEAD is what monitors send; the rule does not depend on the method.
     @ParameterizedTest
     @CsvSource(textBlock = TYPES)

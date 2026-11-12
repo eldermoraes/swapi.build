@@ -39,8 +39,7 @@ public class CanonicalIdFilter implements ContainerRequestFilter {
         }
         String written = lastSegment(request.path());
         if (!KnownEntities.isCanonicalId(written)) {
-            String type = uriInfo.getPathSegments().get(0).getPath();
-            context.abortWith(ApiNotFoundMapper.recordNotFound(type, written));
+            context.abortWith(ApiNotFoundMapper.notFound(uriInfo, written));
         }
     }
 

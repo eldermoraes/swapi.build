@@ -21,6 +21,10 @@ import java.util.Map;
  * The 404s hand-built by the resources ("No people found with id 9999")
  * do not pass through here — this mapper only sees the framework's
  * NotFoundException.
+ *
+ * Since issue #55 an id that is not canonical never reaches the conversion:
+ * CanonicalIdFilter answers it first, with the same response built here. The
+ * mapper still serves every other 404 of /api (an unknown route, for one).
  */
 @Provider
 public class ApiNotFoundMapper implements ExceptionMapper<NotFoundException> {
@@ -39,36 +43,32 @@ public class ApiNotFoundMapper implements ExceptionMapper<NotFoundException> {
 
     @Override
     public Response toResponse(NotFoundException exception) {
-        return notFound(message());
+        return notFound(uriInfo, null);
     }
 
-    private String message() {
+    /**
+     * The contract 404 for the path of this request. The message names the id
+     * as the client wrote it when the caller has it (CanonicalIdFilter, issue
+     * #55: "%31", "1;x=y"), and the decoded second segment otherwise.
+     */
+    static Response notFound(UriInfo uriInfo, String idAsWritten) {
+        return Response.status(Response.Status.NOT_FOUND)
+                .type(MediaType.TEXT_PLAIN)
+                .entity(message(uriInfo, idAsWritten))
+                .build();
+    }
+
+    private static String message(UriInfo uriInfo, String idAsWritten) {
         List<String> segments = uriInfo.getPathSegments().stream()
                 .map(s -> s.getPath())
                 .filter(s -> !s.isEmpty())
                 .toList();
-        if (segments.size() >= 2 && MESSAGE_FORMS.containsKey(segments.get(0))) {
-            return recordMessage(segments.get(0), segments.get(1));
+        if (segments.size() >= 2) {
+            String form = MESSAGE_FORMS.get(segments.get(0));
+            if (form != null) {
+                return "No " + form + " found with id " + (idAsWritten != null ? idAsWritten : segments.get(1));
+            }
         }
         return "No resource found at /api/" + String.join("/", segments);
-    }
-
-    /**
-     * The contract 404 for an id of one of the six types that names no record,
-     * with the id as given. Also what CanonicalIdFilter answers (issue #55).
-     */
-    static Response recordNotFound(String type, String id) {
-        return notFound(recordMessage(type, id));
-    }
-
-    private static String recordMessage(String type, String id) {
-        return "No " + MESSAGE_FORMS.get(type) + " found with id " + id;
-    }
-
-    private static Response notFound(String message) {
-        return Response.status(Response.Status.NOT_FOUND)
-                .type(MediaType.TEXT_PLAIN)
-                .entity(message)
-                .build();
     }
 }
