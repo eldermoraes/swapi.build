@@ -146,7 +146,10 @@ describe('/faq#compare on the client', () => {
     link.remove();
   });
 
-  it('Back to /about and forward to /faq#compare: the comparison again, from the cache', async () => {
+  // Changes on purpose with issue #71: Forward to an entry the reader was on
+  // puts them where they were on it (main-scroll.test.ts), instead of jumping
+  // to the start of its fragment again. jsdom has no layout: that place is 0.
+  it('Back to /about and forward to /faq#compare: the FAQ again, from the cache, where the reader was', async () => {
     // Back past the fragments of /faq to /about (a different document).
     while (window.location.pathname !== '/about') {
       const popped = new Promise((resolve) =>
@@ -168,6 +171,8 @@ describe('/faq#compare on the client', () => {
     expect(window.location.pathname + window.location.hash).toBe('/faq#compare');
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(document.querySelector('#main-content h1')?.textContent).toBe('FAQ');
-    expect(scrolledTo).toEqual(['compare']);
+    expect(scrolledTo).toEqual([]);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenCalledWith({ left: 0, top: 0, behavior: 'instant' });
   });
 });

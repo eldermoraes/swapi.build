@@ -55,7 +55,9 @@ of pure white — depth, not a colour role.
 
 Pathway Gothic One ships **a single 400 weight**. Emphasis comes from size and
 letter-spacing — never `font-weight: bold`, because the browser's faux-bold
-mangles a condensed face.
+mangles a condensed face. A heading is bold by the browser's default, so
+**every rule that sets `--sw-font-display` also sets `font-weight: 400`**;
+`src/ui/display-weight.test.ts` fails the suite on a rule that does not.
 
 Each font token lists a metric-matched fallback face right after the web font
 (`'Pathway Gothic One Fallback'`, `'Inter Fallback'`, `'JetBrains Mono Fallback'`,
@@ -234,7 +236,8 @@ the client adopts it (`bindRecord`) and only colours the JSON (and binds any
 A new page or section is on-standard when:
 
 1. It uses **only tokens** — no raw hex anywhere in page styles.
-2. The display face is **uppercase + letter-spaced**, never bold.
+2. The display face is **uppercase + letter-spaced**, never bold: its rule
+   sets `font-weight: 400` (a heading is bold otherwise).
 3. Gold/cyan roles are respected (gold = action, cyan = data).
 4. Actions are `.sw-pill` — via `pill()` on the client or the `pill.html` tag
    on the server.

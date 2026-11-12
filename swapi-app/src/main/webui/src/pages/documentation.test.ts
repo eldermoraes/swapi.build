@@ -34,7 +34,7 @@ describe('documentation page binding', () => {
     block.querySelector<HTMLInputElement>('input[name="id"]')!.value = '2';
     block.querySelector<HTMLButtonElement>('.try-button')!.click();
     await vi.waitFor(() => {
-      expect(fetchSpy).toHaveBeenCalledWith('/api/people/2');
+      expect(fetchSpy.mock.calls[0]?.[0]).toBe('/api/people/2');
       const result = block.querySelector<HTMLElement>('.try-result')!;
       expect(result.hidden).toBe(false);
       expect(result.textContent).toContain('HTTP 200');
@@ -51,6 +51,32 @@ describe('documentation page binding', () => {
     const block = container.querySelector<HTMLElement>('[data-path="/api/people"]')!;
     block.querySelector<HTMLInputElement>('input[name="search"]')!.value = 'luke';
     block.querySelector<HTMLButtonElement>('.try-button')!.click();
-    await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledWith('/api/people?search=luke'));
+    await vi.waitFor(() => expect(fetchSpy.mock.calls[0]?.[0]).toBe('/api/people?search=luke'));
+  });
+
+  // Issue #71: "Try it" asks /api too; a request that hangs ends with an error.
+  it('a "Try it" that does not answer in 10 seconds says so instead of "Loading…"', async () => {
+    const timer = new AbortController();
+    const limits: number[] = [];
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+      limits.push(ms);
+      return timer.signal;
+    });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      (_url, options) =>
+        new Promise<Response>((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(options.signal!.reason));
+        }),
+    );
+    const container = serverDocs();
+    bindDocumentation(container);
+    const block = container.querySelector<HTMLElement>('[data-path="/api/people"]')!;
+    block.querySelector<HTMLButtonElement>('.try-button')!.click();
+    const result = block.querySelector<HTMLElement>('.try-result')!;
+    await vi.waitFor(() => expect(result.textContent).toContain('Loading'));
+
+    timer.abort(new DOMException('The operation timed out.', 'TimeoutError'));
+    await vi.waitFor(() => expect(result.textContent).toContain('took too long'));
+    expect(limits).toEqual([10_000]);
   });
 });

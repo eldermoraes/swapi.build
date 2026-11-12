@@ -1,6 +1,13 @@
 import { ApiError, fetchResources, searchResource, fetchResourceById, fetchRandom } from './api';
 import { getResourceMeta, RESOURCES } from './constants';
-import { renderResourceList, renderResourceDetail, bindRecord, recordText } from './pages/resource';
+import {
+  renderResourceList,
+  renderResourceDetail,
+  bindRecord,
+  recordText,
+  showsResourceList,
+  updateResourceResults,
+} from './pages/resource';
 import { fetchServerMain, forgetServerMain, showLoadFailure, swapServerMain } from './server-main';
 
 export const RESOURCE_NAMES = RESOURCES.map((resource) => resource.key.toUpperCase());
@@ -89,8 +96,12 @@ export class ResourceExplorer {
 
   constructor(
     private container: HTMLElement,
-    /** Makes `path` the page; `entity` is the record of a detail, undefined for a list. */
-    private commit: (path: string, entity?: Entity) => void,
+    /**
+     * Makes `path` the page; `entity` is the record of a detail, undefined for a
+     * list. `found` is the number of records of a search that changes only the
+     * results of the list shown: not a page change (no scroll, no focus move).
+     */
+    private commit: (path: string, entity?: Entity, found?: number) => void,
     private onHumanAction: () => void = () => {},
   ) {
     container.addEventListener('input', this.onInteraction);
@@ -161,20 +172,30 @@ export class ResourceExplorer {
       if (generation !== this.generation)
         return failure('SUPERSEDED', 'The user changed the page.');
       const path = `/resource/${type}`;
-      this.commit(path);
-      renderResourceList(
-        this.container,
-        type,
-        data,
-        tool === 'sw_search' ? args.query! : '',
-        (action, query) => {
-          void this.execute(
-            action,
-            { resource: args.resource, ...(action === 'sw_search' ? { query } : {}) },
-            { human: true },
-          );
-        },
-      );
+      // The reader's search on the list shown changes only its results; a list
+      // opened any other way (a navigation, a browser tool) is a page change.
+      const inPlace =
+        tool === 'sw_search' && options.human === true && showsResourceList(this.container, type);
+      this.commit(path, undefined, inPlace ? data.length : undefined);
+      if (inPlace) {
+        // The alert of a link that failed on this page: the full draw wiped it.
+        this.container.querySelector('.sw-load-failure')?.remove();
+        updateResourceResults(this.container, type, data);
+      } else {
+        renderResourceList(
+          this.container,
+          type,
+          data,
+          tool === 'sw_search' ? args.query! : '',
+          (action, query) => {
+            void this.execute(
+              action,
+              { resource: args.resource, ...(action === 'sw_search' ? { query } : {}) },
+              { human: true },
+            );
+          },
+        );
+      }
       return { ok: true, resource: args.resource, path, data, count: data.length };
     } catch (error) {
       if (controller.signal.aborted)
