@@ -39,9 +39,9 @@ sed "s|/opt/swapi|$ROOT|g" "$TMP/extracted" > "$TMP/swapi-update"
 
 # Fakes. curl serves the "Release" from $TMP/release and answers the health
 # check unless $TMP/down exists or the check is one of the first N, N being
-# the content of $TMP/failing-checks. It writes one line per health check, the
-# --max-time it was given, to $TMP/checks, and creates $TMP/downloaded on a
-# download. sleep writes the seconds it was asked for to $TMP/slept. install
+# the content of $TMP/failing-checks; a failed check says why on stderr, as
+# curl -sS does. It writes one line per health check, the --max-time it was
+# given, to $TMP/checks, and creates $TMP/downloaded on a download. sleep writes the seconds it was asked for to $TMP/slept. install
 # ignores owner, group and mode.
 mkdir -p "$TMP/bin" "$TMP/release"
 printf 'a native binary\n' > "$TMP/release/application"
@@ -68,7 +68,10 @@ case "\$url" in
   http://127.0.0.1:*)
     printf '%s\n' "\$limit" >> "$TMP/checks"
     failing="\$(cat "$TMP/failing-checks" 2>/dev/null || echo 0)"
-    [ ! -e "$TMP/down" ] && [ "\$(wc -l < "$TMP/checks")" -gt "\$failing" ] ;;
+    if [ -e "$TMP/down" ] || [ "\$(wc -l < "$TMP/checks")" -le "\$failing" ]; then
+      echo "curl: (7) Failed to connect" >&2
+      exit 7
+    fi ;;
   *) exit 22 ;;
 esac
 EOF
@@ -152,19 +155,22 @@ does_not_answer() {
   fi
 }
 
-# total <file>: the sum of the numbers in a file of one number per line.
-total() { awk '{ sum += $1 } END { print sum + 0 }' "$1" 2>/dev/null || echo 0; }
+# column <file>: the lines of a file on one line, "" when it does not exist.
+column() { tr '\n' ' ' < "$1" 2>/dev/null | sed 's/ $//' || true; }
 
-# waited <description> <expected health checks> <most seconds it may take>:
-# the last run checked this many times, and the waits between the checks plus
-# the limit of every check add up to no more than that.
+# waited <description> <expected health checks>: the last run checked this
+# many times, waited one second before each check and gave each one 2 seconds.
 waited() {
-  checks="$(wc -l < "$TMP/checks" 2>/dev/null | tr -d ' ' || true)"
-  longest=$(( $(total "$TMP/slept") + $(total "$TMP/checks") ))
-  if [ "${checks:-0}" = "$2" ] && [ "$longest" -le "$3" ]; then
+  seconds='' limits='' count=0
+  while [ "$count" -lt "$2" ]; do
+    seconds="$seconds${seconds:+ }1"
+    limits="$limits${limits:+ }2"
+    count=$((count + 1))
+  done
+  if [ "$(column "$TMP/slept")" = "$seconds" ] && [ "$(column "$TMP/checks")" = "$limits" ]; then
     pass "$1"
   else
-    fail "$1: ${checks:-0} health check(s) (expected $2), up to $longest s (at most $3)"
+    fail "$1: waits '$(column "$TMP/slept")' (expected '$seconds'), limits '$(column "$TMP/checks")' (expected '$limits')"
     sed 's/^/      /' "$TMP/output"
   fi
 }
@@ -179,10 +185,10 @@ prints() {
   fi
 }
 
-# accepts <tag>: the script deploys it on an empty host.
+# accepts <description> <tag>: the script deploys it on an empty host.
 accepts() {
   host ""
-  deploys "accepts the tag $1" "$1" "$1"
+  deploys "accepts $1" "$2" "$2"
 }
 
 # refuses <description> <tag>: exit 2 with the message, before any download,
@@ -224,12 +230,12 @@ deploys "a retry that answers keeps the last working version" v2.1.0 "v1.9.0 v2.
 # The health check: up to 10 checks, a second apart, 2 seconds each.
 host v2.0.0 v1.9.0
 deploys "a version that answers at once is deployed" v2.1.0 "v2.0.0 v2.1.0"
-waited "a version that answers at once is checked once" 1 3
+waited "a version that answers at once is checked once, after one second" 1
 
 host v2.0.0 v1.9.0
 echo 4 > "$TMP/failing-checks"
 deploys "a version that answers on the fifth check is deployed" v2.1.0 "v2.0.0 v2.1.0"
-waited "the script stops checking when the version answers" 5 15
+waited "the script stops checking when the version answers" 5
 
 host v2.0.0 v1.9.0
 echo 9 > "$TMP/failing-checks"
@@ -238,16 +244,22 @@ deploys "a version that answers on the last check is deployed" v2.1.0 "v2.0.0 v2
 host v2.0.0 v1.9.0
 : > "$TMP/down"
 does_not_answer "a version that never answers is not deployed" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
-waited "a version that never answers is checked 10 times, 30 s at most" 10 30
+waited "a version that never answers is checked 10 times, 30 s at most" 10
+if [ "$(grep -c '^curl: ' "$TMP/output")" = 1 ]; then
+  pass "it shows the error of the last check, once"
+else
+  fail "it shows the error of the last check, once: $(grep -c '^curl: ' "$TMP/output") line(s)"
+fi
 prints "it says the version is not answering" "swapi v2.1.0 is not answering. Roll back with:"
 prints "it prints the rollback command with the previous version" \
   "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
 
 # The tag: v plus three numeric parts of 1 to 4 digits, as the deploy gate.
-accepts v2.5.3
-accepts v10.20.300
-accepts v0.0.0
-accepts v1234.1234.1234
+accepts "a release tag" v2.5.3
+accepts "multi-digit version parts" v10.20.300
+accepts "zeros" v0.0.0
+accepts "parts of four digits" v1234.1234.1234
+accepts "leading zeros, as the gate does" v01.002.0003
 
 refuses "a tag without the v" 2.5.3
 refuses "an uppercase V" V2.5.3
@@ -257,6 +269,9 @@ refuses "a pre-release suffix" v2.5.3-rc1
 refuses "letters after the digits" v1a.2b.3c
 refuses "a letter as a part" v2.x.3
 refuses "an empty part" v2..3
+refuses "an empty first part" v.5.3
+refuses "an empty last part" v2.5.
+refuses "non-ASCII digits" v٢.5.3
 refuses "a part of five digits" v12345.0.0
 refuses "a last part of five digits" v2.5.12345
 refuses "a path after the tag" v2.5.3/../../tmp

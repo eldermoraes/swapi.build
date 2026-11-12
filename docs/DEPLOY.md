@@ -546,6 +546,7 @@ install and for every later version:
 #!/bin/sh
 # usage: swapi-update <tag> <sha256 from the Actions run summary>
 set -eu
+export LC_ALL=C
 tag="${1:?usage: swapi-update <tag> <sha256 from the run summary>}"
 expected="${2:?usage: swapi-update <tag> <sha256 from the run summary>}"
 # A release tag is vX.Y.Z, each part 1 to 4 digits, and nothing else: the shape
@@ -624,7 +625,10 @@ and `sudo systemctl restart swapi`.
 The script refuses a tag that is not `vX.Y.Z` (three numeric parts of 1 to 4
 digits, nothing before or after), the shape `swapi-deploy-gate` accepts
 (section 2.11), before it downloads anything: a pre-release name or a path
-never becomes a download address or a directory under `/opt/swapi/`.
+never becomes a download address or a directory under `/opt/swapi/`. Before
+2026-11-12 the check was a glob that let those through, and the health check
+below was a single request three seconds after the restart: a host that still
+has the old copy keeps both until the script is installed again.
 
 `swapi-update` does not keep the previous version running while it checks the
 new one: it switches the link and restarts the service **before** it knows the
@@ -634,8 +638,9 @@ one: a normal start is reported about a second after the restart, and a
 version that does not start is reported "is not answering" after about 10
 seconds (30 at the very most, if every check hangs). If the new version does
 not start, the whole site (pages, `/api`, `/mcp`) is down from the restart
-until someone runs the rollback command the script printed. That is why the build runs **Native smoke** before the
-binary is attached (see [Automated deploy](#automated-deploy)).
+until someone runs the rollback command the script printed. That is why the
+build runs **Native smoke** before the binary is attached (see
+[Automated deploy](#automated-deploy)).
 
 #### 2.6 `swapi.service`
 
