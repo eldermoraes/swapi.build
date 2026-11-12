@@ -129,7 +129,12 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   instead of 404ing. It was introduced because Vercel had no session affinity;
   on the single self-hosted instance it still keeps a client working after a
   restart drops its session. A genuine `initialize` still creates a
-  real session that lives in one instance's heap until idle (default 30 min).
+  real session that lives in one instance's heap until idle:
+  `quarkus.mcp.server.connection-idle-timeout=2m` (the extension's default is
+  30 min), swept every minute, so two to three minutes after its last use. A
+  dropped id is served like one from before a restart
+  (`McpSessionIdleTimeoutTest`); never raise it back without a reason, the
+  sessions carry nothing this server uses.
   `GET /mcp` answers 405 (no server→client stream) and `DELETE` answers 204.
   The legacy HTTP+SSE transport (`/mcp/sse`) is rejected on purpose. Never
   reintroduce session-affine state, and never depend on the legacy transport.

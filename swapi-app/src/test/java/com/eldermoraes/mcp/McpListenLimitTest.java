@@ -1,13 +1,17 @@
 package com.eldermoraes.mcp;
 
+import io.quarkiverse.mcp.server.McpServer;
 import io.quarkiverse.mcp.server.ResourceManager;
 import io.quarkiverse.mcp.server.ResourceResponse;
 import io.quarkiverse.mcp.server.TextResourceContents;
+import io.quarkiverse.mcp.server.runtime.config.McpServersRuntimeConfig;
 import io.quarkus.arc.ClientProxy;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
+import io.smallrye.config.SmallRyeConfig;
 import io.vertx.core.json.JsonObject;
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
@@ -274,8 +278,13 @@ class McpListenLimitTest {
 
     // The filter only answers a subscribe the extension would have handled.
     // With an unsupported protocol version or without the required Accept,
-    // the extension answers 400 itself, as before 2.12.1, before it creates
-    // any session, and opens nothing.
+    // the extension answers 400 itself, as before 2.12.1, records no
+    // subscriber and opens nothing. Only the Accept is refused before any
+    // session exists. A bad version is refused after the session lookup: with
+    // the real session id these tests send nothing new is created, but
+    // without one (or with an unknown one) extension 2.0.3 creates a session
+    // and leaves it to the idle timeout (issue #45,
+    // McpSessionIdleTimeoutTest.sessionsLeftByRefusedRequestsAreDropped).
     @Test
     void subscribeWithoutTheRequiredAcceptIsLeftToTheExtension() throws Exception {
         String session = openSession();
@@ -373,6 +382,20 @@ class McpListenLimitTest {
                 .post(mcp)
         .then()
                 .statusCode(413);
+    }
+
+    // Issue #45: a session (a genuine initialize, or one of the refused
+    // requests of McpSessionIdleTimeoutTest) stays in the heap until the
+    // extension's idle timeout, and its default is 30 minutes. The sessions
+    // carry nothing this server uses and auto-init serves a dropped id, so
+    // minutes are enough. Read from the mapping the extension itself reads.
+    @Test
+    void idleSessionsAreKeptForMinutes() {
+        Duration timeout = ConfigProvider.getConfig().unwrap(SmallRyeConfig.class)
+                .getConfigMapping(McpServersRuntimeConfig.class)
+                .servers().get(McpServer.DEFAULT).connectionIdleTimeout();
+        assertTrue(timeout.compareTo(Duration.ofMinutes(1)) >= 0 && timeout.compareTo(Duration.ofMinutes(5)) <= 0,
+                "quarkus.mcp.server.connection-idle-timeout is " + timeout + ", expected 1 to 5 minutes");
     }
 
     @Test
