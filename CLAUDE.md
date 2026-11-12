@@ -19,8 +19,9 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
 4. **Branch** — never implement directly on `main`.
 5. **TDD** — failing test first, then implementation. Run the full suite before
    every commit.
-6. **Merge** — ask the user (merge local / PR / keep branch). Run the suite again
-   on the merged result.
+6. **Merge** — ask the user (PR / keep branch). `main` only takes a pull
+   request whose `build` check passed (ruleset below), so a local merge cannot
+   be pushed. Run the suite again on the merged result.
 7. **Release** — only if the change carries a version bump: changelog entry →
    annotated tag → GitHub Release, per `docs/RELEASE.md`.
 8. **Push** — `git push` publishes commits (and tags) only. **It does not deploy.**
@@ -50,6 +51,14 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   (`scripts/swapi-deploy-gate.sh`, tested by `scripts/swapi-deploy-gate.test.sh`
   in CI): it accepts exactly `update vX.Y.Z <sha256>` and calls
   `sudo swapi-update`. Never loosen that pattern or give the key a shell.
+- **`main` is protected by the GitHub ruleset `main`** (2026-11-12, Settings →
+  Rules → Rulesets): no deletion, no force push, every change through a pull
+  request (no approval required), and the `build` check (`ci.yml`, backend
+  suite + Vitest) green before the merge. Nobody bypasses it, admins included:
+  never push to `main` directly, never add a bypass actor or drop the CI
+  check. Tags are not covered, so tagging `main` after the merge
+  (`docs/RELEASE.md`) is unchanged. Renaming the `build` job of `ci.yml`
+  blocks every merge until the ruleset names the new check.
 - **One measurement script, no trackers.** The only third-party script is the
   Cloudflare Web Analytics beacon (no cookie, no local storage), injected by the
   server (`WebAnalytics.java`, through `SeoRoutes`) only when

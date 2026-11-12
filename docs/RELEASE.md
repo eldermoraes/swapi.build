@@ -113,6 +113,11 @@ quotes it in MB.
 
 Never release from a feature branch: the tag must point at `main`.
 
+The merge is a pull request: the `main` ruleset refuses a direct push and
+any merge before the `build` check of `ci.yml` passes. Then
+`git switch main && git pull` before tagging, so the tag names the commit the
+pull request left on `main`.
+
 ## 6. Tag
 
 Annotated, on `main`, after the merge:
