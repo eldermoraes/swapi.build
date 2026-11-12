@@ -695,8 +695,10 @@ must allow `script-src https://static.cloudflareinsights.com` and
 route template, per UTC hour and per UTC day (`com.eldermoraes.stats`): no IP, no
 User-Agent, nothing about the client. Hours are kept 14 days and days 60 days,
 which is what the windows of `GET /api/stats?period=24h|7d|30d` and the `/stats`
-page need, each compared with the window before it; that is a few hundred KB at
-most. The last bucket of a window is still filling while the window before is
+page need, each compared with the window before it. The set of route templates is
+closed: with all 59 route templates busy in every retained hour and day that is
+59 x 396 = 23,364 counters of about 0.1 KB, 2.3 MB; in practice a few hundred KB
+at most. The last bucket of a window is still filling while the window before is
 complete, so the response carries `lastBucketElapsed` (the share of that bucket
 that had passed) and the page scales the window before to the same elapsed time
 before it shows a "vs" figure.
@@ -706,9 +708,10 @@ first route filter to the end of the response (server time; the network is not
 in it), under the same route template. Per route and bucket it keeps a count,
 the sum, the sum of squares, the minimum, the maximum and 84 fixed histogram
 buckets (four per doubling from 0.05 ms to about 74 s, so p50/p95/p99 are within
-about 9 %; see `LatencyHistogram`). One cell is about 0.5 KB; with all 45 routes
-busy every retained hour and day that is under 9 MB, against `MemoryMax=300M`,
-and in practice a small fraction of it. The restore line in the log reports the
+about 9 %; see `LatencyHistogram`). One cell is about 0.5 KB; with all 59 route
+templates busy in every retained hour and day that is 23,364 cells, about
+11.7 MB, and about 14 MB with the counters, against `MemoryMax=300M`, and in
+practice a small fraction of it. The restore line in the log reports the
 live cell count and its size.
 
 **View lifetime.** Nothing in front of the origin caches `/api/stats`, so the
@@ -734,6 +737,18 @@ its counts and no times. A corrupt or unreadable file is ignored with one
 warning and replaced by the next snapshot. From 2.8.2, unknown lines (a route
 or record a later version added) are skipped with one warning; the rest is
 restored, and the next snapshot is written without them.
+
+A file larger than 16 MiB is not read: the start ignores it with one warning and
+begins from zero. The file is a few tens of KB in practice and about 11 MB with
+every route template busy in every retained hour and day and a wide spread of
+times, but nothing caps it when it is written (the theoretical maximum, every
+histogram bucket of every cell in use, is about 31 MB). So the app says when it
+has written a snapshot the next start would refuse: `usage counters snapshot …
+was written with … bytes, more than the … bytes a start accepts`, a warning,
+once per run of oversized snapshots, and `fits again` when a later one is
+within the limit. The file is written in full all the same; if that warning
+ever appears, keep the file before restarting, since the fix is a version with
+a higher limit (`SnapshotFile.MAX_BYTES`).
 
 `ProtectSystem=strict` keeps the rest of the disk read-only. The writable
 directory comes from a drop-in with `StateDirectory=swapi`: systemd creates

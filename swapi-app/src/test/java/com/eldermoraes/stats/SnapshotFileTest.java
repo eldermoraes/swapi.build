@@ -286,6 +286,48 @@ class SnapshotFileTest {
         assertTrue(warnings.getFirst().contains("larger than"));
     }
 
+    /**
+     * The file the comment on {@link SnapshotFile#MAX_BYTES} sizes the limit
+     * for (#60): every template busy in every retained hour and day, each cell
+     * with 40 non-empty histogram buckets. About 11 MB with 59 templates; a
+     * template added moves it towards the limit, and this says when it crosses.
+     */
+    @Test
+    void fullSnapshotFitsTheReadLimit() {
+        long[] buckets = new long[LatencyHistogram.BUCKETS];
+        for (int i = 8; i < 48; i++) {
+            buckets[i] = 1_000;
+        }
+        TimingData busy = new TimingData(40_000, 400_000_000L, 1.2345678901234567E13, 200, 200_000, buckets);
+        Map<String, Long> counts = new java.util.TreeMap<>();
+        Map<String, TimingData> times = new java.util.TreeMap<>();
+        for (String template : RouteNormalizer.templates()) {
+            counts.put(template, 40_000L);
+            times.put(template, busy);
+        }
+        Instant firstHour = Instant.parse("2026-10-19T00:00:00Z");
+        Map<Instant, Map<String, Long>> hours = new java.util.TreeMap<>();
+        Map<Instant, Map<String, TimingData>> hourTimes = new java.util.TreeMap<>();
+        for (int i = 0; i < RouteStats.RETAINED_HOURS; i++) {
+            hours.put(firstHour.plusSeconds(3600L * i), counts);
+            hourTimes.put(firstHour.plusSeconds(3600L * i), times);
+        }
+        Map<LocalDate, Map<String, Long>> days = new java.util.TreeMap<>();
+        Map<LocalDate, Map<String, TimingData>> dayTimes = new java.util.TreeMap<>();
+        for (int i = 0; i < RouteStats.RETAINED_DAYS; i++) {
+            days.put(LocalDate.parse("2026-10-19").plusDays(i), counts);
+            dayTimes.put(LocalDate.parse("2026-10-19").plusDays(i), times);
+        }
+
+        String text = SnapshotFile.encode(new StatsData(firstHour, hours, days, hourTimes, dayTimes));
+        long bytes = text.getBytes(StandardCharsets.UTF_8).length;
+
+        assertEquals(2L * RouteNormalizer.TEMPLATE_COUNT * (RouteStats.RETAINED_HOURS + RouteStats.RETAINED_DAYS),
+                text.lines().count() - 2, "a count line and a time line per template and bucket");
+        assertTrue(bytes > 10_000_000 && bytes < 11_500_000, "the notes say about 11 MB; it is " + bytes);
+        assertTrue(bytes < SnapshotFile.MAX_BYTES, "a full snapshot is " + bytes + " bytes");
+    }
+
     @Test
     void encodedSnapshotNeverCarriesAnythingButTemplates() {
         String text = SnapshotFile.encode(sample());

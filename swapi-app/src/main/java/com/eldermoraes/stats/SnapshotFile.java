@@ -56,8 +56,8 @@ import java.util.function.Consumer;
  *
  * Everything else stays fatal: a missing or unknown header, a known line with a
  * missing field, a negative or invalid number, a bad date, a time that is not an
- * hour start, time numbers that do not add up, or a file larger than
- * {@link #MAX_BYTES} makes the whole file count as corrupt. It is then ignored
+ * hour start, time numbers that do not add up, or a file larger than the read
+ * limit ({@link #MAX_BYTES}) makes the whole file count as corrupt. It is then ignored
  * with one warning and the next snapshot replaces it; the app never fails to
  * start because of it.
  *
@@ -77,28 +77,56 @@ public final class SnapshotFile {
     static final String HEADER = "swapi-route-stats 2";
 
     /**
-     * Far above the largest legitimate snapshot: with all 45 routes busy every
-     * retained hour and day, counts and times come to about 6 MB; in practice
-     * the file is a few tens of KB.
+     * The largest file {@link #read} accepts. It covers a full snapshot, not the
+     * theoretical maximum. With all 59 templates
+     * ({@link RouteNormalizer#TEMPLATE_COUNT}) busy in every retained hour and
+     * day there are 59 x (336 + 60) = 23,364 count lines of about 42 bytes (1 MB)
+     * and as many time lines of about 74 bytes plus 8 to 14 bytes per non-empty
+     * histogram bucket:
+     * <ul>
+     *   <li>40 non-empty buckets in every cell (ten doublings of the time, far
+     *       more spread than a route shows in one hour): about 410 bytes a time
+     *       line, 23,364 x 410 bytes = 9.6 MB, about 11 MB with the count lines
+     *       ({@code SnapshotFileTest} encodes this file and checks it fits);</li>
+     *   <li>all 84 buckets non-empty with ten-digit counts in every cell: about
+     *       1,270 bytes a time line, 23,364 x 1,270 bytes = 29.7 MB, about 31 MB
+     *       in all, above this limit. That takes every route, in every hour,
+     *       answering both under 0.05 ms and over 74 s.</li>
+     * </ul>
+     * In practice the file is a few tens of KB. The limit is checked when
+     * reading; {@link #write} reports the size it wrote, and
+     * {@link StatsPersistence} warns when that is more than a start accepts.
      */
     static final long MAX_BYTES = 16L * 1024 * 1024;
 
     private final Path file;
     private final Path temp;
     private final Consumer<String> warn;
+    private final long maxBytes;
 
     /**
      * @param directory the state directory (it must already exist)
      * @param warn      where warnings go (the log in production, a list in tests)
      */
     public SnapshotFile(Path directory, Consumer<String> warn) {
+        this(directory, warn, MAX_BYTES);
+    }
+
+    /** @param maxBytes the largest file {@link #read} accepts ({@link #MAX_BYTES} outside tests) */
+    SnapshotFile(Path directory, Consumer<String> warn, long maxBytes) {
         this.file = directory.resolve(FILE_NAME);
         this.temp = directory.resolve(FILE_NAME + ".tmp");
         this.warn = warn;
+        this.maxBytes = maxBytes;
     }
 
     Path path() {
         return file;
+    }
+
+    /** The largest file {@link #read} accepts. */
+    long maxBytes() {
+        return maxBytes;
     }
 
     /** What {@link #decode} restored, and how many unknown lines it skipped (first at a 1-based line). */
@@ -119,8 +147,8 @@ public final class SnapshotFile {
     public Optional<StatsData> read() {
         String text;
         try {
-            if (Files.size(file) > MAX_BYTES) {
-                warn.accept("usage counters snapshot " + file + " is larger than " + MAX_BYTES
+            if (Files.size(file) > maxBytes) {
+                warn.accept("usage counters snapshot " + file + " is larger than " + maxBytes
                         + " bytes; ignored, starting from zero");
                 return Optional.empty();
             }
@@ -149,8 +177,14 @@ public final class SnapshotFile {
         }
     }
 
-    /** Writes the counters atomically. */
-    public void write(StatsData data) throws IOException {
+    /**
+     * Writes the counters atomically, whatever their size: a file larger than
+     * {@link #maxBytes()} is still a faithful copy, which a version with a
+     * higher limit can read.
+     *
+     * @return the size of the file written, in bytes
+     */
+    public long write(StatsData data) throws IOException {
         byte[] bytes = encode(data).getBytes(StandardCharsets.UTF_8);
         try (FileChannel channel = FileChannel.open(temp, StandardOpenOption.CREATE,
                 StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
@@ -165,6 +199,7 @@ public final class SnapshotFile {
         } catch (AtomicMoveNotSupportedException e) {
             Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
         }
+        return bytes.length;
     }
 
     static String encode(StatsData data) {
