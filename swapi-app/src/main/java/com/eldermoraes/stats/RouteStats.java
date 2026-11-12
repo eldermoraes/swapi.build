@@ -201,12 +201,11 @@ public class RouteStats {
 
         Map<String, Long> routes = sorted(merge(current));
         Map<String, Long> previousRoutes = sorted(merge(before));
-        Map<String, TimingSum> routeTimes = new HashMap<>();
-        List<LatencyPoint> latencySeries = latencySeries(labels, currentTimes, routeTimes);
+        Performance performance = performance(labels, currentTimes);
         Map<String, String> routeGroups = new LinkedHashMap<>();
         routes.keySet().forEach(r -> routeGroups.put(r, RouteGroup.of(r).id()));
         previousRoutes.keySet().forEach(r -> routeGroups.putIfAbsent(r, RouteGroup.of(r).id()));
-        routeTimes.keySet().forEach(r -> routeGroups.putIfAbsent(r, RouteGroup.of(r).id()));
+        performance.routes().keySet().forEach(r -> routeGroups.putIfAbsent(r, RouteGroup.of(r).id()));
 
         List<Bucket> series = new ArrayList<>();
         for (int i = 0; i < labels.size(); i++) {
@@ -225,20 +224,20 @@ public class RouteStats {
                 groups(previousRoutes, true));
         return new StatsView(period.id(), granularity.id(), labels.getFirst(), labels.getLast(), period.days(),
                 countingSince().toString(), sum(routes), routes, groups(routes, true), routeGroups, series,
-                previous, daily, performance(routeTimes, latencySeries));
+                previous, daily, performance);
     }
 
     /**
-     * p50 and p95 per bucket over all routes, filling {@code routeTimes} with
-     * the total of each timed route over the window on the way.
+     * Server times per route and per group over the window, and p50/p95 per
+     * bucket over all routes.
      *
      * Each live cell is read once, under its own lock, straight into its
      * route's total and its bucket's: no copy of its histogram is made (#53).
      *
      * @param buckets the live cells of each bucket of the window, oldest first; null for a bucket without any
      */
-    private static List<LatencyPoint> latencySeries(List<String> labels, List<Map<String, TimingCell>> buckets,
-                                                    Map<String, TimingSum> routeTimes) {
+    private static Performance performance(List<String> labels, List<Map<String, TimingCell>> buckets) {
+        Map<String, TimingSum> routeTimes = new HashMap<>();
         List<LatencyPoint> series = new ArrayList<>(labels.size());
         TimingSum all = new TimingSum();
         for (int i = 0; i < labels.size(); i++) {
@@ -254,11 +253,7 @@ public class RouteStats {
         }
         // A cell restored from an empty line has no request: its route was not timed.
         routeTimes.values().removeIf(t -> t.count() == 0);
-        return series;
-    }
 
-    /** Server times per route and per group over the window, with the series per bucket. */
-    private static Performance performance(Map<String, TimingSum> routeTimes, List<LatencyPoint> series) {
         Map<RouteGroup, TimingSum> byGroup = new EnumMap<>(RouteGroup.class);
         for (RouteGroup g : RouteGroup.values()) {
             byGroup.put(g, new TimingSum());

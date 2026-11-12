@@ -24,9 +24,17 @@ class StatsViewMemoTest {
     private final RouteStatsTest.MutableClock clock =
             new RouteStatsTest.MutableClock(Instant.parse("2026-10-19T12:30:00Z"));
     private final RouteStats stats = new RouteStats(clock);
+    /** The monotonic clock the memo measures ages on. */
+    private volatile long nanos = 1_000_000_007L;
 
     private StatsViewMemo memo(Duration lifetime) {
-        return new StatsViewMemo(stats, clock, lifetime);
+        return new StatsViewMemo(stats, () -> nanos, lifetime);
+    }
+
+    /** Time passes: on the monotonic clock and on the wall clock alike. */
+    private void pass(Duration d) {
+        nanos += d.toNanos();
+        clock.advance(d);
     }
 
     private static Served sevenDays(StatsViewMemo memo) {
@@ -39,7 +47,7 @@ class StatsViewMemoTest {
         stats.record("/mcp");
         Served first = sevenDays(memo);
         stats.record("/mcp");
-        clock.advance(Duration.ofMillis(59_999));
+        pass(Duration.ofMillis(59_999));
 
         Served again = sevenDays(memo);
         assertSame(first.view(), again.view());
@@ -52,7 +60,7 @@ class StatsViewMemoTest {
         stats.record("/mcp");
         sevenDays(memo);
         stats.record("/mcp");
-        clock.advance(Duration.ofSeconds(60));
+        pass(Duration.ofSeconds(60));
 
         Served rebuilt = sevenDays(memo);
         assertEquals(2, rebuilt.view().total());
@@ -64,11 +72,11 @@ class StatsViewMemoTest {
         StatsViewMemo memo = memo(Duration.ofSeconds(60));
         assertEquals(60, sevenDays(memo).maxAgeSeconds(), "just built");
 
-        clock.advance(Duration.ofMillis(1));
+        pass(Duration.ofMillis(1));
         assertEquals(59, sevenDays(memo).maxAgeSeconds(), "rounded down: age plus max-age never passes 60 s");
-        clock.advance(Duration.ofMillis(19_999));
+        pass(Duration.ofMillis(19_999));
         assertEquals(40, sevenDays(memo).maxAgeSeconds());
-        clock.advance(Duration.ofMillis(39_999));
+        pass(Duration.ofMillis(39_999));
         assertEquals(0, sevenDays(memo).maxAgeSeconds(), "59.999 s old");
     }
 
@@ -104,20 +112,21 @@ class StatsViewMemoTest {
     void aLifetimeAboveTheAdvertisedOneCountsAsTheAdvertisedOne() {
         StatsViewMemo memo = memo(Duration.ofHours(1));
         Served first = sevenDays(memo);
-        clock.advance(Duration.ofSeconds(60));
+        pass(Duration.ofSeconds(60));
 
         assertNotSame(first.view(), sevenDays(memo).view());
     }
 
     @Test
-    void aClockThatStepsBackMakesTheViewStale() {
+    void aWallClockSteppedBackDoesNotStretchTheLifetime() {
         StatsViewMemo memo = memo(Duration.ofSeconds(60));
         Served first = sevenDays(memo);
-        clock.advance(Duration.ofSeconds(-5));
+        pass(Duration.ofSeconds(30));
+        clock.advance(Duration.ofSeconds(-5));                // the wall clock alone, as a time sync would
+        assertEquals(30, sevenDays(memo).maxAgeSeconds(), "30 s old, whatever the wall clock says");
 
-        Served second = sevenDays(memo);
-        assertNotSame(first.view(), second.view());
-        assertEquals(60, second.maxAgeSeconds());
+        pass(Duration.ofSeconds(30));
+        assertNotSame(first.view(), sevenDays(memo).view(), "60 s old: built again");
     }
 
     @Test

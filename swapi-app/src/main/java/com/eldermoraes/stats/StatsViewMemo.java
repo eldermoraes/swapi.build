@@ -6,9 +6,10 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
+import java.util.EnumMap;
+import java.util.Map;
+import java.util.function.LongSupplier;
 
 /**
  * The last view built for each period and granularity, served again while it
@@ -22,7 +23,8 @@ import java.time.Instant;
  *
  * The key is time, not "nothing was recorded since": {@code /api/stats} is a
  * counted route, so the counters move on every request for it and such a key
- * would never be hit.
+ * would never be hit. The age is measured on the monotonic clock: a wall clock
+ * that is stepped back or forth neither stretches nor cuts a lifetime.
  *
  * One build at a time per view: requests that arrive while it is being built
  * wait for it and get the same one. Different views do not wait for each other.
@@ -34,26 +36,34 @@ public class StatsViewMemo {
     static final Duration ADVERTISED = Duration.ofSeconds(60);
 
     private final RouteStats stats;
-    private final Clock clock;
-    private final Duration lifetime;
-    private final Slot[] slots = new Slot[StatsPeriod.values().length * Granularity.values().length];
+    private final LongSupplier nanoTime;
+    private final long lifetimeNanos;
+    /** One slot per window a period accepts; an unaccepted pair has none. */
+    private final Map<StatsPeriod, Map<Granularity, Slot>> slots = new EnumMap<>(StatsPeriod.class);
 
     @Inject
     public StatsViewMemo(RouteStats stats,
                          @ConfigProperty(name = "swapi.stats.view-lifetime") Duration lifetime) {
-        this(stats, Clock.systemUTC(), lifetime);
+        this(stats, System::nanoTime, lifetime);
     }
 
     /**
+     * @param nanoTime a clock that only moves forward, in nanoseconds from any origin
      * @param lifetime how long a view is served again; zero builds one for every request, and anything
      *                 above {@link #ADVERTISED} counts as {@link #ADVERTISED}
      */
-    StatsViewMemo(RouteStats stats, Clock clock, Duration lifetime) {
+    StatsViewMemo(RouteStats stats, LongSupplier nanoTime, Duration lifetime) {
         this.stats = stats;
-        this.clock = clock;
-        this.lifetime = lifetime.compareTo(ADVERTISED) > 0 ? ADVERTISED : lifetime;
-        for (int i = 0; i < slots.length; i++) {
-            slots[i] = new Slot();
+        this.nanoTime = nanoTime;
+        this.lifetimeNanos = (lifetime.compareTo(ADVERTISED) > 0 ? ADVERTISED : lifetime).toNanos();
+        for (StatsPeriod period : StatsPeriod.values()) {
+            Map<Granularity, Slot> ofPeriod = new EnumMap<>(Granularity.class);
+            for (Granularity granularity : Granularity.values()) {
+                if (period.accepts(granularity)) {
+                    ofPeriod.put(granularity, new Slot(period, granularity));
+                }
+            }
+            slots.put(period, ofPeriod);
         }
     }
 
@@ -63,10 +73,11 @@ public class StatsViewMemo {
      * @throws IllegalArgumentException if the period does not accept the granularity
      */
     public Served view(StatsPeriod period, Granularity granularity) {
-        if (!period.accepts(granularity)) {
+        Slot slot = slots.get(period).get(granularity);
+        if (slot == null) {
             throw new IllegalArgumentException(period.id() + " does not accept " + granularity.id());
         }
-        return slots[period.ordinal() * Granularity.values().length + granularity.ordinal()].view(period, granularity);
+        return slot.view();
     }
 
     /**
@@ -79,21 +90,27 @@ public class StatsViewMemo {
 
     private final class Slot {
 
+        private final StatsPeriod period;
+        private final Granularity granularity;
         private StatsView view;
-        private Instant built;
+        private long builtNanos;
 
-        synchronized Served view(StatsPeriod period, Granularity granularity) {
-            Instant now = clock.instant();
+        Slot(StatsPeriod period, Granularity granularity) {
+            this.period = period;
+            this.granularity = granularity;
+        }
+
+        synchronized Served view() {
+            long now = nanoTime.getAsLong();
             if (view != null) {
-                Duration age = Duration.between(built, now);
-                // A clock that stepped back gives a negative age: stale, or the view would outlive its lifetime.
-                if (!age.isNegative() && age.compareTo(lifetime) < 0) {
-                    return new Served(view, ADVERTISED.minus(age).toSeconds());
+                long age = now - builtNanos;
+                if (age < lifetimeNanos) {
+                    return new Served(view, ADVERTISED.minusNanos(age).toSeconds());
                 }
             }
             view = stats.view(period, granularity);
             // The age counts from before the build, so it never understates how old the numbers are.
-            built = now;
+            builtNanos = now;
             return new Served(view, ADVERTISED.toSeconds());
         }
     }
