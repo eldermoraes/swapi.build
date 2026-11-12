@@ -53,6 +53,16 @@ import java.util.Optional;
  *   goes on to the extension, which already refuses them with -32601 without
  *   keeping anything.
  *
+ * A JSON array (a JSON-RPC batch) is answered here too, always the same way:
+ * 400 with -32600, without looking inside it (issue #70). The extension
+ * (2.0.3) refuses an array on its own, but only as a side effect: it casts the
+ * decoded body to a JSON object inside a try and answers the failed cast as a
+ * parse error (200, -32700), before any session or stream. That is not a
+ * contract. A version that accepted batches would serve a subscriptions/listen
+ * inside one with an open stream, so no array goes on to the extension, and
+ * McpListenLimitTest.theExtensionItselfStillRefusesABatch fails the day this
+ * guard stops being a second lock and becomes the only one.
+ *
  * The method in the body wins over the Mcp-Method header; the header alone
  * counts only when the body has no method (or is not JSON). Either way a
  * listen is answered here, so neither path opens a stream.
@@ -84,7 +94,7 @@ public class McpTransportFilter {
 
     static final String LISTEN_NOT_OFFERED = "subscriptions/listen is not offered: swapi.build data never"
             + " changes, so this server sends no notifications.";
-    static final String BATCH_WITH_LISTEN = "batch with subscriptions/listen is not supported";
+    static final String BATCH_NOT_SUPPORTED = "JSON-RPC batches are not supported: send one request per POST.";
 
     // JSON-RPC error codes, the same the extension uses (JsonRpcErrorCodes).
     private static final int INVALID_REQUEST = -32600;
@@ -182,12 +192,12 @@ public class McpTransportFilter {
         RequestBody body = rc.body();
         Object message = parse(body == null ? null : body.buffer());
         String headerMethod = rc.request().getHeader("Mcp-Method");
-        if (message instanceof JsonArray batch) {
-            if (batchContainsListen(batch)) {
-                end(rc, 400, error(null, INVALID_REQUEST, BATCH_WITH_LISTEN));
-                return;
-            }
-        } else if (message instanceof JsonObject request) {
+        if (message instanceof JsonArray) {
+            // Every batch, whatever it carries: see the class comment.
+            end(rc, 400, error(null, INVALID_REQUEST, BATCH_NOT_SUPPORTED));
+            return;
+        }
+        if (message instanceof JsonObject request) {
             Object id = request.getValue("id");
             String method = request.getValue("method") instanceof String s ? s : null;
             if (LISTEN.equals(method) || (method == null && LISTEN.equals(headerMethod))) {
@@ -266,15 +276,6 @@ public class McpTransportFilter {
         JsonObject meta = params != null && params.getValue("_meta") instanceof JsonObject m ? m : null;
         String version = meta != null && meta.getValue(META_PROTOCOL_VERSION) instanceof String s ? s : null;
         return version != null && McpProtocolVersion.isStateless(version);
-    }
-
-    private static boolean batchContainsListen(JsonArray batch) {
-        for (Object item : batch) {
-            if (item instanceof JsonObject o && LISTEN.equals(o.getValue("method"))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     // Parsed with the same decoder the extension uses, so an escaped method
