@@ -87,6 +87,17 @@ while [ $# -gt 0 ]; do
 done
 if [ "$directory" = 1 ]; then mkdir -p "${paths[@]}"; else cp "${paths[0]}" "${paths[1]}"; fi
 EOF
+# readlink behaves as GNU's on the Ubuntu host, also on macOS: -f of a path
+# that does not exist prints the path and exits 0 (BSD's prints nothing).
+REAL_READLINK="$(command -v readlink)"
+cat > "$TMP/bin/readlink" <<EOF
+#!/bin/sh
+if [ "\$1" = -f ] && [ ! -e "\$2" ] && [ ! -L "\$2" ]; then
+  printf '%s\n' "\$2"
+  exit 0
+fi
+exec "$REAL_READLINK" "\$@"
+EOF
 for name in systemctl ldd; do
   printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/$name"
 done
@@ -254,9 +265,9 @@ prints "it says the version is not answering" "swapi v2.1.0 is not answering. Ro
 prints "it prints the rollback command with the previous version" \
   "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
 
-# The rollback hint names the version that served before the first attempt of
-# the tag, never the tag itself, and no `ln` at all when there is none.
-NO_PREVIOUS='No version that served before it is on this host to roll back to.'
+# The rollback hint names the version that served before the tag, never the
+# tag itself, and no `ln` at all when none is recorded or it is gone.
+NO_PREVIOUS='No version to roll back to: none is recorded for this tag, or the recorded one is gone.'
 OLDER='  To go back to an older release: swapi-update <tag> <sha256 from its run summary>'
 
 # no_rollback <description> <tag>: the last run printed no `ln` command, and
@@ -275,18 +286,25 @@ host v2.0.0 v1.9.0
 : > "$TMP/down"
 does_not_answer "a first attempt that does not answer" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
 does_not_answer "its retry that does not answer" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
-prints "a retry names the version that served before the first attempt" \
+prints "a retry names the version that served before the tag" \
   "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
 does_not_answer "a second retry that does not answer" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
 prints "a second retry still names it" \
   "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
 
 # The rollback the hint asks for, then the same tag again: the hint again names
-# the version that served before that tag's first attempt.
+# the version that served before that tag.
 ln -sfn "$ROOT/v2.0.0" "$ROOT/current"
 does_not_answer "a retry after a rollback that does not answer" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
 prints "a retry after a rollback names the version rolled back to" \
   "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
+
+# A rollback by hand to another version, then the same tag: the hint names
+# the version that served before this run, not the one before the first.
+ln -sfn "$ROOT/v1.9.0" "$ROOT/current"
+does_not_answer "a retry from another version that does not answer" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
+prints "a retry from another version names that version" \
+  "  ln -sfn $ROOT/v1.9.0 $ROOT/current && systemctl restart swapi"
 
 # A redeploy of a version the script deployed: the record of its own deploy.
 host v2.0.0 v1.9.0
@@ -304,7 +322,8 @@ ln -sfn "$ROOT/v2.1.0" "$ROOT/current"
 does_not_answer "a redeploy whose recorded previous version was pruned" v2.1.0 "v2.1.0 v2.2.0"
 no_rollback "a redeploy whose recorded previous version was pruned" v2.1.0
 
-# A redeploy with no record (installed by an older copy of the script).
+# A redeploy with no record (installed by an older copy of the script): the
+# previous version is on disk, but nothing says which one it is.
 host v2.0.0 v1.9.0
 : > "$TMP/down"
 does_not_answer "a redeploy without a record that does not answer" v2.0.0 "v1.9.0 v2.0.0"

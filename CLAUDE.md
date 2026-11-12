@@ -153,11 +153,12 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   with an unsupported protocol version or `Accept`, go on to the extension
   (`-32601` / `400`, nothing kept). The body `method` wins over the
   `Mcp-Method` header. Every JSON-RPC batch (a JSON array), whatever it
-  carries, gets one answer from the filter, without looking inside it: HTTP 400,
-  `-32600`, `id` null, counted once. The extension refuses arrays only as a
-  side effect of a cast (`-32700`, or a bare 400 without the transport's
-  `Accept`), not by contract: never let an array reach it
-  (`theExtensionItselfStillRefusesABatch` fails the day it accepts one).
+  carries, gets one answer from the filter, without looking inside it: HTTP
+  400, `-32600`, `id` null, counted once. The extension refuses arrays only as
+  a side effect of a cast (200 with `-32700`, or a bare 400 without the
+  transport's `Accept`), not by contract: never let an array reach it
+  (`theExtensionItselfStillRefusesABatch` fails the day its POST handler stops
+  answering one with `-32700`).
   `quarkus.http.limits.max-body-size=256K` bounds the
   double decode on the event loop. `McpListenLimitTest` guards it; never let a
   POST to `/mcp` open a stream that waits for notifications.
