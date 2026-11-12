@@ -1,5 +1,32 @@
 # swapi.build as an MCP Server — evaluation (blindspot)
 
+> **Historical record — not current guidance.** This is the evaluation written
+> on 2026-07-31, before the MCP server existed. It is kept so the reasoning
+> behind the first version stays readable; do not act on its recommendations or
+> use it to instruct an agent. The decisions in force are in
+> [`CLAUDE.md`](../CLAUDE.md) ("Non-negotiable facts"), the host runbook is
+> [`docs/DEPLOY.md`](DEPLOY.md), and what shipped is in
+> [`CHANGELOG.md`](../CHANGELOG.md). Superseded since it was written:
+>
+> - **Extension version.** The text recommends the 1.13.x line of
+>   `quarkus-mcp-server-http`; the project is on the 2.x line (the version in
+>   force is the one in `swapi-app/pom.xml`).
+> - **Vercel.** Every mention of the Vercel deploy, `Dockerfile.vercel` and the
+>   scale-to-zero cold start is obsolete: nothing of this project runs on Vercel
+>   (2026-10-19). Production is a native executable on a self-hosted host.
+> - **Cloudflare in front of the domain.** The zone is DNS-only (no proxy), so
+>   there is no edge in front of the origin and no Cloudflare rate-limit rule
+>   for `/mcp`.
+> - **"Stateless only".** `/mcp` serves stateful and stateless clients on the
+>   same endpoint, on purpose; only the legacy HTTP+SSE transport is rejected.
+> - **Tool surface and action plan.** The plan below is not a backlog; the MCP
+>   surface that exists is described in `CLAUDE.md`.
+>
+> Two edits were made to the original text on 2026-11-12: the "Reusable brief"
+> section that closed the document was removed (it packed the facts above into
+> an instruction), and wording that characterized the availability of another
+> API was removed.
+
 **Date:** 2026-07-31
 **Question:** does it make sense to also expose the API as an MCP Server, as a gateway for demos with LLMs?
 **Short verdict:** yes — but for the sake of **distribution and positioning**, not the functional gain. And the timing is exceptionally good: the MCP spec has just stabilized on a model that favors exactly your stack, and the "demo data API with an official remote MCP" niche is vacant.
@@ -22,12 +49,12 @@ Verified via the GitHub API on 2026-07-31:
 
 | Repo | Stars | Type | Backend |
 |---|---|---|---|
-| johnpapa/mcp-starwars | 10 | local stdio, didactic demo | swapi.dev (stalled since Apr 2025) |
+| johnpapa/mcp-starwars | 10 | local stdio, didactic demo | swapi.dev |
 | glaucia86/swapi-mcp-server-app | 15 | local, "study purposes" | SWAPI |
 | pipeworx-io/mcp-swapi | 0 | part of a gateway | swapi.dev |
 | vitormm/mcp-starwars | 0 | local | SWAPI |
 
-All local (stdio), none hosted, none by the API's owner, all on top of the unstable swapi.dev — exactly the fragility that motivated swapi.build. An official remote MCP at `swapi.build/mcp` dominates this niche on day 1.
+All local (stdio), none hosted, none by the API's owner. An official remote MCP at `swapi.build/mcp` dominates this niche on day 1.
 
 ### 3. Timing: the spec changed 3 days ago — building on the right model now avoids rework
 
@@ -94,7 +121,3 @@ The 2026-07-28 spec formalized **MCP Apps** (server-rendered UI inside the chat,
 1. `/mcp` + `/api/*` coexistence (inferred from the Quarkus architecture; confirm in dev mode — minutes).
 2. Native build of the extension on the `Dockerfile.vercel` Mandrel/UBI9.
 3. Which spec revision 1.13.x implements (any of them works with current clients).
-
-## Reusable brief (how to instruct Claude about this topic from now on)
-
-> swapi.build: read-only Star Wars API, Quarkus 3.23 + GraalVM native (Mandrel/UBI9), static in-memory data, single container on Vercel behind Cloudflare. MCP server: `quarkus-mcp-server-http` extension (Quarkiverse) in the same app, endpoint `https://swapi.build/mcp`, **stateless** Streamable HTTP (2026-07-28 spec), **no auth**, rate limiting on Cloudflare. Never: legacy SSE, stateful session patterns, Cloudflare's `McpAgent` (legacy), a second codebase for the MCP. Tools: few and generic (resource as an enum), all with `readOnlyHint`. Distribution: official MCP Registry + directories + Claude Connectors Directory (requires a public privacy policy).
