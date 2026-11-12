@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Release rehearsal only (2.12.1, docs/RELEASE.md): measures what concurrent
-# subscriptions/listen cost the server, and the RSS over many tool calls. Never
-# run against production: it opens hundreds of connections on purpose.
+# Release rehearsal only (2.12.1; docs/RELEASE.md, "Optional: MCP load
+# rehearsal", under step 4): measures what concurrent subscriptions/listen cost
+# the server, and the RSS over many tool calls. Never run against production:
+# it opens hundreds of connections on purpose.
 #
 # usage:
 #   mcp-listen-load.sh listens <base-url> <target> [count=500] [hold=60]

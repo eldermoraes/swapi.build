@@ -65,6 +65,13 @@ jobs:
       - name: Main text extraction tests
         run: scripts/main-text.test.sh
 
+      # Nothing outside the application build is left orphan: every helper
+      # script is named by a document in docs/ or by a workflow, and every
+      # Maven project under examples/ is in the matrix of examples.yml, which
+      # compiles it. Reads the repository only.
+      - name: No unreferenced script or example
+        run: scripts/unreferenced.test.sh
+
       # Maven never runs Vitest: Quinoa's `vite build` bundles the frontend, it
       # does not test it. Without this step the frontend suite — including the
       # "no raw colour" guard in tokens.test.ts — passes locally and gates

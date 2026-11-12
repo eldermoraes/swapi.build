@@ -61,6 +61,44 @@ of runs), and the count is wrong; do not publish it. The schedule gives about 70
 runs a day (647 by 28 October 2026), so the history passes 1000 runs in early
 November 2026 and 5000 around the end of December 2026.
 
+### Optional: MCP load rehearsal
+
+Not a gate, and not part of the pipeline: it needs a running instance, takes
+minutes and gives numbers to read, not a pass or a fail. Worth running only for
+a release that changes how `/mcp` handles a request: `McpTransportFilter`, the
+version of the MCP server extension, or `quarkus.http.limits.max-body-size`.
+
+`scripts/mcp-listen-load.sh` measures what the suite cannot: the cost of many
+concurrent `subscriptions/listen` requests, and the memory over many tool
+calls. **Never run it against production**: it opens hundreds of connections on
+purpose. The target is a local instance of the release candidate (its pid), or
+the native binary in a container (`podman:<container>`, read as the `VmRSS` of
+its PID 1):
+
+```bash
+# mcp-listen-load.sh listens <base-url> <target> [count=500] [hold=60]
+# mcp-listen-load.sh calls   <base-url> <target> [count=10000]
+scripts/mcp-listen-load.sh listens http://localhost:5432 <pid>
+scripts/mcp-listen-load.sh calls   http://localhost:5432 <pid>
+scripts/mcp-listen-load.sh listens http://localhost:<port> podman:<container>
+```
+
+What to expect, with the 2.12.1 measurements as the baseline (native binary in
+a container; `CHANGELOG.md`, 2.12.1, `Security` for the listens and `Changed`
+for the calls). The script prints the memory in kB (`rss_kb`); the changelog
+quotes it in MB.
+
+- `listens`: all 500 answered within 2 s with `-32601`, and none still open at
+  30 s. The first burst of connections costs memory once (142.2 to 170.9 MB);
+  a second run leaves it flat (169.3 MB). A listen that stays open is the
+  2.12.0 defect back.
+- `calls`: every call answers `200`, and the memory does not grow over the
+  10 000 calls (170.9 to 169.3 MB). The request context leak fixed in
+  `quarkus-mcp-server` 2.0.3 did not show as memory even on 2.12.0 (175.5 to
+  173.2 MB), so a flat figure does not prove that fix: `McpRequestContextTest`
+  does, in the suite. A figure that grows with the number of calls is
+  something new, to investigate before releasing.
+
 ## 5. Commit and merge to `main`
 
 Never release from a feature branch: the tag must point at `main`.
