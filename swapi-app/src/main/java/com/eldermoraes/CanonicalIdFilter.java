@@ -22,8 +22,8 @@ import jakarta.ws.rs.ext.Provider;
  * /random have none. The parameter stays an int in the resources, which keeps
  * /openapi.json as it was.
  *
- * A trailing slash is ignored on purpose: /api/people/1/ answered 200 before
- * this filter and is not part of that issue.
+ * A trailing slash is ignored here on purpose: the spelling of the rest of
+ * the path, trailing slashes included, is CanonicalPathFilter's (issue #105).
  */
 @Provider
 public class CanonicalIdFilter implements ContainerRequestFilter {

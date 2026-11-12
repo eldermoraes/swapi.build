@@ -52,9 +52,22 @@ public class ApiNotFoundMapper implements ExceptionMapper<NotFoundException> {
      * #55: "%31", "1;x=y"), and the decoded second segment otherwise.
      */
     static Response notFound(UriInfo uriInfo, String idAsWritten) {
+        return textNotFound(message(uriInfo, idAsWritten));
+    }
+
+    /**
+     * The contract 404 for a path that is not written in its canonical form
+     * (CanonicalPathFilter, issue #105: "/api//people/1"). The message repeats
+     * the path as the client wrote it, not decoded.
+     */
+    static Response notFoundAt(String pathAsWritten) {
+        return textNotFound("No resource found at " + pathAsWritten);
+    }
+
+    private static Response textNotFound(String message) {
         return Response.status(Response.Status.NOT_FOUND)
                 .type(MediaType.TEXT_PLAIN)
-                .entity(message(uriInfo, idAsWritten))
+                .entity(message)
                 .build();
     }
 
