@@ -170,7 +170,7 @@ public class RouteStats {
         List<String> labels = new ArrayList<>();
         List<Map<String, Long>> current = new ArrayList<>();
         List<Map<String, Long>> before = new ArrayList<>();
-        List<Map<String, TimingData>> currentTimes = new ArrayList<>();
+        List<Map<String, TimingCell>> currentTimes = new ArrayList<>();
         String previousFrom;
         String previousTo;
         if (granularity == Granularity.HOUR) {
@@ -181,7 +181,7 @@ public class RouteStats {
                 labels.add(hourLabel(h));
                 current.add(counts(hours.get(h)));
                 before.add(counts(hours.get(h - n)));
-                currentTimes.add(times(hourTimes.get(h)));
+                currentTimes.add(hourTimes.get(h));
             }
             previousFrom = hourLabel(first - n);
             previousTo = hourLabel(first - 1);
@@ -193,7 +193,7 @@ public class RouteStats {
                 labels.add(d.toString());
                 current.add(counts(days.get(d)));
                 before.add(counts(days.get(d.minusDays(n))));
-                currentTimes.add(times(dayTimes.get(d)));
+                currentTimes.add(dayTimes.get(d));
             }
             previousFrom = first.minusDays(n).toString();
             previousTo = first.minusDays(1).toString();
@@ -201,11 +201,11 @@ public class RouteStats {
 
         Map<String, Long> routes = sorted(merge(current));
         Map<String, Long> previousRoutes = sorted(merge(before));
-        Map<String, TimingData> routeTimes = mergeTimes(currentTimes);
+        Performance performance = performance(labels, currentTimes);
         Map<String, String> routeGroups = new LinkedHashMap<>();
         routes.keySet().forEach(r -> routeGroups.put(r, RouteGroup.of(r).id()));
         previousRoutes.keySet().forEach(r -> routeGroups.putIfAbsent(r, RouteGroup.of(r).id()));
-        routeTimes.keySet().forEach(r -> routeGroups.putIfAbsent(r, RouteGroup.of(r).id()));
+        performance.routes().keySet().forEach(r -> routeGroups.putIfAbsent(r, RouteGroup.of(r).id()));
 
         List<Bucket> series = new ArrayList<>();
         for (int i = 0; i < labels.size(); i++) {
@@ -224,40 +224,57 @@ public class RouteStats {
                 groups(previousRoutes, true));
         return new StatsView(period.id(), granularity.id(), labels.getFirst(), labels.getLast(), period.days(),
                 countingSince().toString(), sum(routes), routes, groups(routes, true), routeGroups, series,
-                previous, daily, performance(labels, currentTimes, routeTimes));
+                previous, daily, performance);
     }
 
-    /** Server times per route and per group over the window, and p50/p95 per bucket over all routes. */
-    static Performance performance(List<String> labels, List<Map<String, TimingData>> buckets,
-                                   Map<String, TimingData> routeTimes) {
+    /**
+     * Server times per route and per group over the window, and p50/p95 per
+     * bucket over all routes.
+     *
+     * Each live cell is read once, under its own lock, straight into its
+     * route's total and its bucket's: no copy of its histogram is made (#53).
+     *
+     * @param buckets the live cells of each bucket of the window, oldest first; null for a bucket without any
+     */
+    private static Performance performance(List<String> labels, List<Map<String, TimingCell>> buckets) {
+        Map<String, TimingSum> routeTimes = new HashMap<>();
+        List<LatencyPoint> series = new ArrayList<>(labels.size());
+        TimingSum all = new TimingSum();
+        for (int i = 0; i < labels.size(); i++) {
+            all.clear();
+            Map<String, TimingCell> cells = buckets.get(i);
+            if (cells != null) {
+                cells.forEach((route, cell) ->
+                        cell.addTo(routeTimes.computeIfAbsent(route, r -> new TimingSum()), all));
+            }
+            TimingData t = all.data();
+            series.add(new LatencyPoint(labels.get(i), t.count(), ms(t.percentileMicros(0.50)),
+                    ms(t.percentileMicros(0.95))));
+        }
+        // A cell restored from an empty line has no request: its route was not timed.
+        routeTimes.values().removeIf(t -> t.count() == 0);
+
+        Map<RouteGroup, TimingSum> byGroup = new EnumMap<>(RouteGroup.class);
+        for (RouteGroup g : RouteGroup.values()) {
+            byGroup.put(g, new TimingSum());
+        }
         Map<String, Latency> routes = new LinkedHashMap<>();
         routeTimes.entrySet().stream()
-                .sorted(Comparator.<Map.Entry<String, TimingData>>comparingLong(e -> e.getValue().count())
+                .sorted(Comparator.<Map.Entry<String, TimingSum>>comparingLong(e -> e.getValue().count())
                         .reversed()
                         .thenComparing(Map.Entry.comparingByKey()))
-                .forEach(e -> routes.put(e.getKey(), Latency.of(e.getValue())));
+                .forEach(e -> {
+                    routes.put(e.getKey(), Latency.of(e.getValue().data()));
+                    byGroup.get(RouteGroup.of(e.getKey())).add(e.getValue());
+                });
 
-        Map<RouteGroup, TimingData> byGroup = new EnumMap<>(RouteGroup.class);
-        for (RouteGroup g : RouteGroup.values()) {
-            byGroup.put(g, TimingData.EMPTY);
-        }
-        routeTimes.forEach((route, t) -> byGroup.merge(RouteGroup.of(route), t, TimingData::merge));
         Map<String, Latency> groups = new LinkedHashMap<>();
         byGroup.entrySet().stream()
-                .sorted(Comparator.<Map.Entry<RouteGroup, TimingData>>comparingLong(e -> e.getValue().count())
+                .sorted(Comparator.<Map.Entry<RouteGroup, TimingSum>>comparingLong(e -> e.getValue().count())
                         .reversed()
                         .thenComparing(Map.Entry.comparingByKey()))
-                .forEach(e -> groups.put(e.getKey().id(), Latency.of(e.getValue())));
+                .forEach(e -> groups.put(e.getKey().id(), Latency.of(e.getValue().data())));
 
-        List<LatencyPoint> series = new ArrayList<>();
-        for (int i = 0; i < labels.size(); i++) {
-            TimingData all = TimingData.EMPTY;
-            for (TimingData t : buckets.get(i).values()) {
-                all = all.merge(t);
-            }
-            series.add(new LatencyPoint(labels.get(i), all.count(), ms(all.percentileMicros(0.50)),
-                    ms(all.percentileMicros(0.95))));
-        }
         return new Performance("ms", routes, groups, series);
     }
 
@@ -381,12 +398,6 @@ public class RouteStats {
     private static Map<String, Long> merge(List<Map<String, Long>> buckets) {
         Map<String, Long> totals = new HashMap<>();
         buckets.forEach(b -> b.forEach((route, n) -> totals.merge(route, n, Long::sum)));
-        return totals;
-    }
-
-    static Map<String, TimingData> mergeTimes(List<Map<String, TimingData>> buckets) {
-        Map<String, TimingData> totals = new HashMap<>();
-        buckets.forEach(b -> b.forEach((route, t) -> totals.merge(route, t, TimingData::merge)));
         return totals;
     }
 

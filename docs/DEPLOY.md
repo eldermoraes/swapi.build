@@ -728,6 +728,17 @@ busy every retained hour and day that is under 9 MB, against `MemoryMax=300M`,
 and in practice a small fraction of it. The restore line in the log reports the
 live cell count and its size.
 
+**View lifetime.** Nothing in front of the origin caches `/api/stats`, so the
+app does it itself: the view of each window is built at most once per
+`swapi.stats.view-lifetime` (60 s, never more than the `max-age` the response
+advertises) and served again in between, with `max-age` reduced by its age
+(`StatsViewMemo`). The numbers are therefore up to 60 s behind the counters. For
+the probes this means a view built just before the REST probe does not hold that
+probe's request yet: with a week of history the checks pass anyway; on a host
+with no `/api/people/{id}` request in the last 24 hours, the `performance` check
+of `verify-deploy.sh` can fail if someone opened the home page in the minute
+before, and passes when repeated a minute later.
+
 The counters live in memory and, when the unit has a state directory, are also
 written to `/var/lib/swapi/route-stats.txt`: every 10 minutes if they changed,
 and on shutdown, by writing a temporary file and renaming it over the old one.

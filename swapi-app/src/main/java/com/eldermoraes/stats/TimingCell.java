@@ -44,6 +44,16 @@ final class TimingCell {
         }
     }
 
+    /**
+     * Adds this cell to the two totals a view keeps for it, its route's and
+     * its hour's or day's, from one reading: both get the same numbers, and
+     * no histogram is copied.
+     */
+    synchronized void addTo(TimingSum route, TimingSum bucket) {
+        route.add(count, sumMicros, sumSquares, minMicros, maxMicros, buckets);
+        bucket.add(count, sumMicros, sumSquares, minMicros, maxMicros, buckets);
+    }
+
     synchronized TimingData data() {
         if (count == 0) {
             return TimingData.EMPTY;

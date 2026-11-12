@@ -1,8 +1,10 @@
 package com.eldermoraes.stats;
 
 import com.eldermoraes.stats.StatsPeriod.Granularity;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.management.ManagementFactory;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -418,5 +420,99 @@ class RouteStatsTest {
         assertEquals(5, view.total());
         assertTrue(view.performance().routes().isEmpty());
         assertEquals(0, view.performance().groups().get("mcp").count());
+    }
+
+    // --- Cost of one view (#53) ----------------------------------------------
+
+    @Test
+    void serverTimesAddUpAcrossRoutesGroupsAndBuckets() {
+        stats.recordDuration("/api/films", 1 * MS);              // 12:30
+        stats.recordDuration("/api/films", 3 * MS);
+        stats.recordDuration("/api/people/{id}", 5 * MS);
+        stats.recordDuration("/mcp", 40 * MS);
+        clock.advance(Duration.ofHours(1));
+        stats.recordDuration("/api/films", 5 * MS);              // 13:30
+        stats.recordDuration("/api/people/{id}", 7 * MS);
+        stats.recordDuration("/docs", 10 * MS);
+
+        RouteStats.StatsView view = stats.view(StatsPeriod.LAST_24_HOURS, Granularity.HOUR);
+        RouteStats.Performance perf = view.performance();
+
+        assertEquals(List.of("/api/films", "/api/people/{id}", "/docs", "/mcp"),
+                List.copyOf(perf.routes().keySet()), "by count, then by name");
+        RouteStats.Latency films = perf.routes().get("/api/films");
+        assertEquals(3, films.count());
+        assertEquals(3.0, films.mean());
+        assertEquals(1.0, films.min());
+        assertEquals(5.0, films.max());
+        assertEquals(1.633, films.stddev(), "sqrt(8/3) ms, to the microsecond");
+        assertEquals(new RouteStats.Latency(1, 40.0, 40.0, 40.0, 0.0, 40.0, 40.0, 40.0), perf.routes().get("/mcp"),
+                "one request: every percentile is clamped to it");
+
+        assertEquals(List.of("rest", "mcp", "pages", "seo", "other"), List.copyOf(perf.groups().keySet()));
+        RouteStats.Latency rest = perf.groups().get("rest");     // 1, 3, 5, 5 and 7 ms
+        assertEquals(5, rest.count());
+        assertEquals(4.2, rest.mean());
+        assertEquals(1.0, rest.min());
+        assertEquals(7.0, rest.max());
+        assertEquals(2.04, rest.stddev(), "sqrt(4.16) ms, to the microsecond");
+        assertEquals(5.0, rest.p50(), 5.0 * LatencyHistogram.MAX_RELATIVE_ERROR);
+        assertEquals(7.0, rest.p99(), 7.0 * LatencyHistogram.MAX_RELATIVE_ERROR);
+        assertEquals(10.0, perf.groups().get("pages").max());
+        assertEquals(new RouteStats.Latency(0, null, null, null, null, null, null, null), perf.groups().get("seo"));
+
+        assertEquals(24, perf.series().size());
+        RouteStats.LatencyPoint noon = perf.series().get(22);    // 1, 3, 5 and 40 ms
+        assertEquals("2026-10-19T12:00:00Z", noon.start());
+        assertEquals(4, noon.count());
+        assertEquals(3.0, noon.p50(), 3.0 * LatencyHistogram.MAX_RELATIVE_ERROR);
+        assertEquals(40.0, noon.p95(), 40.0 * LatencyHistogram.MAX_RELATIVE_ERROR);
+        RouteStats.LatencyPoint one = perf.series().get(23);     // 5, 7 and 10 ms
+        assertEquals(3, one.count());
+        assertEquals(7.0, one.p50(), 7.0 * LatencyHistogram.MAX_RELATIVE_ERROR);
+        assertEquals(10.0, one.p95(), 10.0 * LatencyHistogram.MAX_RELATIVE_ERROR);
+        assertEquals(new RouteStats.LatencyPoint("2026-10-18T14:00:00Z", 0, null, null), perf.series().get(0));
+
+        assertEquals("pages", view.routeGroups().get("/docs"), "a route that was only timed still has its group");
+    }
+
+    /**
+     * The worst case: every one of the 45 route templates timed in every hour
+     * of the 7-day hourly view. Before #53 one build allocated 32.6 MB, six
+     * histogram copies per cell; summed in place it stays under a megabyte or
+     * two, whatever the traffic was. The ceiling is far from both on purpose.
+     */
+    @Test
+    void buildingTheLargestViewAllocatesLittle() {
+        com.sun.management.ThreadMXBean threads = allocationCounter();
+        for (int hour = 0; hour < 7 * 24; hour++) {
+            for (int route = 0; route < 45; route++) {
+                stats.record("/api/route" + route);
+                stats.recordDuration("/api/route" + route, (1 + (hour * 31 + route * 17) % 500) * MS);
+            }
+            clock.advance(Duration.ofHours(1));
+        }
+        clock.advance(Duration.ofHours(-1));                     // back into the last hour recorded
+        for (int i = 0; i < 20; i++) {
+            stats.view(StatsPeriod.LAST_7_DAYS, Granularity.HOUR);
+        }
+
+        int builds = 20;
+        long id = Thread.currentThread().threadId();
+        long before = threads.getThreadAllocatedBytes(id);
+        for (int i = 0; i < builds; i++) {
+            stats.view(StatsPeriod.LAST_7_DAYS, Granularity.HOUR);
+        }
+        long perBuild = (threads.getThreadAllocatedBytes(id) - before) / builds;
+
+        assertEquals(45, stats.view(StatsPeriod.LAST_7_DAYS, Granularity.HOUR).performance().routes().size());
+        assertTrue(perBuild < 4L * 1024 * 1024, "one 7-day hourly view allocated " + perBuild + " bytes");
+    }
+
+    /** Bytes allocated per thread, where the JVM counts them; the test is skipped where it does not. */
+    private static com.sun.management.ThreadMXBean allocationCounter() {
+        Assumptions.assumeTrue(ManagementFactory.getThreadMXBean() instanceof com.sun.management.ThreadMXBean t
+                && t.isThreadAllocatedMemorySupported() && t.isThreadAllocatedMemoryEnabled());
+        return (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
     }
 }
