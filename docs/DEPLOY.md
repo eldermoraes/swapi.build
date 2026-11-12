@@ -75,6 +75,43 @@ hash copied from the summary of that release's original run. `test` and
 
 The manual path is [Updating the version on the host](#updating-the-version-on-the-host).
 
+### Moving the pin of an action
+
+Every action the workflows take from outside this repository is pinned by a
+full commit SHA, with the release it corresponds to in a comment on the same
+line:
+
+```yaml
+uses: owner/repo@<40 hex commit> # vX.Y.Z
+```
+
+A tag or a branch can be moved by whoever controls the action's repository,
+and the next job would run their code next to the deploy key, the Tailscale
+secret or the Claude OAuth token; a commit cannot be moved.
+`scripts/pinned-actions.test.sh` (run by CI) fails on any other form, and when
+one action has two different pins.
+
+To move a pin to a newer release:
+
+1. List the tags: `git ls-remote --tags https://github.com/<owner>/<repo>`.
+2. Choose the release: stay on the same major line unless the move is a
+   decision of its own, and prefer a release at least two weeks old (time for a
+   bad or compromised release to be noticed). For an
+   action that releases almost daily (`anthropics/claude-code-action`), its
+   major tag is always newer than that: take the newest release that is two
+   weeks old, not the one the major tag points at.
+3. Take the **commit** of that tag. An annotated tag has two lines, and the
+   commit is the one ending in `^{}`; the other is the tag object and does not
+   work as a pin. A tag with a single line already is the commit.
+4. Replace the SHA and the version in the comment in **every** workflow that
+   uses the action, in one commit.
+5. Run `scripts/pinned-actions.test.sh`. It checks the shape of the pins
+   offline, not that the SHA is the commit of the version in the comment:
+   step 3 is the only check of that.
+
+A pin by commit does not cover what an action downloads while it runs (a
+toolchain, a CLI); it closes the moved-tag path only.
+
 ## What the probes check
 
 `scripts/verify-deploy.sh origin <host>`, run by the `deploy` job on
@@ -983,9 +1020,8 @@ to the host's Tailscale IP. sshd, the `deploy` user, the forced command and the
 pinned host key (section 2.11) are unchanged; only the address changes.
 
 The action is `tailscale/github-action`, pinned by commit with its version in a
-comment. To move to a newer version, take the commit of its tag
-(`git ls-remote --tags https://github.com/tailscale/github-action`), prefer a
-version at least two weeks old, and keep the comment in step.
+comment, like every action of the workflows. To move to a newer version, see
+[Moving the pin of an action](#moving-the-pin-of-an-action).
 
 On `release: published`, GitHub runs the workflow file **of the tagged
 commit**: the first release whose tag contains this path is the first deploy
