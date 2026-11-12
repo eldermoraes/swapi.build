@@ -13,7 +13,8 @@ import static org.hamcrest.Matchers.equalTo;
  * auto-init covers POST, which is where the tool calls happen, but GET and
  * DELETE with a foreign session are still 404. Since we emit no
  * server->client messages, the 405 from the 2025-03-26 spec is the correct
- * and unconditional answer for GET, and DELETE (teardown) always succeeds.
+ * and unconditional answer for GET, and DELETE (teardown) always succeeds
+ * (and frees the session it names when there is one: McpDeleteSessionTest).
  */
 @QuarkusTest
 class McpTransportEdgesTest {

@@ -31,7 +31,7 @@ public class SwapiPrompts {
                     + "JSON; Claude Code splits a slash command on spaces.") String name) {
         // Checked on the raw name: trim() removes every character up to
         // U+0020, so "Luke\u0000" would pass as "Luke".
-        if (name != null && name.chars().anyMatch(SwapiPrompts::forbidden)) {
+        if (name != null && name.codePoints().anyMatch(SwapiPrompts::forbidden)) {
             throw new McpException("name must not contain control, format or separator characters or double quotes",
                     JsonRpcErrorCodes.INVALID_PARAMS);
         }

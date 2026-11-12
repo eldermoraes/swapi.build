@@ -35,7 +35,9 @@ Successful responses return `200`; unknown or non-numeric ids return `404`.
 `/api/people/{id}` or `/mcp`) and per group (REST API, MCP, pages, SEO, other)
 for the last 24 hours (`?period=24h`, per hour), 7 days (default, per day;
 `&granularity=hour` for hourly) or 30 days (`?period=30d`, per day), each with
-the window before it for comparison, plus server response times per route and
+the window before it for comparison (the last hour or day is still filling, and
+`lastBucketElapsed` says how much of it has passed, so the window before can be
+scaled to the same time), plus server response times per route and
 per group under `performance` (requests, mean, min, max, standard deviation and
 approximate p50/p95/p99 in milliseconds, network excluded). They are counted with
 no IP address or client details. The [`/stats`](https://swapi.build/stats) page
@@ -175,11 +177,6 @@ On Business/Enterprise, the "MCP servers in Copilot" org policy must be enabled.
 Or Bob panel → MCP tab → **Edit Global MCP**. Bob detects the tools automatically.
 </details>
 
-> The server scales to zero when idle — if the very first connection attempt fails, retry once
-> (the native binary starts in tens of milliseconds; the platform may take a bit longer to
-> provision the container; subsequent calls are fast, whether your client is stateless or
-> session-based).
-
 ## WebMCP in the browser (experimental)
 
 The website exposes `sw_list`, `sw_get`, `sw_search` and `sw_random` through
@@ -216,22 +213,25 @@ swapi-app/
       specie/                 # Specie model, service, resource
       starship/               # Starship model, service, resource
       vehicle/                # Vehicle model, service, resource
-      mcp/                    # MCP server tools (sw_list, sw_get, sw_random, sw_search)
-      SWObject.java           # Base model class
-      SWService.java          # Service interface
+      mcp/                    # MCP server: tools (sw_list, sw_get, sw_random, sw_search), resources, prompt
+      seo/                    # Site pages: metadata, server-rendered <main> (Qute), Markdown copies, sitemap
+      stats/                  # Anonymous usage counters and server times (/api/stats)
+      SWObject.java           # Base model class (and the one helper that makes an address absolute)
+      RecordService.java      # Base of the six services: load, list, by id, search, random
       ApiResource.java        # Root /api endpoint
       ApplicationPath.java    # Jakarta REST base path (/api)
     resources/
       data/                   # Static JSON data files
+      seo/                    # site.json (page metadata) and faq.json (FAQ text)
+      templates/              # Qute templates of the server-rendered pages
       application.properties  # Quarkus configuration
     webui/                    # Frontend (TypeScript + Vite)
       src/
         api.ts                # API client with request management
         main.ts               # SPA router
-        pages/                # Page renderers (home, resource, docs, mcp, about, privacy, terms)
+        pages/                # Client code of the pages (home, resource, docs, mcp, webmcp, stats, privacy, terms)
         json-highlight.ts     # JSON syntax highlighting for result panels
         style.css             # Site styles
-        types.ts              # TypeScript interfaces for API resources
         constants.ts          # Shared resource metadata
         utils.ts              # Shared utilities (escapeHtml)
   src/test/
@@ -281,7 +281,8 @@ Pull requests are always welcome. Whether it's fixing a bug, improving the docs,
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/my-change`)
-3. Make your changes (with tests) and run the suite: `cd swapi-app && ./mvnw test`
+3. Make your changes (with tests) and run both suites: `cd swapi-app && ./mvnw test`, then
+   `cd src/main/webui && npm test`
 4. Commit and push
 5. Open a Pull Request
 

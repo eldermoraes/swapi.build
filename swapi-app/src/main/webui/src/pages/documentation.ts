@@ -1,3 +1,4 @@
+import { isTimeout, TIMEOUT_MESSAGE, withTimeout } from '../fetch-timeout';
 import { highlightJson } from '../json-highlight';
 import { escapeHtml } from '../utils';
 
@@ -26,7 +27,7 @@ export function bindDocumentation(container: HTMLElement): void {
       result.hidden = false;
       result.innerHTML = '<p class="try-status">Loading…</p>';
       try {
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: withTimeout() });
         const statusLine = `<p class="try-status">GET ${escapeHtml(url)} → HTTP ${res.status}</p>`;
         const text = await res.text();
         let bodyHtml: string;
@@ -36,8 +37,11 @@ export function bindDocumentation(container: HTMLElement): void {
           bodyHtml = `<pre class="try-json">${escapeHtml(text)}</pre>`; // 404 devolve text/plain
         }
         result.innerHTML = statusLine + bodyHtml;
-      } catch {
-        result.innerHTML = '<p class="try-status">Network error — check your connection</p>';
+      } catch (error) {
+        const message = isTimeout(error)
+          ? TIMEOUT_MESSAGE
+          : 'Network error — check your connection';
+        result.innerHTML = `<p class="try-status">${escapeHtml(message)}</p>`;
       }
     });
   });

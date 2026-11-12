@@ -1,8 +1,10 @@
 package com.eldermoraes.stats;
 
 import com.eldermoraes.stats.StatsPeriod.Granularity;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.management.ManagementFactory;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -181,6 +183,54 @@ class RouteStatsTest {
         assertEquals(168, view.series().size());
         assertEquals(1, view.total());
         assertEquals(1, view.previous().total());
+    }
+
+    // --- How far the last bucket has filled (#54) -----------------------------
+
+    @Test
+    void lastBucketElapsedIsTheShareOfTheHourOrDayThatHasPassed() {
+        clock.now = Instant.parse("2026-10-19T12:30:00Z");
+        assertEquals(0.5, stats.view(StatsPeriod.LAST_24_HOURS, Granularity.HOUR).lastBucketElapsed());
+        assertEquals(0.5, stats.view(StatsPeriod.LAST_7_DAYS, Granularity.HOUR).lastBucketElapsed());
+
+        clock.now = Instant.parse("2026-10-19T06:00:00Z");
+        assertEquals(0.25, stats.view(StatsPeriod.LAST_7_DAYS, Granularity.DAY).lastBucketElapsed());
+        assertEquals(0.25, stats.view(StatsPeriod.LAST_30_DAYS, Granularity.DAY).lastBucketElapsed());
+    }
+
+    @Test
+    void lastBucketElapsedIsZeroWhenTheBucketStartsAndNeverReachesOne() {
+        clock.now = Instant.parse("2026-10-19T00:00:00Z");
+        assertEquals(0.0, stats.view(StatsPeriod.LAST_7_DAYS, Granularity.DAY).lastBucketElapsed());
+        assertEquals(0.0, stats.view(StatsPeriod.LAST_24_HOURS, Granularity.HOUR).lastBucketElapsed());
+
+        clock.now = Instant.parse("2026-10-19T23:59:59.999Z");
+        assertEquals(0.9999, stats.view(StatsPeriod.LAST_7_DAYS, Granularity.DAY).lastBucketElapsed());
+        assertEquals(0.9997, stats.view(StatsPeriod.LAST_24_HOURS, Granularity.HOUR).lastBucketElapsed());
+    }
+
+    @Test
+    void flatTrafficReadJustAfterMidnightComparesCloseToZeroOnceThePreviousWindowIsScaled() {
+        // One request at the start of every hour for two weeks, read at 00:05 UTC.
+        Instant end = Instant.parse("2026-10-19T00:00:00Z");
+        for (Instant t = Instant.parse("2026-10-06T00:00:00Z"); !t.isAfter(end); t = t.plus(Duration.ofHours(1))) {
+            clock.now = t;
+            stats.record("/mcp");
+        }
+        clock.now = Instant.parse("2026-10-19T00:05:00Z");
+
+        RouteStats.StatsView view = stats.view(StatsPeriod.LAST_7_DAYS, Granularity.DAY);
+        // Six full days and the first request of the seventh, against seven full days:
+        // compared as they are, flat traffic reads as a drop of 14 %.
+        assertEquals(145, view.total());
+        assertEquals(168, view.previous().total());
+        assertEquals(0.0034, view.lastBucketElapsed());          // 5 of 1440 minutes
+
+        // The documented comparison: the previous window at the same elapsed time.
+        double comparable = view.previous().total() * (view.series().size() - 1 + view.lastBucketElapsed())
+                / view.series().size();
+        assertEquals(144.08, comparable, 0.01);                  // 168 x 6.0034 / 7
+        assertEquals(0.0, (view.total() - comparable) / comparable, 0.01, "within 1 % of no change");
     }
 
     @Test
@@ -418,5 +468,101 @@ class RouteStatsTest {
         assertEquals(5, view.total());
         assertTrue(view.performance().routes().isEmpty());
         assertEquals(0, view.performance().groups().get("mcp").count());
+    }
+
+    // --- Cost of one view (#53) ----------------------------------------------
+
+    @Test
+    void serverTimesAddUpAcrossRoutesGroupsAndBuckets() {
+        stats.recordDuration("/api/films", 1 * MS);              // 12:30
+        stats.recordDuration("/api/films", 3 * MS);
+        stats.recordDuration("/api/people/{id}", 5 * MS);
+        stats.recordDuration("/mcp", 40 * MS);
+        clock.advance(Duration.ofHours(1));
+        stats.recordDuration("/api/films", 5 * MS);              // 13:30
+        stats.recordDuration("/api/people/{id}", 7 * MS);
+        stats.recordDuration("/docs", 10 * MS);
+
+        RouteStats.StatsView view = stats.view(StatsPeriod.LAST_24_HOURS, Granularity.HOUR);
+        RouteStats.Performance perf = view.performance();
+
+        assertEquals(List.of("/api/films", "/api/people/{id}", "/docs", "/mcp"),
+                List.copyOf(perf.routes().keySet()), "by count, then by name");
+        RouteStats.Latency films = perf.routes().get("/api/films");
+        assertEquals(3, films.count());
+        assertEquals(3.0, films.mean());
+        assertEquals(1.0, films.min());
+        assertEquals(5.0, films.max());
+        assertEquals(1.633, films.stddev(), "sqrt(8/3) ms, to the microsecond");
+        assertEquals(new RouteStats.Latency(1, 40.0, 40.0, 40.0, 0.0, 40.0, 40.0, 40.0), perf.routes().get("/mcp"),
+                "one request: every percentile is clamped to it");
+
+        assertEquals(List.of("rest", "mcp", "pages", "seo", "other"), List.copyOf(perf.groups().keySet()));
+        RouteStats.Latency rest = perf.groups().get("rest");     // 1, 3, 5, 5 and 7 ms
+        assertEquals(5, rest.count());
+        assertEquals(4.2, rest.mean());
+        assertEquals(1.0, rest.min());
+        assertEquals(7.0, rest.max());
+        assertEquals(2.04, rest.stddev(), "sqrt(4.16) ms, to the microsecond");
+        assertEquals(5.0, rest.p50(), 5.0 * LatencyHistogram.MAX_RELATIVE_ERROR);
+        assertEquals(7.0, rest.p99(), 7.0 * LatencyHistogram.MAX_RELATIVE_ERROR);
+        assertEquals(10.0, perf.groups().get("pages").max());
+        assertEquals(new RouteStats.Latency(0, null, null, null, null, null, null, null), perf.groups().get("seo"));
+
+        assertEquals(24, perf.series().size());
+        RouteStats.LatencyPoint noon = perf.series().get(22);    // 1, 3, 5 and 40 ms
+        assertEquals("2026-10-19T12:00:00Z", noon.start());
+        assertEquals(4, noon.count());
+        assertEquals(3.0, noon.p50(), 3.0 * LatencyHistogram.MAX_RELATIVE_ERROR);
+        assertEquals(40.0, noon.p95(), 40.0 * LatencyHistogram.MAX_RELATIVE_ERROR);
+        RouteStats.LatencyPoint one = perf.series().get(23);     // 5, 7 and 10 ms
+        assertEquals(3, one.count());
+        assertEquals(7.0, one.p50(), 7.0 * LatencyHistogram.MAX_RELATIVE_ERROR);
+        assertEquals(10.0, one.p95(), 10.0 * LatencyHistogram.MAX_RELATIVE_ERROR);
+        assertEquals(new RouteStats.LatencyPoint("2026-10-18T14:00:00Z", 0, null, null), perf.series().get(0));
+
+        assertEquals("pages", view.routeGroups().get("/docs"), "a route that was only timed still has its group");
+    }
+
+    /**
+     * The worst case: every one of the route templates timed in every hour
+     * of the 7-day hourly view. Before #53 one build allocated 32.6 MB, six
+     * histogram copies per cell; summed in place it stays under a megabyte or
+     * two, whatever the traffic was. The ceiling is far from both on purpose.
+     */
+    @Test
+    void buildingTheLargestViewAllocatesLittle() {
+        com.sun.management.ThreadMXBean threads = allocationCounter();
+        for (int hour = 0; hour < 7 * 24; hour++) {
+            int n = 0;
+            for (String route : RouteNormalizer.templates()) {
+                stats.record(route);
+                stats.recordDuration(route, (1 + (hour * 31 + n++ * 17) % 500) * MS);
+            }
+            clock.advance(Duration.ofHours(1));
+        }
+        clock.advance(Duration.ofHours(-1));                     // back into the last hour recorded
+        for (int i = 0; i < 20; i++) {
+            stats.view(StatsPeriod.LAST_7_DAYS, Granularity.HOUR);
+        }
+
+        int builds = 20;
+        long id = Thread.currentThread().threadId();
+        long before = threads.getThreadAllocatedBytes(id);
+        for (int i = 0; i < builds; i++) {
+            stats.view(StatsPeriod.LAST_7_DAYS, Granularity.HOUR);
+        }
+        long perBuild = (threads.getThreadAllocatedBytes(id) - before) / builds;
+
+        assertEquals(RouteNormalizer.TEMPLATE_COUNT,
+                stats.view(StatsPeriod.LAST_7_DAYS, Granularity.HOUR).performance().routes().size());
+        assertTrue(perBuild < 4L * 1024 * 1024, "one 7-day hourly view allocated " + perBuild + " bytes");
+    }
+
+    /** Bytes allocated per thread, where the JVM counts them; the test is skipped where it does not. */
+    private static com.sun.management.ThreadMXBean allocationCounter() {
+        Assumptions.assumeTrue(ManagementFactory.getThreadMXBean() instanceof com.sun.management.ThreadMXBean t
+                && t.isThreadAllocatedMemorySupported() && t.isThreadAllocatedMemoryEnabled());
+        return (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
     }
 }

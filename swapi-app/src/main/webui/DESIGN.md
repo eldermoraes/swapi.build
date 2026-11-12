@@ -55,13 +55,25 @@ of pure white — depth, not a colour role.
 
 Pathway Gothic One ships **a single 400 weight**. Emphasis comes from size and
 letter-spacing — never `font-weight: bold`, because the browser's faux-bold
-mangles a condensed face.
+mangles a condensed face. A heading is bold by the browser's default, so
+**every rule that sets `--sw-font-display` also sets `font-weight: 400`**;
+`src/ui/display-weight.test.ts` fails the suite on a rule that does not.
 
 Each font token lists a metric-matched fallback face right after the web font
 (`'Pathway Gothic One Fallback'`, `'Inter Fallback'`, `'JetBrains Mono Fallback'`,
 defined in `tokens.css`): a local font scaled to the web font's widths and
-metrics, so the page does not move when the Google Fonts swap in
+metrics, so the page does not move when the web fonts swap in
 (`font-fallbacks.test.ts`). A new web font gets its own fallback face.
+
+The site serves its own fonts: the three families are woff2 files in
+`src/fonts/` (the latin subset; Inter and JetBrains Mono are variable, one file
+for all their weights), each with its SIL Open Font License beside it, declared
+as `@font-face` in `tokens.css` with `font-display: swap` and a relative `url()`,
+so Vite fingerprints them under `/assets/`. Never link a font service or any
+other host from `index.html` or a stylesheet: the privacy page says the site
+loads none, and `no-third-party-hosts.test.ts` fails if one comes back. A new
+web font is a new file there, with its licence, its face and its fallback face
+(`web-fonts.test.ts`).
 
 ## 3. Colour roles
 
@@ -126,8 +138,9 @@ falls below AA.
 Two places draw components. Pages drawn by the client import from
 `src/ui/components.ts`; each helper returns an HTML **string** (pages render by
 assigning `innerHTML`), and every interpolated value is passed through
-`escapeHtml`. The four pages drawn by the server (home, `/docs`, `/docs/mcp`,
-`/about`, 2.11.0+) use the Qute tags in `src/main/resources/templates/tags/`,
+`escapeHtml`. The pages drawn by the server (home, `/docs`, `/docs/mcp` and
+`/about` since 2.11.0, the record addresses since 2.12.0, `/faq` since 2.15.0)
+use the Qute tags in `src/main/resources/templates/tags/`,
 which Qute escapes (templates never use `raw` or `safe`); the client only binds
 behaviour to what the server drew.
 
@@ -223,7 +236,8 @@ the client adopts it (`bindRecord`) and only colours the JSON (and binds any
 A new page or section is on-standard when:
 
 1. It uses **only tokens** — no raw hex anywhere in page styles.
-2. The display face is **uppercase + letter-spaced**, never bold.
+2. The display face is **uppercase + letter-spaced**, never bold: its rule
+   sets `font-weight: 400` (a heading is bold otherwise).
 3. Gold/cyan roles are respected (gold = action, cyan = data).
 4. Actions are `.sw-pill` — via `pill()` on the client or the `pill.html` tag
    on the server.
@@ -239,8 +253,10 @@ A new page or section is on-standard when:
     panels hide only under `.js`).
 11. A page drawn on the server gets its Markdown copy for free (2.14.0, the
     `<main>` converted at its address plus `.md`); mark decoration that is not
-    content with `data-md="skip"` (the feature icons of `/about`), and read the
-    copy once before shipping.
+    content with `data-md="skip"` (the feature icons of `/about`), mark a
+    paragraph shown with `white-space: pre-line` with `data-md="lines"` so the
+    copy keeps its lines and paragraphs (the opening crawl), and read the copy
+    once before shipping.
 
 ## 8. Voice & copy
 

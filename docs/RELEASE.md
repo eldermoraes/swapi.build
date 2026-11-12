@@ -42,24 +42,72 @@ Infrastructure goes under `Changed`; development-dependency patches under
 
 ```bash
 cd swapi-app && ./mvnw test
+cd src/main/webui && npm test
 ```
 
-`ChangelogVersionTest` fails if steps 2 and 3 disagree. `OpenApiVersionTest` fails
+Maven never runs the frontend suite (Vitest); CI runs both. `ChangelogVersionTest` fails if steps 2 and 3 disagree. `OpenApiVersionTest` fails
 if the published `info.version` stops matching the pom.
 `FaqFileTest.shippedFactsAreAtMost180DaysOld` fails when a fact of the FAQ
 comparison (`seo/faq.json`) was checked more than 180 days ago, even in a release
 that does not touch the FAQ: check each cell again (content type and body, not
-just the status), update the values and dates, and only then release. A release
+just the status), update the values and dates, and only then release. The top
+`checkedOn` is the oldest cell date (the file does not load otherwise): set it
+to that date, which moves only when every cell has been checked again. The
+cells and that date are all there is to edit: no answer names another API (the
+loader refuses it), so there is no prose to update. A release
 that touches the FAQ also recalculates the monitor count of the answer "How do I
 know it is up?" from the scheduled runs of the `Uptime` workflow:
-`gh run list --workflow Uptime --event schedule --limit 5000 --json conclusion,createdAt --jq '[length, (map(select(.conclusion=="success"))|length), (map(.createdAt)|min), (map(.createdAt)|max)]'`.
-The total and the successes go into the answer, the first and last day into its
-"between ... and ..." (in UTC). The earliest `createdAt` must be
-`2026-10-19T22:39:05Z`, the first scheduled run: a later one means the list was
-cut (by `--limit`, or by the 1000-result cap GitHub may apply to a filtered list
-of runs), and the count is wrong; do not publish it. The schedule gives about 70
-runs a day (647 by 28 October 2026), so the history passes 1000 runs in early
-November 2026 and 5000 around the end of December 2026.
+`scripts/uptime-run-count.sh` (from a checkout, with `gh` logged in; about a
+minute). The total and the successes go into the answer, the first and last day
+into its "between ... and ..." (in UTC). A run listed as "not successful" with
+`queued` or `in_progress` has not finished: it is neither a check that passed
+nor one that failed, so leave it out of the total you publish (the newest run
+finishes within minutes, but one has stayed `queued` since
+`2026-11-11T20:36:53Z`). Never count with `gh run list --limit N`: GitHub cuts a list of
+runs at 1000 results whatever the limit, and since early November 2026 that
+command returns only the newest 1000 (1978 scheduled runs on 12 November 2026).
+The script reads the history in windows of `created` date instead, and prints a
+count only when the earliest run is `2026-10-19T22:39:05Z`, the first scheduled
+run, and the runs add up to the total GitHub reports; if it exits with an
+error, the count is wrong: do not publish one.
+
+### Optional: MCP load rehearsal
+
+Not a gate, and not part of the pipeline: it needs a running instance, takes
+minutes and gives numbers to read, not a pass or a fail. Worth running only for
+a release that changes how `/mcp` handles a request: `McpTransportFilter`, the
+version of the MCP server extension, or `quarkus.http.limits.max-body-size`.
+
+`scripts/mcp-listen-load.sh` measures what the suite cannot: the cost of many
+concurrent `subscriptions/listen` requests, and the memory over many tool
+calls. **Never run it against production**: it opens hundreds of connections on
+purpose. The target is a local instance of the release candidate (its pid), or
+the native binary in a container (`podman:<container>`, read as the `VmRSS` of
+its PID 1):
+
+```bash
+# mcp-listen-load.sh listens <base-url> <target> [count=500] [hold=60]
+# mcp-listen-load.sh calls   <base-url> <target> [count=10000]
+scripts/mcp-listen-load.sh listens http://localhost:5432 <pid>
+scripts/mcp-listen-load.sh calls   http://localhost:5432 <pid>
+scripts/mcp-listen-load.sh listens http://localhost:<port> podman:<container>
+```
+
+What to expect, with the 2.12.1 measurements as the baseline (native binary in
+a container; `CHANGELOG.md`, 2.12.1, `Security` for the listens and `Changed`
+for the calls). The script prints the memory in kB (`rss_kb`); the changelog
+quotes it in MB.
+
+- `listens`: all 500 answered within 2 s with `-32601`, and none still open at
+  30 s. The first burst of connections costs memory once (142.2 to 170.9 MB);
+  a second run leaves it flat (169.3 MB). A listen that stays open is the
+  2.12.0 defect back.
+- `calls`: every call answers `200`, and the memory does not grow over the
+  10 000 calls (170.9 to 169.3 MB). The request context leak fixed in
+  `quarkus-mcp-server` 2.0.3 did not show as memory even on 2.12.0 (175.5 to
+  173.2 MB), so a flat figure does not prove that fix: `McpRequestContextTest`
+  does, in the suite. A figure that grows with the number of calls is
+  something new, to investigate before releasing.
 
 ## 5. Commit and merge to `main`
 
@@ -89,7 +137,8 @@ A version bump changes `info.version` in the public spec, so it must reach
 production. Publishing the Release (step 7) triggers **Native binary and
 deploy** (`native-binary.yml`). Pushing the tag alone deploys nothing.
 
-1. `test` runs the full suite on the tag; `build` builds the native binary,
+1. `test` runs the backend suite on the tag (Vitest ran in `ci.yml` on the
+   merged commit); `build` builds the native binary,
    attaches `application` and `application.sha256` to the Release and prints
    the hash in the run summary.
 2. `deploy` waits for **manual approval** (environment `production`). Approve

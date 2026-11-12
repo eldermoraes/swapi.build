@@ -4,15 +4,14 @@ export function renderTerms(container: HTMLElement): void {
       <h1 class="sw-page-title">Terms of Use</h1>
 
       <section class="about-section">
-        <p><em>Last updated: August 2, 2026</em></p>
+        <p><em>Last updated: November 12, 2026</em></p>
       </section>
 
       <section class="about-section">
         <h2>The service</h2>
         <p>
           swapi.build is a free, open-source Star Wars API and MCP server, provided as is, with no
-          warranty of any kind and no uptime guarantee. The service scales to zero when idle, so the
-          very first request after a quiet period may be slower.
+          warranty of any kind and no uptime guarantee.
         </p>
       </section>
 

@@ -1,7 +1,9 @@
 package com.eldermoraes.stats;
 
+import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Maps a request path to the route template it is counted under.
@@ -16,6 +18,9 @@ import java.util.Set;
  * Static files of the SPA ({@code /assets/*}, the favicon, the Open Graph image)
  * are not counted at all: every page view fetches several of them, so they would
  * only drown the routes that matter.
+ *
+ * {@link #templates()} lists the closed set and {@link #TEMPLATE_COUNT} is its
+ * size, the number every sizing note of the statistics starts from.
  */
 public final class RouteNormalizer {
 
@@ -29,7 +34,40 @@ public final class RouteNormalizer {
             // 2.14.0 (slice G1): /llms-full.txt and the Markdown copies of the fixed pages.
             "/llms-full.txt", "/index.html.md", "/docs.md", "/docs/mcp.md", "/faq.md", "/about.md");
 
+    /**
+     * How many templates there are: 22 fixed addresses, list, {@code random} and
+     * {@code {id}} of each of the 6 record types under {@code /api} (18), list,
+     * {@code {id}} and {@code {id}.md} of each under {@code /resource} (18), and
+     * {@link #OTHER}. The worst cases in {@link RouteStats}, at
+     * {@link SnapshotFile#MAX_BYTES} and in docs/DEPLOY.md ("Usage counters",
+     * "Server times") are multiples of it: a change here goes there too, and
+     * {@code RouteNormalizerTest} fails until this number is the size of
+     * {@link #templates()}.
+     */
+    public static final int TEMPLATE_COUNT = 59;
+
+    private static final Set<String> TEMPLATES = listTemplates();
+
     private RouteNormalizer() {
+    }
+
+    /** Every template {@link #normalize} can return, sorted. */
+    public static Set<String> templates() {
+        return TEMPLATES;
+    }
+
+    private static Set<String> listTemplates() {
+        Set<String> all = new TreeSet<>(FIXED);
+        for (String resource : RESOURCES) {
+            all.add("/api/" + resource);
+            all.add("/api/" + resource + "/random");
+            all.add("/api/" + resource + "/{id}");
+            all.add("/resource/" + resource);
+            all.add("/resource/" + resource + "/{id}");
+            all.add("/resource/" + resource + "/{id}.md");
+        }
+        all.add(OTHER);
+        return Collections.unmodifiableSet(all);
     }
 
     /**
@@ -42,7 +80,18 @@ public final class RouteNormalizer {
         if (rawPath == null || rawPath.isEmpty()) {
             return Optional.of(OTHER);
         }
-        String path = rawPath.split("[?#]", 2)[0];
+        // Cut by hand: split("[?#]") would compile a regex on every request.
+        String path = rawPath;
+        for (int i = 0; i < path.length(); i++) {
+            char c = path.charAt(i);
+            if (c == '?' || c == '#') {
+                path = path.substring(0, i);
+                break;
+            }
+        }
+        if (path.isEmpty()) {
+            return Optional.of(OTHER);
+        }
         if (path.length() > 1 && path.endsWith("/")) {
             path = path.substring(0, path.length() - 1);
         }

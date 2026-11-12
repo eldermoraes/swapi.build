@@ -1,0 +1,63 @@
+name: Examples
+
+# The client examples under examples/ are standalone Maven projects, each with
+# its own Maven wrapper and no parent: `./mvnw package` in swapi-app (CI) never
+# compiles them, so until 2026-11-12 nothing showed they still built.
+#
+# Compile only: the examples have no tests, and running them needs the network
+# to swapi.build (and Ollama, for the MCP client).
+#
+# A workflow of its own, not a job in ci.yml: CI is the gate of every pull
+# request and has no path filter; this one runs only when an example (or this
+# file) changes. workflow_dispatch is for the changes that come from outside
+# the examples, such as a Quarkus platform bump in swapi-app that the examples
+# should follow.
+#
+# A new example goes into the matrix below: scripts/unreferenced.test.sh (CI)
+# fails while a Maven project under examples/ is missing from it.
+on:
+  push:
+    branches: [main]
+    paths:
+      - examples/**
+      - .github/workflows/examples.yml
+  pull_request:
+    paths:
+      - examples/**
+      - .github/workflows/examples.yml
+  workflow_dispatch:
+
+concurrency:
+  group: examples-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          - examples/java/langchain4j-mcp-client
+          - examples/java/quarkus-rest-client
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+          # The example's own pom, so the key never matches the swapi-app cache
+          # (which holds none of the LangChain4j dependencies).
+          cache-dependency-path: ${{ matrix.example }}/pom.xml
+      - name: Compile
+        working-directory: ${{ matrix.example }}
+        run: ./mvnw -B -q -DskipTests compile

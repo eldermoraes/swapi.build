@@ -87,7 +87,11 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   commit of a version line, never at the bump commit.
 - **Successful GETs return HTTP 200; nonexistent ids return 404.** This holds for
   the site pages too: an unknown page or entity answers 404 (`SeoRoutes`), and
-  Quinoa's SPA routing stays off.
+  Quinoa's SPA routing stays off. A conditional request is the exception: a
+  page, a Markdown copy and `/llms-full.txt` carry a strong `ETag` (a digest of
+  the bytes sent, `TaggedBody`), and a GET or HEAD whose `If-None-Match` names
+  it answers 304 with no body (#58). A 404, a 503 or a redirect never carries
+  an `ETag`, and `/api` has no validators.
 - **Page metadata has one source**: `swapi-app/src/main/resources/seo/site.json`,
   read by `SeoMetadataRegistry` and by `seo.ts`/`routes.ts`; the client never
   rewrites the head on the first load. Record addresses become indexable one type
@@ -129,8 +133,14 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   instead of 404ing. It was introduced because Vercel had no session affinity;
   on the single self-hosted instance it still keeps a client working after a
   restart drops its session. A genuine `initialize` still creates a
-  real session that lives in one instance's heap until idle (default 30 min).
-  `GET /mcp` answers 405 (no server→client stream) and `DELETE` answers 204.
+  real session that lives in one instance's heap until idle:
+  `quarkus.mcp.server.connection-idle-timeout=2m` (the extension's default is
+  30 min), swept every minute, so two to three minutes after its last use. A
+  dropped id is served like one from before a restart
+  (`McpSessionIdleTimeoutTest`).
+  `GET /mcp` answers 405 (no server→client stream) and `DELETE` answers 204,
+  always, and frees the session it names when the process holds it
+  (`McpDeleteSessionTest`).
   The legacy HTTP+SSE transport (`/mcp/sse`) is rejected on purpose. Never
   reintroduce session-affine state, and never depend on the legacy transport.
   The server sends no notifications (the data never changes), so
@@ -142,7 +152,14 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   per request in a list never cleaned). Stateless subscribe, and a subscribe
   with an unsupported protocol version or `Accept`, go on to the extension
   (`-32601` / `400`, nothing kept). The body `method` wins over the
-  `Mcp-Method` header. `quarkus.http.limits.max-body-size=256K` bounds the
+  `Mcp-Method` header. Every JSON-RPC batch (a JSON array), whatever it
+  carries, gets one answer from the filter, without looking inside it: HTTP
+  400, `-32600`, `id` null, counted once. The extension refuses arrays only as
+  a side effect of a cast (200 with `-32700`, or a bare 400 without the
+  transport's `Accept`), not by contract: never let an array reach it
+  (`theExtensionItselfStillRefusesABatch` fails the day its POST handler stops
+  answering one with `-32700`).
+  `quarkus.http.limits.max-body-size=256K` bounds the
   double decode on the event loop. `McpListenLimitTest` guards it; never let a
   POST to `/mcp` open a stream that waits for notifications.
 - **MCP surface (2.13.0+).** Four tools; `sw_get` takes an optional `expand`

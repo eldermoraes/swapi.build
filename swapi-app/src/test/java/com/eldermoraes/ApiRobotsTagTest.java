@@ -18,7 +18,7 @@ import static io.restassured.RestAssured.given;
 @QuarkusTest
 class ApiRobotsTagTest {
 
-    private static final String API_CACHE_CONTROL = "public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400";
+    private static final String API_CACHE_CONTROL = "public, max-age=300, s-maxage=300, stale-while-revalidate=86400";
 
     @Test
     void everyApiResponseSaysNoindex() {

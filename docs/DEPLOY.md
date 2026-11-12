@@ -29,8 +29,9 @@ Publishing a GitHub Release (`docs/RELEASE.md`, step 7) runs
    job's output. Before it is attached, **Native smoke** (2.11.0+) starts the
    binary on port 8099 and runs `scripts/native-smoke.sh`: it waits up to 20 s
    for `/api/people/1` (Luke Skywalker), then checks `/openapi.json` (paths not
-   empty, the version of the pom) and the four server-rendered pages (marker,
-   phrase, at least 200 characters of `<main>`). A failure prints the app log
+   empty, the version of the pom), the five server-rendered pages and two record
+   addresses (marker, phrase, at least 200 characters of `<main>`), the Markdown
+   copies, `/llms-full.txt` and the MCP endpoint. A failure prints the app log
    and stops the job, so nothing is attached and the deploy never begins:
    `swapi-update` switches the link before it knows the new version answers,
    and a binary that does not start would take the whole site down.
@@ -75,6 +76,43 @@ hash copied from the summary of that release's original run. `test` and
 
 The manual path is [Updating the version on the host](#updating-the-version-on-the-host).
 
+### Moving the pin of an action
+
+Every action the workflows take from outside this repository is pinned by a
+full commit SHA, with the release it corresponds to in a comment on the same
+line:
+
+```yaml
+uses: owner/repo@<40 hex commit> # vX.Y.Z
+```
+
+A tag or a branch can be moved by whoever controls the action's repository,
+and the next job would run their code next to the deploy key, the Tailscale
+secret or the Claude OAuth token; a commit cannot be moved.
+`scripts/pinned-actions.test.sh` (run by CI) fails on any other form, and when
+one action has two different pins.
+
+To move a pin to a newer release:
+
+1. List the tags: `git ls-remote --tags https://github.com/<owner>/<repo>`.
+2. Choose the release: stay on the same major line unless the move is a
+   decision of its own, and prefer a release at least two weeks old (time for a
+   bad or compromised release to be noticed). For an
+   action that releases almost daily (`anthropics/claude-code-action`), its
+   major tag is always newer than that: take the newest release that is two
+   weeks old, not the one the major tag points at.
+3. Take the **commit** of that tag. An annotated tag has two lines, and the
+   commit is the one ending in `^{}`; the other is the tag object and does not
+   work as a pin. A tag with a single line already is the commit.
+4. Replace the SHA and the version in the comment in **every** workflow that
+   uses the action, in one commit.
+5. Run `scripts/pinned-actions.test.sh`. It checks the shape of the pins
+   offline, not that the SHA is the commit of the version in the comment:
+   step 3 is the only check of that.
+
+A pin by commit does not cover what an action downloads while it runs (a
+toolchain, a CLI); it closes the moved-tag path only.
+
 ## What the probes check
 
 `scripts/verify-deploy.sh origin <host>`, run by the `deploy` job on
@@ -86,7 +124,8 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   URLs. Proves the per-request base-URL discovery through `X-Forwarded-*`.
 - **Usage counters**: `GET /api/stats` returns 200 with `countingSince` and the
   `/api/people/{id}` route the REST probe just hit; `?period=24h` answers 24
-  hourly buckets and `?period=30d` 30 daily ones (2.7.0+), each with a
+  hourly buckets and `?period=30d` 30 daily ones (2.7.0+), each with
+  `lastBucketElapsed` from 0 to under 1 (how far the last bucket has filled) and a
   `performance` block holding all five groups and one latency point per bucket
   (2.8.0+), and `/stats` serves the page with its own title.
 - **OpenAPI**: `/openapi.json` with `Accept: text/html` returns
@@ -141,7 +180,8 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   `site.json`, so it proves the file reached the native binary (without it the
   app does not start at all). Control: `/resource/people/1` stays
   `noindex,follow` with the canonical `/resource/people`. `sitemap.xml` has
-  exactly 20 `<loc>` (the 14 pages and lists plus the six films), no record of
+  exactly 21 `<loc>` (the 15 pages and lists plus the six films; 20 before
+  2.15.0, which added `/faq`), no record of
   another type and no `<lastmod>` (a date that never changes is noise; a date
   that always changes is a lie).
 - **Robots header (2.10.0+)**: `/api/people/1` and `/api/films/9` (a 404)
@@ -149,7 +189,7 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   `/resource/films/1`, `/openapi.json`, `robots.txt`, `sitemap.xml` and
   `llms.txt` have no `X-Robots-Tag` at all: on a page it would deindex the
   site. `/api/people/1` keeps exactly
-  `Cache-Control: public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400`.
+  `Cache-Control: public, max-age=300, s-maxage=300, stale-while-revalidate=86400`.
 - **Server-rendered content (2.11.0+)**: the `<main>` of `/`, `/docs`,
   `/docs/mcp` and `/about` is drawn by the server (Qute) for whoever does not
   run JavaScript (GPTBot, ClaudeBot, PerplexityBot, agents that `fetch`). Each
@@ -181,7 +221,7 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   marker, and `/resource/films/1` has a `BreadcrumbList`. The links and the
   samples are read from the markup of `<main>` (`main_html` in
   `scripts/lib/main-text.sh`), the text from `main_text`. Any `FAIL` here after
-  a deploy is an immediate rollback to 2.11.0.
+  a deploy is an immediate rollback to the previous version.
 - **Markdown copies and `/llms-full.txt` (2.14.0+)**: every page whose `<main>`
   the server draws has a Markdown copy at its address plus `.md`, converted
   from that `<main>`. `/index.html.md` (the home), `/docs.md`, `/docs/mcp.md`,
@@ -211,7 +251,28 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   with the phrase, the canonical `https://<host>/faq` and the comparison as a
   table (lines that start with `| `). `/about` says `stays up for live
   demos` and never `never go offline`. Any `FAIL` here after a deploy is an
-  immediate rollback to 2.14.0.
+  immediate rollback to the previous version.
+- **Validators (#58)**: `/docs`, `/resource/films/1`, `/docs.md`,
+  `/resource/films/1.md` and `/llms-full.txt` each carry a strong `ETag` (a
+  digest of the bytes of the body: it changes with the content, the host and
+  the analytics beacon, never with a version string). A `GET` with it in
+  `If-None-Match` answers `304` with no body, the same `ETag`, the
+  `Cache-Control` of the address (`public, max-age=0, must-revalidate,
+  s-maxage=300` for the HTML, `public, max-age=300, s-maxage=86400` for a copy
+  and `/llms-full.txt`) and `Vary: Origin`; a `HEAD` with it answers `304`;
+  another tag gets `200` with the same `ETag`. `/resource/people/9999` with
+  `If-None-Match: *` answers `404` with no `ETag`. These are asked without
+  `Accept-Encoding`, so Caddy does not compress and the tag is the
+  application's. One more line is informational only: `/docs` asked with
+  `Accept-Encoding: zstd, gzip`, then again with the `ETag` it got. When Caddy
+  compresses, its `encode` appends `-<encoding>` to a strong tag (`"abc"`
+  becomes `"abc-zstd"`) and takes that suffix off `If-None-Match` before the
+  application sees it, so the line should end in `304`. A `200` there means
+  the Caddy on the host does not undo its suffix: nothing breaks, but a
+  browser (which always asks for compression) then downloads the page on
+  every revalidation, as before #58. Without compression on the proxy the line
+  says there is nothing to check. A `FAIL` in the validator lines is a rollback
+  to the previous release.
 - **Cold start**: the time of one request, informational only.
 - **MCP stateless**: a `tools/call` of `sw_get` with the 2026-07-28 headers and
   `_meta` returns `isError: false` and URLs on the host. `server/discover` and
@@ -269,6 +330,15 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   `https://<host>/mcp` and no `evil.example` in the same answer.
 - **Caddy headers**: `Strict-Transport-Security: max-age=63072000` and no
   `Server` header.
+- **Compression** (Caddy's `encode`, section 2.7): `/docs` asked with
+  `Accept-Encoding: zstd, gzip` answers `Content-Encoding: zstd`, with
+  `Accept-Encoding: gzip` answers `gzip`, both smaller than the plain answer
+  and with `Vary` naming `Accept-Encoding`; without `Accept-Encoding` there is
+  no `Content-Encoding`. `/api/people/1` (JSON) and `/docs.md` (a Markdown
+  copy) answer `zstd` too. A `FAIL`
+  here means the `Caddyfile` on the host lost its `encode` block or the list
+  of types changed; the site still works, with larger answers, so it is a
+  `Caddyfile` fix, not a rollback of the binary.
 
 ### The www redirect
 
@@ -303,7 +373,8 @@ fake hosts on `127.0.0.1` (one for `www`, one for the apex) and proves that a
 correct redirect passes and a wrong status, a wrong host, a dropped query, a
 redirect to somewhere else or an empty `<main>` at the destination fails.
 
-The redirect lives on the host, in the `Caddyfile` (section 4). It was
+The redirect lives on the host, in the `Caddyfile` (section 2.7; history in
+section 4). It was
 applied there and verified with the probe on 2026-10-26 (18:25 BRT).
 
 ## Troubleshooting (application)
@@ -316,13 +387,13 @@ applied there and verified with the probe on 2026-10-26 (18:25 BRT).
 | The OpenAPI version probe fails right after a deploy | The host still runs the previous version: `swapi-update` failed, or the probe ran against a tag other than the deployed one. Read the `deploy` job log; on the host, `readlink /opt/swapi/current`. |
 | A file from `public/` or an asset answers 404 from 2.9.1 on | Its path has no dot in the last segment and is not under `/assets/`, so `SeoRoutes` treats it as a page and, not knowing it, answers the not-found document. Every new file in `public/` needs an extension. |
 | A page of the site answers 404 from 2.9.1 on | The route is missing from `swapi-app/src/main/resources/seo/site.json`, the one source the server and the site both read (2.10.0+). Quinoa's SPA routing stays off: turning it back on brings back the soft 404s and the double count in `/stats`. |
-| The app does not start after a release that touched `seo/site.json` (2.10.0+) | The file is invalid (the log names the key and the reason, for example a placeholder that is not a field of its type) or it is missing from `quarkus.native.resources.includes` in `application.properties` (the log names `seo/site.json`). The app refuses to start rather than serve pages without metadata. `swapi-update` has already switched the link and restarted the service when it reports "is not answering": the site is down until you run the rollback command it printed. |
+| The app does not start after a release that touched `seo/site.json` (2.10.0+) | The file is invalid (the log names the key and the reason, for example a placeholder that is not a field of its type) or it is missing from `quarkus.native.resources.includes` in `application.properties` (the log names `seo/site.json`). The app refuses to start rather than serve pages without metadata. `swapi-update` has already switched the link and restarted the service when it reports "is not answering": the site is down until you run the rollback command it printed (when it printed none, no rollback target was recorded or it is gone: run `swapi-update` with an older tag). |
 | A page shows its text, but the tabs, the copy buttons or "Try it" do not respond (2.11.0+) | The client code of that page did not bind: the `data-ssr-page` marker of the `<main>` did not match the route the client resolved. The browser console says which; compare the marker with the page's key in `seo/site.json`. |
 | A page shows "This page could not be loaded" (2.11.0+) | Its render failed on the server, which then served the shell without the marker. The log has an `ERROR` from `ServerRendering` or `OpenApiDocs` naming the page, and the server-rendered content probe reads `FAIL`: roll back (see [5. Rollback](#5-rollback)). |
 | A `.md` copy answers HTML, or two `Cache-Control` headers (2.14.0+) | The `spa` filter of `application.properties` (`quarkus.http.filter.spa`) stamped the HTML policy on `/resource/{type}/{id}.md`, or a route before `SeoRoutes` answered it. `SeoRoutes` sets the copy's headers when they are written, so only its own `Cache-Control` stays (`MarkdownCopiesTest.recordCopyHasOneCacheControlTheMarkdownOne`); check that the running version is 2.14.0+ and that no new filter matches `.md`. |
 | A copy or `/llms-full.txt` answers `503 Markdown copy unavailable` (2.14.0+) | The render of that page failed (the log has an `ERROR` from `ServerRendering`, or `OpenApiDocs` for `/docs.md` without the OpenAPI document) or the converter threw (`ERROR Markdown copy of <page> failed`). One failed copy makes all of `/llms-full.txt` `503`. A `503` is never cached; the HTML of the page keeps working. Roll back (see [5. Rollback](#5-rollback)). |
-| A release stopped by the 180-day test (2.15.0+): `FaqFileTest.shippedFactsAreAtMost180DaysOld` fails in CI | A fact of the FAQ comparison (`seo/faq.json`) was checked more than 180 days ago. This is on purpose, even for a release that does not touch the FAQ: an old comparison is the reputational risk. Check each listed cell again (content type and body, not just the status), update its value and `checkedOn` (and the top `checkedOn`), recalculate the monitor count of "How do I know it is up?", and run the suite again. It never blocks a rollback: the `workflow_dispatch` with `sha256` skips test and build. |
-| The app does not start after a release that touched `seo/faq.json` (2.15.0+) | The file is invalid: the log names `seo/faq.json` and the key (an unknown key, a cell count that does not match the columns, a source that is not https, a date that is not `yyyy-mm-dd`, HTML in a text, or a marker other than `{count:<type>}`). `FaqFileTest.invalidFilesFailWithTheKey` covers each. Fix the file, or roll back with the command `swapi-update` printed. |
+| A release stopped by the 180-day test (2.15.0+): `FaqFileTest.shippedFactsAreAtMost180DaysOld` fails in CI | A fact of the FAQ comparison (`seo/faq.json`) was checked more than 180 days ago. This is on purpose, even for a release that does not touch the FAQ: an old comparison is the reputational risk. Check each listed cell again (content type and body, not just the status), update its value and `checkedOn` (and set the top `checkedOn` to the oldest cell date), recalculate the monitor count of "How do I know it is up?" with `scripts/uptime-run-count.sh` (`docs/RELEASE.md`, step 4), and run the suite again. It never blocks a rollback: the `workflow_dispatch` with `sha256` skips test and build. |
+| The app does not start after a release that touched `seo/faq.json` (2.15.0+) | The file is invalid: the log names `seo/faq.json` and the key (an unknown key, a cell count that does not match the columns, a source that is not https, a date that is not `yyyy-mm-dd`, HTML in a text, a marker other than `{count:<type>}`, an answer that names another API of the comparison, a question or an answer that writes a count of records as a literal, or a top `checkedOn` that is not the oldest cell date). `FaqFileTest.invalidFilesFailWithTheKey` covers each. Fix the file, or roll back with the command `swapi-update` printed. |
 | The app does not start after a release that touched the Qute templates (2.11.0+) | A page marked `ssr` in `seo/site.json` has no renderer or template; the log names it. The **Native smoke** step of the build should have stopped that release; if it reached the host, roll back with the command `swapi-update` printed. |
 
 ## WebMCP verification (2.5.0+)
@@ -419,8 +490,12 @@ job:
   source** for the checksum, so a binary swapped on the Release together with
   its `.sha256` is still caught by `swapi-update`.
 
-A pull request that changes the workflow runs the suite, the build and the
-GLIBC check without uploading or deploying anything.
+A pull request that changes the workflow, `scripts/native-smoke.sh`, the pom or
+the server's code and resources runs the build, the GLIBC check and the native
+smoke without uploading or deploying anything. The `test` job is skipped
+there: `.github/workflows/ci.yml` already runs the suite on every pull request
+(`scripts/native-binary-triggers.test.sh` checks, in CI, which jobs run for
+each trigger).
 
 ### 2. Host preparation (one SSH window with write access)
 
@@ -546,9 +621,18 @@ install and for every later version:
 #!/bin/sh
 # usage: swapi-update <tag> <sha256 from the Actions run summary>
 set -eu
+export LC_ALL=C
 tag="${1:?usage: swapi-update <tag> <sha256 from the run summary>}"
 expected="${2:?usage: swapi-update <tag> <sha256 from the run summary>}"
-case "$tag" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "not a release tag: $tag"; exit 2 ;; esac
+# A release tag is vX.Y.Z, each part 1 to 4 digits, and nothing else: the shape
+# swapi-deploy-gate accepts. What follows the v must be digits and dots only,
+# with no empty part, no part of 5 digits and exactly two dots.
+case "${tag#v}" in
+  "$tag" | *[!0-9.]* | .* | *. | *..* | *.*.*.* | *[0-9][0-9][0-9][0-9][0-9]*) shape=no ;;
+  *.*.*) shape=yes ;;
+  *) shape=no ;;
+esac
+[ "$shape" = yes ] || { echo "not a release tag: $tag"; exit 2; }
 base="https://github.com/eldermoraes/swapi.build/releases/download/$tag"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -565,32 +649,93 @@ fi
 
 install -d -o root -g root -m 755 "/opt/swapi/$tag"
 install -o root -g root -m 755 "$tmp/application" "/opt/swapi/$tag/application"
-previous=$(readlink -f /opt/swapi/current || true)
+previous=
+if [ -L /opt/swapi/current ]; then previous=$(readlink -f /opt/swapi/current || true); fi
+# The version to roll back to: the last one `current` pointed at when a run
+# of this tag found it elsewhere, kept in the tag's directory, since a retry or
+# a redeploy finds the tag itself in `current`.
+if [ "$previous" != "/opt/swapi/$tag" ]; then
+  printf '%s\n' "$previous" > "/opt/swapi/$tag/previous"
+fi
+rollback=$(cat "/opt/swapi/$tag/previous" 2>/dev/null || true)
 ln -sfn "/opt/swapi/$tag" /opt/swapi/current
 systemctl restart swapi
-sleep 3
-if ! curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:5432/api/people/1; then
-  echo "swapi $tag is not answering. Roll back with:"
-  echo "  ln -sfn ${previous:-<previous version dir>} /opt/swapi/current && systemctl restart swapi"
+# The site is down while this waits: at most 10 checks, one second apart, 2
+# seconds each (about 10 seconds when nothing listens, 30 at the very most).
+answering=no
+checks=0
+while [ "$answering" = no ] && [ "$checks" -lt 10 ]; do
+  checks=$((checks + 1))
+  sleep 1
+  if error=$(curl -fsS --max-time 2 -o /dev/null http://127.0.0.1:5432/api/people/1 2>&1); then
+    answering=yes
+  fi
+done
+if [ "$answering" = no ]; then
+  echo "$error" >&2                                # what the last check said
+  if [ -n "$rollback" ] && [ "$rollback" != "/opt/swapi/$tag" ] && [ -d "$rollback" ]; then
+    echo "swapi $tag is not answering. Roll back with:"
+    echo "  ln -sfn $rollback /opt/swapi/current && systemctl restart swapi"
+  else
+    echo "swapi $tag is not answering. No version to roll back to: none is recorded for this tag, or the recorded one is gone."
+    echo "  To go back to an older release: swapi-update <tag> <sha256 from its run summary>"
+  fi
   exit 1
 fi
 echo "swapi $tag is up"
 
-# Keep only the active version and the previous one.
-for dir in /opt/swapi/v*; do
-  case "$dir" in "/opt/swapi/$tag" | "$previous") ;; *) rm -rf "$dir" ;; esac
-done
+# Keep only the active version and the previous one. A redeploy of the version
+# that was already active removes nothing: the link pointed at this tag, so
+# nothing here names the real previous version, and it must stay on disk.
+if [ "$previous" != "/opt/swapi/$tag" ]; then
+  for dir in /opt/swapi/v*; do
+    case "$dir" in "/opt/swapi/$tag" | "$previous") ;; *) rm -rf "$dir" ;; esac
+  done
+fi
 ```
+
+The block above is the only source of the script, and
+`scripts/swapi-update.test.sh` runs it in CI against a temporary directory. The
+host has its own copy: after any change to the block, the maintainer installs
+it again as `/usr/local/sbin/swapi-update` (owner root, mode 755). Until then
+the host runs the old script. Before 2026-11-12 that copy removed the rollback
+version on a redeploy, accepted any `v*.*.*` glob as a tag, checked the
+health once, three seconds after the restart, and on a redeploy or a retry
+printed a rollback to the tag itself; a host that still has it keeps all four
+behaviours until the block is installed again.
+
+After an upgrade, `/opt/swapi/` holds the new version and the one that was
+active before it. A redeploy of the active version (a reinstall, the proof of
+the deploy path, or a retry of a tag that did not answer) removes nothing, so
+the version to roll back to is still there; the next upgrade prunes as usual.
+
+The rollback command printed on "is not answering" names the version that
+served before the tag: each run of the tag that finds `current` pointing
+elsewhere records that version in `/opt/swapi/<tag>/previous`, and a redeploy
+or a retry (where `current` already points at the tag) reads it there. When
+there is no record (a first install, or a tag installed by the old copy) or the
+recorded version is no longer on disk (pruned since), it prints no `ln`
+command, says so, and points to `swapi-update` with an older tag.
 
 Rolling back a version is `sudo ln -sfn /opt/swapi/<previous tag> /opt/swapi/current`
 and `sudo systemctl restart swapi`.
 
+The script refuses a tag that is not `vX.Y.Z` (three numeric parts of 1 to 4
+digits, nothing before or after), the shape `swapi-deploy-gate` accepts
+(section 2.11), before it downloads anything: a pre-release name or a path
+never becomes a download address or a directory under `/opt/swapi/`.
+
 `swapi-update` does not keep the previous version running while it checks the
 new one: it switches the link and restarts the service **before** it knows the
-new version answers. If the new version does not start, the whole site (pages,
-`/api`, `/mcp`) is down from the restart until someone runs the rollback command
-the script printed. That is why the build runs **Native smoke** before the
-binary is attached (see [Automated deploy](#automated-deploy)).
+new version answers. After the restart it asks for `/api/people/1` up to 10
+times, one second apart, 2 seconds for each answer, and stops at the first
+one: a normal start is reported about a second after the restart, and a
+version that does not start is reported "is not answering" after about 10
+seconds (30 at the very most, if every check hangs). If the new version does
+not start, the whole site (pages, `/api`, `/mcp`) is down from the restart
+until someone runs the rollback command the script printed. That is why the
+build runs **Native smoke** before the binary is attached (see
+[Automated deploy](#automated-deploy)).
 
 #### 2.6 `swapi.service`
 
@@ -694,18 +839,35 @@ must allow `script-src https://static.cloudflareinsights.com` and
 route template, per UTC hour and per UTC day (`com.eldermoraes.stats`): no IP, no
 User-Agent, nothing about the client. Hours are kept 14 days and days 60 days,
 which is what the windows of `GET /api/stats?period=24h|7d|30d` and the `/stats`
-page need, each compared with the window before it; that is a few hundred KB at
-most.
+page need, each compared with the window before it. The set of route templates is
+closed: with all 59 route templates busy in every retained hour and day that is
+59 x 396 = 23,364 counters of about 0.1 KB, 2.3 MB; in practice a few hundred KB
+at most. The last bucket of a window is still filling while the window before is
+complete, so the response carries `lastBucketElapsed` (the share of that bucket
+that had passed) and the page scales the window before to the same elapsed time
+before it shows a "vs" figure.
 
 **Server times (2.8.0+).** The same filter times each counted request, from the
 first route filter to the end of the response (server time; the network is not
 in it), under the same route template. Per route and bucket it keeps a count,
 the sum, the sum of squares, the minimum, the maximum and 84 fixed histogram
 buckets (four per doubling from 0.05 ms to about 74 s, so p50/p95/p99 are within
-about 9 %; see `LatencyHistogram`). One cell is about 0.5 KB; with all 45 routes
-busy every retained hour and day that is under 9 MB, against `MemoryMax=300M`,
-and in practice a small fraction of it. The restore line in the log reports the
+about 9 %; see `LatencyHistogram`). One cell is about 0.5 KB; with all 59 route
+templates busy in every retained hour and day that is 23,364 cells, about
+11.7 MB, and about 14 MB with the counters, against `MemoryMax=300M`, and in
+practice a small fraction of it. The restore line in the log reports the
 live cell count and its size.
+
+**View lifetime.** Nothing in front of the origin caches `/api/stats`, so the
+app does it itself: the view of each window is built at most once per
+`swapi.stats.view-lifetime` (60 s, never more than the `max-age` the response
+advertises) and served again in between, with `max-age` reduced by its age
+(`StatsViewMemo`). The numbers are therefore up to 60 s behind the counters. For
+the probes this means a view built just before the REST probe does not hold that
+probe's request yet: with a week of history the checks pass anyway; on a host
+with no `/api/people/{id}` request in the last 24 hours, the `/api/stats` and
+`performance` checks of `verify-deploy.sh` can fail if someone opened the home page in the minute
+before, and passes when repeated a minute later.
 
 The counters live in memory and, when the unit has a state directory, are also
 written to `/var/lib/swapi/route-stats.txt`: every 10 minutes if they changed,
@@ -719,6 +881,18 @@ its counts and no times. A corrupt or unreadable file is ignored with one
 warning and replaced by the next snapshot. From 2.8.2, unknown lines (a route
 or record a later version added) are skipped with one warning; the rest is
 restored, and the next snapshot is written without them.
+
+A file larger than 16 MiB is not read: the start ignores it with one warning and
+begins from zero. The file is a few tens of KB in practice and about 11 MB with
+every route template busy in every retained hour and day and a wide spread of
+times, but nothing caps it when it is written (the theoretical maximum, every
+histogram bucket of every cell in use, is about 31 MB). So the app says when it
+has written a snapshot the next start would refuse: `usage counters snapshot …
+was written with … bytes, more than the … bytes a start accepts`, a warning,
+once per run of oversized snapshots, and `fits again` when a later one is
+within the limit. The file is written in full all the same; if that warning
+ever appears, keep the file before restarting, since the fix is a version with
+a higher limit (`SnapshotFile.MAX_BYTES`).
 
 `ProtectSystem=strict` keeps the rest of the disk read-only. The writable
 directory comes from a drop-in with `StateDirectory=swapi`: systemd creates
@@ -803,7 +977,12 @@ CPUWeight=50
 
 Caddy needs outbound network (Let's Encrypt), so it gets no `IPAddressDeny`.
 
-**`/etc/caddy/Caddyfile`** (rehearsal form: only `oracle.swapi.build`):
+**`/etc/caddy/Caddyfile`** (as it is on the host: copied from it on 2026-11-12,
+Caddy v2.11.9, after `text/markdown` joined the `encode` list that day. During the rehearsal the only site address was
+`oracle.swapi.build`, and there was no `www` block). On a new host do not
+paste the site names as they are: start with a name whose DNS already points
+at the host, and add each production name only after its DNS does (the rule
+below, and section 4):
 
 ```
 {
@@ -816,13 +995,33 @@ Caddy needs outbound network (Let's Encrypt), so it gets no `IPAddressDeny`.
 	}
 }
 
-oracle.swapi.build {
+swapi.build {
+	encode zstd gzip {
+		match {
+			header Content-Type text/html*
+			header Content-Type text/css*
+			header Content-Type text/plain*
+			header Content-Type text/javascript*
+			header Content-Type application/javascript*
+			header Content-Type application/json*
+			header Content-Type application/xml*
+			header Content-Type text/xml*
+			header Content-Type image/svg+xml*
+			header Content-Type text/markdown*
+		}
+	}
 	header -Server
 	header Strict-Transport-Security "max-age=63072000"
 	request_body {
 		max_size 1MB
 	}
 	reverse_proxy 127.0.0.1:5432
+}
+
+www.swapi.build {
+	header -Server
+	header Strict-Transport-Security "max-age=63072000"
+	redir https://swapi.build{uri} 308
 }
 ```
 
@@ -831,6 +1030,16 @@ oracle.swapi.build {
 - `protocols h1 h2`: no HTTP/3 advertised on UDP 443, which stays closed.
 - Only a header read timeout: no `write` or `idle` timeout, which would cut the
   streamed responses of `/mcp`.
+- `encode zstd gzip`: Caddy compresses, the application does not
+  (`quarkus.http.enable-compression` is not set). zstd when the client accepts it,
+  gzip otherwise (at equal weight in `Accept-Encoding`), nothing for a client
+  that accepts neither (Brotli is not offered). Only the content types in
+  `match` are compressed, and only answers of at least 512 bytes (Caddy's
+  default `minimum_length`): those carry `Vary: Accept-Encoding`, a smaller
+  one (`/robots.txt`, `/api/`) gets neither the encoding nor that `Vary`.
+  `text/event-stream` is not in the list, so a streamed answer of `/mcp` is
+  never buffered by the encoder: keep it out. `text/markdown` is in it since
+  2026-11-12 (`/docs.md` went from about 10 KB to under 3 KB on the wire).
 - HSTS: two years, the value the site has always sent, no `preload`, no
   `includeSubDomains`.
 - `reverse_proxy` overwrites `X-Forwarded-*` coming from clients, which is what
@@ -979,9 +1188,8 @@ to the host's Tailscale IP. sshd, the `deploy` user, the forced command and the
 pinned host key (section 2.11) are unchanged; only the address changes.
 
 The action is `tailscale/github-action`, pinned by commit with its version in a
-comment. To move to a newer version, take the commit of its tag
-(`git ls-remote --tags https://github.com/tailscale/github-action`), prefer a
-version at least two weeks old, and keep the comment in step.
+comment, like every action of the workflows. To move to a newer version, see
+[Moving the pin of an action](#moving-the-pin-of-an-action).
 
 On `release: published`, GitHub runs the workflow file **of the tagged
 commit**: the first release whose tag contains this path is the first deploy
@@ -1087,10 +1295,12 @@ without repository activity: re-enable it if so.
 ### 5. Rollback
 
 The only way back is the previous version on the host. `swapi-update` keeps the
-active version and the one before it under `/opt/swapi/`.
+active version and the one before it under `/opt/swapi/`, and a redeploy of the
+active version removes nothing (section 2.5; the host copy of the script must
+be the current one).
 
 ```bash
-ls /opt/swapi/                                   # v<previous> and v<current>
+ls /opt/swapi/                                   # v<current>, v<previous>; one more after a failed upgrade
 sudo ln -sfn /opt/swapi/<previous tag> /opt/swapi/current
 sudo systemctl restart swapi
 curl -fsS https://swapi.build/openapi.json | grep -o '"version"[^,]*'
@@ -1098,8 +1308,11 @@ scripts/verify-deploy.sh origin swapi.build      # from a checkout of <previous 
 ```
 
 `swapi-update` prints the exact `ln` command when a new version does not
-answer. A rollback is a host change (maintainer, or a session he opens for it);
-the next release then goes out through the normal pipeline. Rolling back to a
+answer, naming the version that served before that tag, also on a retry
+(section 2.5); with no record of it, or with it no longer on disk, it prints
+none. A
+rollback is a host change (maintainer, or a session he opens for it); the next
+release then goes out through the normal pipeline. Rolling back to a
 version older than the previous one: run `sudo swapi-update <tag> <sha256>` with
 the hash from that release's run summary.
 

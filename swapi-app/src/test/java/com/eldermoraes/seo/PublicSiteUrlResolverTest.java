@@ -55,6 +55,24 @@ class PublicSiteUrlResolverTest {
         assertEquals("https://preview.example/docs/mcp", urls.absoluteUrl(rc, "/docs/mcp"));
     }
 
+    // Brackets around something that is not an IPv6 address match the host
+    // pattern but do not parse as a URI: absoluteUrl would throw on every page.
+    @ParameterizedTest
+    @ValueSource(strings = {"[1]", "[.]", "[:]", "[1.2.3.4]", "[1]:8080"})
+    void aBracketedHostThatIsNotIpv6IsRefused(String hostile) {
+        PublicSiteUrlResolver urls = resolver(Optional.empty());
+        RoutingContext rc = request(Map.of("X-Forwarded-Proto", "https", "X-Forwarded-Host", hostile));
+        assertEquals(false, urls.siteRoot(rc).contains("["), urls.siteRoot(rc));
+        urls.absoluteUrl(rc, "/docs");
+    }
+
+    @Test
+    void aRealBracketedIpv6HostStillDecides() {
+        PublicSiteUrlResolver urls = resolver(Optional.empty());
+        RoutingContext rc = request(Map.of("X-Forwarded-Proto", "https", "X-Forwarded-Host", "[::1]:8443"));
+        assertEquals("https://[::1]:8443/docs", urls.absoluteUrl(rc, "/docs"));
+    }
+
     @Test
     void withoutHeadersTheRequestItselfDecides() {
         PublicSiteUrlResolver urls = resolver(Optional.empty());

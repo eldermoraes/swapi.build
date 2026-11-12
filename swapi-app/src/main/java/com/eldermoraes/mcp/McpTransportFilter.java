@@ -2,6 +2,7 @@ package com.eldermoraes.mcp;
 
 import io.quarkiverse.mcp.server.McpProtocolVersion;
 import io.quarkiverse.mcp.server.ResourceManager;
+import io.quarkiverse.mcp.server.runtime.ConnectionManager;
 import io.quarkus.runtime.configuration.MemorySize;
 import io.quarkus.vertx.http.runtime.BodyConfig;
 import io.quarkus.vertx.http.runtime.VertxHttpConfig;
@@ -52,6 +53,17 @@ import java.util.Optional;
  *   goes on to the extension, which already refuses them with -32601 without
  *   keeping anything.
  *
+ * A JSON array (a JSON-RPC batch) is answered here too, always the same way:
+ * 400 with -32600, without looking inside it (issue #70). The extension
+ * (2.0.3) refuses an array on its own, but only as a side effect: it casts the
+ * decoded body to a JSON object inside a try and answers the failed cast as a
+ * parse error (200, -32700), before any session or stream (or, without the
+ * Accept the transport requires, a bare 400 before that). That is not a
+ * contract. A version that accepted batches would serve a subscriptions/listen
+ * inside one with an open stream, so no array goes on to the extension, and
+ * McpListenLimitTest.theExtensionItselfStillRefusesABatch fails the day this
+ * guard stops being a second lock and becomes the only one.
+ *
  * The method in the body wins over the Mcp-Method header; the header alone
  * counts only when the body has no method (or is not JSON). Either way a
  * listen is answered here, so neither path opens a stream.
@@ -83,7 +95,7 @@ public class McpTransportFilter {
 
     static final String LISTEN_NOT_OFFERED = "subscriptions/listen is not offered: swapi.build data never"
             + " changes, so this server sends no notifications.";
-    static final String BATCH_WITH_LISTEN = "batch with subscriptions/listen is not supported";
+    static final String BATCH_NOT_SUPPORTED = "JSON-RPC batches are not supported: send one request per POST.";
 
     // JSON-RPC error codes, the same the extension uses (JsonRpcErrorCodes).
     private static final int INVALID_REQUEST = -32600;
@@ -92,14 +104,18 @@ public class McpTransportFilter {
     private static final int RESOURCE_NOT_FOUND = -32002;
 
     // Legacy 2024-11-05 transport: the SSE stream and the POSTs to
-    // /mcp/messages/<id> must land on the same instance, and in this topology
-    // they do not. Rejecting explicitly beats doing the handshake and dying silently.
+    // /mcp/messages/<id> need session-affine state, which this server never
+    // keeps (a restart drops it). Rejecting explicitly beats doing the
+    // handshake and dying silently.
     private static final String LEGACY_GONE = """
             {"error":"The legacy HTTP+SSE transport (spec 2024-11-05) is not \
             supported. Use the Streamable HTTP endpoint at /mcp."}""";
 
     @Inject
     ResourceManager resources;
+
+    @Inject
+    ConnectionManager sessions;
 
     private final Handler<RoutingContext> bodyHandler = quarkusBodyHandler();
 
@@ -136,7 +152,24 @@ public class McpTransportFilter {
             // calls) and DELETE (teardown), plus the CORS preflight OPTIONS.
             rc.response().setStatusCode(405).putHeader("Allow", "POST, DELETE").end();
         } else if (HttpMethod.DELETE.equals(method)) {
-            // Session teardown: there is no real session to destroy, so always ok.
+            // Session teardown: always 204. A genuine initialize does leave a
+            // session in this process, and without this it stayed until the
+            // idle timeout (issue #46), so the one the request names is freed
+            // here. remove() does nothing for an id the process does not hold
+            // (unknown, malformed). For one it holds, it takes the entry out
+            // of the map, closes the connection (a status flip), cancels its
+            // ping timer if any and drops its pending cancellations: all in
+            // memory, no I/O, fine on the event loop.
+            // The extension's own DELETE (2.0.3, terminateSession) is not
+            // used on purpose: it answers 200 for a known id, 404 for any
+            // other and 405 with a stateless MCP-Protocol-Version, and it logs
+            // the id the client sent. Nothing is logged here.
+            // ConnectionManager is an internal of the extension:
+            // McpDeleteSessionTest fails if an upgrade changes what this does.
+            String session = rc.request().getHeader(SESSION_HEADER);
+            if (session != null) {
+                sessions.remove(session);
+            }
             rc.response().setStatusCode(204).end();
         } else if (HttpMethod.POST.equals(method)) {
             // Reads the body (or fails with 413 over the limit, as the
@@ -161,12 +194,12 @@ public class McpTransportFilter {
         RequestBody body = rc.body();
         Object message = parse(body == null ? null : body.buffer());
         String headerMethod = rc.request().getHeader("Mcp-Method");
-        if (message instanceof JsonArray batch) {
-            if (batchContainsListen(batch)) {
-                end(rc, 400, error(null, INVALID_REQUEST, BATCH_WITH_LISTEN));
-                return;
-            }
-        } else if (message instanceof JsonObject request) {
+        if (message instanceof JsonArray) {
+            // Every batch, whatever it carries: see the class comment.
+            end(rc, 400, error(null, INVALID_REQUEST, BATCH_NOT_SUPPORTED));
+            return;
+        }
+        if (message instanceof JsonObject request) {
             Object id = request.getValue("id");
             String method = request.getValue("method") instanceof String s ? s : null;
             if (LISTEN.equals(method) || (method == null && LISTEN.equals(headerMethod))) {
@@ -203,8 +236,12 @@ public class McpTransportFilter {
     // Only the subscribe the extension itself would handle in the session era:
     // a supported (or absent) MCP-Protocol-Version and the Accept the
     // transport requires. With a bad version or Accept the extension answers
-    // 400 before it creates any session, and in the stateless era -32601;
-    // neither keeps anything nor opens a stream, so those go on to it.
+    // 400, and in the stateless era -32601; none records a subscriber or opens
+    // a stream, so those go on to it. The 400 for the Accept comes before any
+    // session exists. The 400 for the version does not (extension 2.0.3,
+    // issue #45): without a session id, or with one the process does not know,
+    // the session is created first and stays in the heap until
+    // quarkus.mcp.server.connection-idle-timeout (McpSessionIdleTimeoutTest).
     // Without Mcp-Session-Id the extension does NOT answer 400: auto-init
     // creates a session for the request and would record the subscriber like
     // any other, so that case is answered here too.
@@ -241,15 +278,6 @@ public class McpTransportFilter {
         JsonObject meta = params != null && params.getValue("_meta") instanceof JsonObject m ? m : null;
         String version = meta != null && meta.getValue(META_PROTOCOL_VERSION) instanceof String s ? s : null;
         return version != null && McpProtocolVersion.isStateless(version);
-    }
-
-    private static boolean batchContainsListen(JsonArray batch) {
-        for (Object item : batch) {
-            if (item instanceof JsonObject o && LISTEN.equals(o.getValue("method"))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     // Parsed with the same decoder the extension uses, so an escaped method

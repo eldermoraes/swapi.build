@@ -20,6 +20,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @QuarkusTest
 class StatsResourceTest {
 
+    // CORS echoes the request Origin, so a publicly cacheable answer must vary
+    // by it, as every other cacheable response does (CacheControlFilter).
+    @Test
+    void cacheableAnswerVariesByOrigin() {
+        given().when().get("/api/stats").then()
+                .statusCode(200)
+                .header("Cache-Control", equalTo(StatsResource.CACHE_CONTROL))
+                .header("Vary", containsString("Origin"));
+    }
+
     @Test
     void countsRequestsByRouteTemplate() {
         given().get("/api/people/1").then().statusCode(200);
@@ -111,6 +121,27 @@ class StatsResourceTest {
         given().when().get("/api/stats?period=7d&granularity=hour").then()
                 .statusCode(200)
                 .body("series.size()", equalTo(168));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "?period=24h", "?period=7d&granularity=hour", "?period=30d"})
+    void everyWindowSaysHowFarItsLastBucketHasFilled(String query) {
+        Number elapsed = given().when().get("/api/stats" + query).then()
+                .statusCode(200)
+                .extract().path("lastBucketElapsed");
+
+        assertTrue(elapsed != null && elapsed.doubleValue() >= 0 && elapsed.doubleValue() < 1,
+                "lastBucketElapsed is a share from 0 to under 1: " + elapsed);
+    }
+
+    @Test
+    void lastBucketElapsedIsDescribedInTheOpenApiSpec() {
+        given().when().get("/openapi.json").then()
+                .statusCode(200)
+                .body("components.schemas.StatsView.properties.lastBucketElapsed.type", equalTo("number"))
+                .body("components.schemas.StatsView.properties.lastBucketElapsed.description",
+                        containsString("last bucket"))
+                .body("paths.'/api/stats'.get.description", containsString("lastBucketElapsed"));
     }
 
     @Test

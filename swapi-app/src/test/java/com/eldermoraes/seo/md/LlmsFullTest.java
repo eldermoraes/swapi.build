@@ -1,6 +1,7 @@
 package com.eldermoraes.seo.md;
 
 import com.eldermoraes.seo.KnownEntities;
+import com.eldermoraes.seo.TaggedBody;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.response.Response;
 import jakarta.inject.Inject;
@@ -145,9 +146,22 @@ class LlmsFullTest {
 
     @Test
     void isBuiltOncePerSiteRoot() {
-        String first = copies.llmsFull("https://once.example").orElseThrow();
-        String second = copies.llmsFull("https://once.example").orElseThrow();
+        TaggedBody first = copies.llmsFull("https://once.example").orElseThrow();
+        TaggedBody second = copies.llmsFull("https://once.example").orElseThrow();
         Assertions.assertSame(first, second);
+    }
+
+    // #58: a cached body is kept with its validator, so the tag is computed once
+    // per cached body; a record copy is not cached and is tagged per request.
+    @Test
+    void cachedCopyKeepsItsValidator() {
+        TaggedBody first = copies.copy("/about", "https://once.example").orElseThrow();
+        TaggedBody second = copies.copy("/about", "https://once.example").orElseThrow();
+        Assertions.assertSame(first, second);
+
+        TaggedBody record = copies.copy("/resource/films/1", "https://once.example").orElseThrow();
+        Assertions.assertEquals(record.etag(), copies.copy("/resource/films/1", "https://once.example").orElseThrow().etag());
+        Assertions.assertNotEquals(record.etag(), copies.copy("/resource/films/1", "https://twice.example").orElseThrow().etag());
     }
 
     @Test

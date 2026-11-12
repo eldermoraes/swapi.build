@@ -9,10 +9,11 @@ import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.not;
 
 /**
- * An MCP session lives in one instance's heap and Vercel has no session
- * affinity: an Mcp-Session-Id issued by instance A arrives at instance B,
- * which does not know it. Without auto-init that is a 404 and the stateful
- * client breaks.
+ * An MCP session lives in one instance's heap, so an Mcp-Session-Id can reach
+ * an instance that does not know it: after a restart on the single
+ * self-hosted host today, and between instances on Vercel (no session
+ * affinity) when auto-init was introduced. Without auto-init that is a 404
+ * and the stateful client breaks.
  *
  * These tests use rest-assured, not McpAssured, on purpose: McpAssured
  * manages the session and therefore never reproduces the bug.

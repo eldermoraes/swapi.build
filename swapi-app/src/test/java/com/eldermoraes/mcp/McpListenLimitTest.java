@@ -1,13 +1,21 @@
 package com.eldermoraes.mcp;
 
+import io.quarkiverse.mcp.server.McpServer;
 import io.quarkiverse.mcp.server.ResourceManager;
 import io.quarkiverse.mcp.server.ResourceResponse;
 import io.quarkiverse.mcp.server.TextResourceContents;
+import io.quarkiverse.mcp.server.http.runtime.StreamableHttpMcpMessageHandler;
+import io.quarkiverse.mcp.server.runtime.config.McpServersRuntimeConfig;
 import io.quarkus.arc.ClientProxy;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
+import io.smallrye.config.SmallRyeConfig;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.Route;
+import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.BodyHandler;
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
@@ -49,6 +57,12 @@ class McpListenLimitTest {
 
     @Inject
     ResourceManager resources;
+
+    @Inject
+    Router router;
+
+    @Inject
+    StreamableHttpMcpMessageHandler extensionHandler;
 
     private static String statelessMeta() {
         return """
@@ -171,6 +185,143 @@ class McpListenLimitTest {
         assertTrue(body.getJsonObject("error").getString("message").contains("batch"), r.body());
     }
 
+    // Issue #70: a JSON array is one answer, whatever it carries. Before, only
+    // the batch with a listen was answered here (400, -32600) and every other
+    // one went on to the extension (200, -32700 "Unable to parse", or a bare
+    // 400 without the Accept the transport requires).
+    @Test
+    void everyBatchGetsTheSameAnswer() throws Exception {
+        String plain = """
+                [{"jsonrpc":"2.0","id":1,"method":"tools/list"},
+                 {"jsonrpc":"2.0","id":2,"method":"resources/list"}]
+                """;
+        String withListen = """
+                [{"jsonrpc":"2.0","id":1,"method":"tools/list"},
+                 {"jsonrpc":"2.0","id":2,"method":"subscriptions/listen","params":{"notifications":{}}}]
+                """;
+        String session = openSession();
+        Map<String, HttpRequest> batches = new java.util.LinkedHashMap<>();
+        batches.put("plain", post(plain).build());
+        batches.put("with a listen", post(withListen).build());
+        batches.put("empty", post("[]").build());
+        batches.put("of one", post("""
+                [{"jsonrpc":"2.0","id":1,"method":"tools/list"}]
+                """).build());
+        batches.put("of things that are not requests", post("[1,\"two\",null]").build());
+        batches.put("plain, with the listen header",
+                post(plain).header("Mcp-Method", "subscriptions/listen").build());
+        batches.put("plain, stateless", statelessPost("tools/list", plain).build());
+        batches.put("with a listen, stateless", statelessPost("subscriptions/listen", withListen).build());
+        batches.put("plain, without the Accept of the transport", HttpRequest.newBuilder(mcp)
+                .timeout(Duration.ofSeconds(10))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(plain)).build());
+
+        JsonObject expected = new JsonObject(sendWithDeadline(batches.get("with a listen"), DEADLINE_MS).body());
+        for (Map.Entry<String, HttpRequest> batch : batches.entrySet()) {
+            HttpResponse<String> r = sendWithDeadline(batch.getValue(), DEADLINE_MS);
+            String what = "batch " + batch.getKey() + ": " + r.statusCode() + " " + r.body();
+            assertEquals(400, r.statusCode(), what);
+            assertTrue(r.headers().firstValue("Content-Type").orElse("").startsWith("application/json"),
+                    "a JSON answer, not an event stream: " + what);
+            JsonObject body = new JsonObject(r.body());
+            assertEquals(-32600, body.getJsonObject("error").getInteger("code"), what);
+            assertTrue(body.getJsonObject("error").getString("message").contains("batch"), what);
+            assertTrue(body.containsKey("id") && body.getValue("id") == null, what);
+            assertFalse(body.containsKey("result"), what);
+            assertEquals(expected, body, what);
+        }
+
+        // In a session the answer is the same and carries the session id back,
+        // as every answer of the filter does.
+        HttpResponse<String> inSession = sendWithDeadline(sessionPost(session, plain).build(), DEADLINE_MS);
+        assertEquals(400, inSession.statusCode(), inSession.body());
+        assertEquals(expected, new JsonObject(inSession.body()));
+        assertEquals(session, inSession.headers().firstValue("Mcp-Session-Id").orElse(null));
+    }
+
+    // The stats page says so (pages/stats.ts, "a batch counts once"): /mcp
+    // counts HTTP requests, and a refused batch is one.
+    @Test
+    void batchIsCountedOnceAsMcp() throws Exception {
+        long before = mcpCount();
+        HttpResponse<String> r = sendWithDeadline(post("""
+                [{"jsonrpc":"2.0","id":1,"method":"tools/list"},
+                 {"jsonrpc":"2.0","id":2,"method":"tools/list"},
+                 {"jsonrpc":"2.0","id":3,"method":"tools/list"}]
+                """).build(), DEADLINE_MS);
+        assertEquals(400, r.statusCode(), r.body());
+        assertEquals(before + 1, mcpCount());
+    }
+
+    // Why the filter's batch guard exists, checked (issue #70). The filter
+    // answers every JSON array, so no batch reaches the extension; this test
+    // hands a batch to the extension's POST handler behind a route of its
+    // own, setting the server name as the extension's route does before it
+    // calls the same handler (HttpMcpServerRecorder; that wrapper is not
+    // reachable from here, so a batch split there would not be seen). In
+    // 2.0.3 the handler casts the decoded body to JsonObject inside its try,
+    // so any array is answered as a parse error (200, -32700) before a
+    // session or a stream exists: today the guard is a second lock. If the
+    // batch part fails, an upgraded extension started to accept batches: a
+    // subscriptions/listen inside one would open a stream with no limit, the
+    // guard became the only thing in the way, and it must stay (decide then
+    // whether batches should be served at all). If the control fails, it is
+    // this harness that broke (a renamed context key, a changed handler), not
+    // the extension's answer to batches.
+    @Test
+    void theExtensionItselfStillRefusesABatch() throws Exception {
+        String path = "/test-only/mcp-extension-batch";
+        Route route = router.post(path)
+                .handler(BodyHandler.create())
+                .handler(rc -> {
+                    rc.put("mcp.http.server-name", McpServer.DEFAULT); // HttpMcpServerRecorder.CONTEXT_KEY
+                    extensionHandler.handle(rc);
+                });
+        try {
+            // Control: the same route serves a single request, so the body
+            // does reach the handler and -32700 below is about the array.
+            HttpResponse<String> control = sendWithDeadline(HttpRequest.newBuilder(mcp.resolve(path))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json, text/event-stream")
+                    .header("MCP-Protocol-Version", STATELESS)
+                    .header("Mcp-Method", "tools/list")
+                    .POST(HttpRequest.BodyPublishers.ofString("""
+                            {"jsonrpc":"2.0","id":1,"method":"tools/list","params":{%s}}
+                            """.formatted(statelessMeta()))).build(), 5000);
+            assertEquals(200, control.statusCode(), control.body());
+            assertTrue(control.body().contains("sw_get"),
+                    "the test route no longer reaches the extension's handler: " + control.body());
+
+            for (String batch : java.util.List.of("""
+                    [{"jsonrpc":"2.0","id":1,"method":"tools/list"},
+                     {"jsonrpc":"2.0","id":2,"method":"resources/list"}]
+                    """, """
+                    [{"jsonrpc":"2.0","id":1,"method":"tools/list"},
+                     {"jsonrpc":"2.0","id":2,"method":"subscriptions/listen","params":{"notifications":{}}}]
+                    """, "[" + statelessListen("3") + "]")) {
+                HttpResponse<String> r = sendWithDeadline(HttpRequest.newBuilder(mcp.resolve(path))
+                        .timeout(Duration.ofSeconds(10))
+                        .header("Content-Type", "application/json")
+                        .header("Accept", "application/json, text/event-stream")
+                        .POST(HttpRequest.BodyPublishers.ofString(batch)).build(), DEADLINE_MS);
+                String what = "the extension answered a batch with " + r.statusCode() + " " + r.body();
+                assertEquals(200, r.statusCode(), what);
+                assertTrue(r.headers().firstValue("Content-Type").orElse("").startsWith("application/json"),
+                        "a JSON answer, not an event stream: " + r.headers().map());
+                assertTrue(r.body().strip().startsWith("{"), what);
+                JsonObject body = new JsonObject(r.body());
+                assertEquals(-32700, body.getJsonObject("error").getInteger("code"), what);
+                assertFalse(body.containsKey("result"), what);
+                assertTrue(r.headers().firstValue("Mcp-Session-Id").isEmpty(), "no session for a batch: " + what);
+            }
+        } finally {
+            route.remove();
+        }
+    }
+
     // Guard: on the stateless era the extension already refuses subscribe
     // without keeping anything (conferred on production, 27/10).
     @Test
@@ -274,8 +425,13 @@ class McpListenLimitTest {
 
     // The filter only answers a subscribe the extension would have handled.
     // With an unsupported protocol version or without the required Accept,
-    // the extension answers 400 itself, as before 2.12.1, before it creates
-    // any session, and opens nothing.
+    // the extension answers 400 itself, as before 2.12.1, records no
+    // subscriber and opens nothing. Only the Accept is refused before any
+    // session exists. A bad version is refused after the session lookup: with
+    // the real session id these tests send nothing new is created, but
+    // without one (or with an unknown one) extension 2.0.3 creates a session
+    // and leaves it to the idle timeout (issue #45,
+    // McpSessionIdleTimeoutTest.sessionsLeftByRefusedRequestsAreDropped).
     @Test
     void subscribeWithoutTheRequiredAcceptIsLeftToTheExtension() throws Exception {
         String session = openSession();
@@ -373,6 +529,20 @@ class McpListenLimitTest {
                 .post(mcp)
         .then()
                 .statusCode(413);
+    }
+
+    // Issue #45: a session (a genuine initialize, or one of the refused
+    // requests of McpSessionIdleTimeoutTest) stays in the heap until the
+    // extension's idle timeout, and its default is 30 minutes. The sessions
+    // carry nothing this server uses and auto-init serves a dropped id, so
+    // minutes are enough. Read from the mapping the extension itself reads.
+    @Test
+    void idleTimeoutIsMinutes() {
+        Duration timeout = ConfigProvider.getConfig().unwrap(SmallRyeConfig.class)
+                .getConfigMapping(McpServersRuntimeConfig.class)
+                .servers().get(McpServer.DEFAULT).connectionIdleTimeout();
+        assertTrue(timeout.compareTo(Duration.ofMinutes(1)) >= 0 && timeout.compareTo(Duration.ofMinutes(5)) <= 0,
+                "quarkus.mcp.server.connection-idle-timeout is " + timeout + ", expected 1 to 5 minutes");
     }
 
     @Test

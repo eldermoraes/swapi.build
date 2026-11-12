@@ -25,20 +25,25 @@ public class StatsResource {
 
     /**
      * The counters move with every request, so the deny-list CacheControlFilter
-     * (edge TTL of a year) must not apply: setting the header here opts out of it.
+     * (five minutes, browser and shared cache) must not apply: setting the header
+     * here opts out of it. This is the header of a view that was just built; one
+     * served again from {@link StatsViewMemo} carries what is left of its 60 seconds.
      */
-    static final String CACHE_CONTROL = "public, max-age=60";
+    static final String CACHE_CONTROL = cacheControl(StatsViewMemo.ADVERTISED.toSeconds());
 
     @Inject
-    RouteStats stats;
+    StatsViewMemo views;
 
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(summary = "Request counts per route for the last 24 hours, 7 days or 30 days",
             description = "Totals per route template (for example /api/people/{id} or /mcp) and per group "
                     + "(rest, mcp, pages, seo, other), a trend per hour or per UTC day, and the same totals for "
-                    + "the window right before, for comparison. Counted with no IP address, no User-Agent and "
-                    + "no other data about the client. Without parameters: the last 7 days, per day.")
+                    + "the window right before, for comparison. The last hour or day of the window is still "
+                    + "filling while the window before is complete: lastBucketElapsed says how much of it has "
+                    + "passed, so the two can be compared at the same elapsed time. Counted with no IP address, "
+                    + "no User-Agent and no other data about the client. Without parameters: the last 7 days, "
+                    + "per day.")
     @APIResponse(responseCode = "200", description = "Request counts for the window",
             content = @Content(schema = @Schema(implementation = RouteStats.StatsView.class)))
     @APIResponse(responseCode = "400", description = "Unknown period or granularity, or a combination the "
@@ -60,9 +65,17 @@ public class StatsResource {
         if (!p.accepts(g)) {
             throw badRequest("period " + p.id() + " does not accept granularity " + g.id());
         }
-        return RestResponse.ResponseBuilder.ok(stats.view(p, g))
-                .header(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL)
+        StatsViewMemo.Served served = views.view(p, g);
+        return RestResponse.ResponseBuilder.ok(served.view())
+                .header(HttpHeaders.CACHE_CONTROL, cacheControl(served.maxAgeSeconds()))
+                // Opting out of CacheControlFilter also drops its Vary: CORS
+                // echoes the request Origin, so a cacheable answer varies by it.
+                .header(HttpHeaders.VARY, "Origin")
                 .build();
+    }
+
+    private static String cacheControl(long maxAgeSeconds) {
+        return "public, max-age=" + maxAgeSeconds;
     }
 
     /** A fixed message: the rejected value is never echoed back. */

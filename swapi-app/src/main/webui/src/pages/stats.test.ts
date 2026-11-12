@@ -19,6 +19,7 @@ import {
   formatMs,
   latencyRows,
   latencyPath,
+  elapsedBuckets,
   GROUPS,
 } from './stats';
 
@@ -175,6 +176,138 @@ describe('stats page helpers', () => {
     v.performance!.routes = { '<img src=x>': latency(1, 1) };
     expect(renderStatsData(v, 'routes')).not.toContain('<img src=x>');
   });
+});
+
+// #54: the window ends with the hour or day still filling, the previous one is
+// complete. The server says how far the last bucket has filled
+// (lastBucketElapsed) and the page compares at the same elapsed time.
+describe('the comparison with the previous window', () => {
+  /** 100 requests a day for two weeks, read at 00:05 UTC: one request so far today. */
+  function flatAtTheStartOfADay(): StatsView {
+    const v = view('7d');
+    v.series = v.series.map((b, i) => ({
+      start: b.start,
+      total: i === 6 ? 1 : 100,
+      groups: { mcp: i === 6 ? 1 : 100 },
+    }));
+    v.total = 601;
+    v.routes = { '/mcp': 601 };
+    v.groups = { rest: 0, mcp: 601, pages: 0, seo: 0, other: 0 };
+    v.routeGroups = { '/mcp': 'mcp' };
+    v.previous = {
+      from: 'a',
+      to: 'b',
+      total: 700,
+      routes: { '/mcp': 700 },
+      groups: { rest: 0, mcp: 700, pages: 0, seo: 0, other: 0 },
+    };
+    v.lastBucketElapsed = 0.0034;
+    return v;
+  }
+
+  function render(v: StatsView, mode: 'routes' | 'groups'): HTMLElement {
+    const el = document.createElement('div');
+    el.innerHTML = renderStatsData(v, mode);
+    return el;
+  }
+
+  const notes = (el: HTMLElement) =>
+    [...el.querySelectorAll('.stats-kpi-note')].map((n) => n.textContent);
+
+  it('counts the time the window has covered, not its buckets', () => {
+    expect(elapsedBuckets(flatAtTheStartOfADay())).toBeCloseTo(6.0034);
+    expect(elapsedBuckets({ ...view('24h'), lastBucketElapsed: 0.5 })).toBeCloseTo(23.5);
+    expect(elapsedBuckets({ ...view('7d'), lastBucketElapsed: 0 })).toBe(6);
+  });
+
+  it('shows no change for flat traffic at the start of a day', () => {
+    const el = render(flatAtTheStartOfADay(), 'routes');
+    expect(notes(el)[0]).toBe('±0% vs the previous 7 days, scaled to 6.0 days');
+    expect(el.querySelector('[data-row="/mcp"] .stats-change')!.textContent).toBe('±0%');
+  });
+
+  it('compares with six of the seven previous days in the first second of a day', () => {
+    const v = flatAtTheStartOfADay();
+    v.lastBucketElapsed = 0;
+    v.total = 600; // nothing counted yet today; the previous 700 scale to 600
+    v.routes = { '/mcp': 600 };
+    const el = render(v, 'routes');
+    expect(notes(el)[0]).toBe('±0% vs the previous 7 days, scaled to 6.0 days');
+    expect(el.querySelector('[data-row="/mcp"] .stats-change')!.textContent).toBe('±0%');
+  });
+
+  it('shows no change for a flat group either', () => {
+    const el = render(flatAtTheStartOfADay(), 'groups');
+    expect(el.querySelector('[data-row="mcp"] .stats-change')!.textContent).toBe('±0%');
+    expect(el.querySelector('[data-row="rest"] .stats-change')!.textContent).toBe('—');
+  });
+
+  it('still shows a real change, measured at the same elapsed time', () => {
+    const v = flatAtTheStartOfADay();
+    v.lastBucketElapsed = 0.5; // 6.5 of 7 days: the previous 700 scale to 650
+    v.total = 780;
+    v.routes = { '/mcp': 780 };
+    const el = render(v, 'routes');
+    expect(notes(el)[0]).toBe('▲ 20% vs the previous 7 days, scaled to 6.5 days');
+    expect(el.querySelector('[data-row="/mcp"] .stats-change')!.textContent).toBe('▲ 20%');
+  });
+
+  it('says what is compared: under the tiles and in the ranking header', () => {
+    const v = flatAtTheStartOfADay();
+    v.lastBucketElapsed = 0.3;
+    const el = render(v, 'routes');
+    expect(el.querySelector('.stats-compare-note')!.textContent).toBe(
+      'The last day is still filling: 6.3 of 7 days have passed (UTC). ' +
+        'Every "vs" figure compares with the previous 7 days scaled to the same 6.3 days.',
+    );
+    const heads = [...el.querySelectorAll('.stats-ranking thead th')].map((th) => th.textContent);
+    expect(heads[heads.length - 1]).toBe('vs the previous 7 days, scaled');
+    const groupHeads = [...render(v, 'groups').querySelectorAll('.stats-ranking thead th')].map(
+      (th) => th.textContent,
+    );
+    expect(groupHeads[groupHeads.length - 1]).toBe('vs the previous 7 days, scaled');
+  });
+
+  it('speaks in hours for the 24 hour window', () => {
+    const v = { ...view('24h'), lastBucketElapsed: 0.5 };
+    const el = render(v, 'routes');
+    expect(notes(el)[0]).toBe('▲ 104% vs the previous 24 hours, scaled to 23.5 hours');
+    expect(el.querySelector('.stats-compare-note')!.textContent).toContain(
+      'The last hour is still filling: 23.5 of 24 hours have passed (UTC).',
+    );
+  });
+
+  it('takes the average over the time that has passed', () => {
+    const el = render(flatAtTheStartOfADay(), 'routes');
+    const tiles = [...el.querySelectorAll('.stats-kpi')];
+    const average = tiles[tiles.length - 1];
+    expect(average.querySelector('.stats-kpi-value')!.textContent).toBe('100.1');
+    expect(average.querySelector('.stats-kpi-note')!.textContent).toBe('over 6.0 days');
+  });
+
+  it('never rounds the elapsed time up to the whole window', () => {
+    const v = flatAtTheStartOfADay();
+    v.lastBucketElapsed = 0.9999;
+    expect(notes(render(v, 'routes'))[0]).toContain('scaled to 6.9 days');
+  });
+
+  it.each([undefined, -1, 1.5, Number.NaN, '0.5'])(
+    'compares and labels as before when the server sends lastBucketElapsed = %s',
+    (value) => {
+      const v = flatAtTheStartOfADay();
+      (v as { lastBucketElapsed?: unknown }).lastBucketElapsed = value;
+      expect(elapsedBuckets(v)).toBeNull();
+      const el = render(v, 'routes');
+      expect(notes(el)[0]).toBe('▼ 14% vs the previous 7 days');
+      expect(el.querySelector('.stats-compare-note')).toBeNull();
+      const heads = [...el.querySelectorAll('.stats-ranking thead th')].map((th) => th.textContent);
+      expect(heads[heads.length - 1]).toBe('vs the previous 7 days');
+      const tiles = [...el.querySelectorAll('.stats-kpi')];
+      expect(tiles[tiles.length - 1].querySelector('.stats-kpi-note')!.textContent).toBe(
+        'over 7 days',
+      );
+    },
+  );
 });
 
 describe('performance section', () => {

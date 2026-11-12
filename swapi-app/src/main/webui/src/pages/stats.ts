@@ -67,6 +67,11 @@ export interface StatsView {
     groups: Record<GroupId, number>;
   };
   performance?: Performance;
+  /**
+   * Share of the last bucket (`to`) that had passed when the numbers were
+   * read, 0 to under 1 (#54). Absent from a server older than the field.
+   */
+  lastBucketElapsed?: number;
 }
 
 export const PERIODS: { id: Period; label: string; previous: string }[] = [
@@ -97,7 +102,11 @@ export const GROUPS: { id: GroupId; label: string; hint: string }[] = [
     label: 'Pages and docs',
     hint: 'this site: full loads and in-site navigations since 2.11.0',
   },
-  { id: 'seo', label: 'SEO', hint: 'robots.txt, sitemap.xml, llms.txt, llms-full.txt and the Markdown copies (.md)' },
+  {
+    id: 'seo',
+    label: 'SEO',
+    hint: 'robots.txt, sitemap.xml, llms.txt, llms-full.txt and the Markdown copies (.md)',
+  },
   { id: 'other', label: 'Other', hint: 'unknown paths' },
 ];
 
@@ -135,6 +144,35 @@ export function formatChange(current: number, previous: number): string {
   return `${rounded > 0 ? '▲' : '▼'} ${Math.abs(rounded)}%`;
 }
 
+/**
+ * Buckets of time the window has covered: every bucket but the last, plus the
+ * share of the last one that has passed. The previous window always covers
+ * `series.length` buckets, so the two are only comparable at this length (#54).
+ * null when the server does not say how far the last bucket has filled.
+ */
+export function elapsedBuckets(view: StatsView): number | null {
+  const share = view.lastBucketElapsed;
+  if (typeof share !== 'number' || !(share >= 0 && share < 1) || view.series.length === 0) {
+    return null;
+  }
+  return view.series.length - 1 + share;
+}
+
+/**
+ * A count of the previous window brought to the time the current window has
+ * covered, spread evenly over the previous window. Unchanged when the server
+ * does not say how far the last bucket has filled.
+ */
+function scaleToElapsed(previous: number, view: StatsView): number {
+  const elapsed = elapsedBuckets(view);
+  return elapsed === null ? previous : (previous * elapsed) / view.series.length;
+}
+
+/** "6.3": one decimal, rounded down so a window never reads as complete. */
+function formatElapsed(elapsed: number): string {
+  return (Math.floor(elapsed * 10) / 10).toFixed(1);
+}
+
 export function groupLabel(id: GroupId): string {
   return GROUPS.find((g) => g.id === id)?.label ?? 'Other';
 }
@@ -153,6 +191,7 @@ export interface RankRow {
   label: string;
   group: GroupId;
   count: number;
+  /** The previous window's count at the same elapsed time (see `elapsedBuckets`). */
   previous: number;
   share: number;
 }
@@ -166,7 +205,7 @@ export function rankRows(view: StatsView, mode: View): RankRow[] {
       label: g.label,
       group: g.id,
       count: view.groups[g.id] ?? 0,
-      previous: view.previous.groups[g.id] ?? 0,
+      previous: scaleToElapsed(view.previous.groups[g.id] ?? 0, view),
       share: share(view.groups[g.id] ?? 0),
     })).sort((a, b) => b.count - a.count);
   }
@@ -177,7 +216,7 @@ export function rankRows(view: StatsView, mode: View): RankRow[] {
       label: route,
       group: view.routeGroups[route] ?? 'other',
       count,
-      previous: view.previous.routes[route] ?? 0,
+      previous: scaleToElapsed(view.previous.routes[route] ?? 0, view),
       share: share(count),
     }))
     .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
@@ -197,7 +236,19 @@ function kpis(view: StatsView, mode: View): string {
     null,
   );
   const top = rankRows(view, mode)[0];
-  const average = view.series.length ? view.total / view.series.length : 0;
+  const elapsed = elapsedBuckets(view);
+  const span = elapsed ?? view.series.length;
+  const average = span > 0 ? view.total / span : 0;
+  const scaled = elapsed === null ? '' : `, scaled to ${formatElapsed(elapsed)} ${unit}s`;
+  // What every "vs" figure on the page compares; only when the server says
+  // how far the last bucket has filled.
+  const compared =
+    elapsed === null
+      ? ''
+      : `<p class="stats-note stats-compare-note">${escapeHtml(
+          `The last ${unit} is still filling: ${formatElapsed(elapsed)} of ${view.series.length} ${unit}s have passed (UTC). ` +
+            `Every "vs" figure compares with ${period.previous} scaled to the same ${formatElapsed(elapsed)} ${unit}s.`,
+        )}</p>`;
   const tile = (label: string, value: string, note: string) => `
     <div class="stats-kpi sw-panel">
       <span class="stats-kpi-label">${escapeHtml(label)}</span>
@@ -209,7 +260,7 @@ function kpis(view: StatsView, mode: View): string {
       ${tile(
         'Requests',
         numbers.format(view.total),
-        `${formatChange(view.total, view.previous.total)} vs ${period.previous}`,
+        `${formatChange(view.total, scaleToElapsed(view.previous.total, view))} vs ${period.previous}${scaled}`,
       )}
       ${tile(
         mode === 'groups' ? 'Top group' : 'Top route',
@@ -226,9 +277,10 @@ function kpis(view: StatsView, mode: View): string {
       ${tile(
         `Average per ${unit}`,
         numbers.format(Math.round(average * 10) / 10),
-        `over ${view.series.length} ${unit}s`,
+        `over ${elapsed === null ? view.series.length : formatElapsed(elapsed)} ${unit}s`,
       )}
-    </div>`;
+    </div>
+    ${compared}`;
 }
 
 function chart(view: StatsView, mode: View): string {
@@ -307,6 +359,7 @@ function shareCell(row: RankRow): string {
 
 function ranking(view: StatsView, mode: View): string {
   const period = PERIODS.find((p) => p.id === view.period)!;
+  const versus = `vs ${period.previous}${elapsedBuckets(view) === null ? '' : ', scaled'}`;
   const rows = rankRows(view, mode);
   if (mode === 'groups') {
     const body = rows
@@ -343,7 +396,7 @@ function ranking(view: StatsView, mode: View): string {
         <h2 class="stats-heading" id="stats-ranking">Groups</h2>
         <div class="sw-table-wrap">
           <table class="sw-table stats-table stats-ranking">
-            <thead><tr><th scope="col">#</th><th scope="col">Group</th><th scope="col">Requests</th><th scope="col">Share</th><th scope="col">vs ${escapeHtml(period.previous)}</th></tr></thead>
+            <thead><tr><th scope="col">#</th><th scope="col">Group</th><th scope="col">Requests</th><th scope="col">Share</th><th scope="col">${escapeHtml(versus)}</th></tr></thead>
             <tbody>${body}</tbody>
           </table>
         </div>
@@ -370,7 +423,7 @@ function ranking(view: StatsView, mode: View): string {
         rows.length
           ? `<div class="sw-table-wrap">
           <table class="sw-table stats-table stats-ranking">
-            <thead><tr><th scope="col">#</th><th scope="col">Route</th><th scope="col">Group</th><th scope="col">Requests</th><th scope="col">Share</th><th scope="col">vs ${escapeHtml(period.previous)}</th></tr></thead>
+            <thead><tr><th scope="col">#</th><th scope="col">Route</th><th scope="col">Group</th><th scope="col">Requests</th><th scope="col">Share</th><th scope="col">${escapeHtml(versus)}</th></tr></thead>
             <tbody>${body}</tbody>
           </table>
         </div>`

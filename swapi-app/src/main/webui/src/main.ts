@@ -1,6 +1,6 @@
 import './style.css';
 import { bindHome } from './pages/home';
-import { ResourceExplorer } from './resource-actions';
+import { ResourceExplorer, type ActionResult } from './resource-actions';
 import { registerWebMcp } from './webmcp';
 import { renderWebMcp, updateWebMcpStatus } from './pages/webmcp';
 import { bindDocumentation } from './pages/documentation';
@@ -39,10 +39,20 @@ function announce(message: string) {
   });
 }
 
+/** What a search announces: the number of records it found. */
+function resultCount(found: number): string {
+  if (found === 0) return 'No results found.';
+  return found === 1 ? '1 result found.' : `${found} results found.`;
+}
+
 function updateActiveNav(page: Page) {
   const active = activeNavHref(page);
   document.querySelectorAll('.nav-link').forEach((link) => {
-    link.classList.toggle('active', active !== null && link.getAttribute('href') === active);
+    const isActive = active !== null && link.getAttribute('href') === active;
+    link.classList.toggle('active', isActive);
+    // The underline is for the eye; this says "current page" to a screen reader.
+    if (isActive) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
   });
 }
 
@@ -78,10 +88,95 @@ function writeHead(
 const container = document.getElementById('main-content')!;
 const pageLifecycle = new AbortController();
 
+// The height of the sticky header, for the scroll padding of the root
+// (base.css): a #fragment target lands below the header, not under it.
+const header = document.querySelector('.sw-header');
+function syncHeaderHeight(): void {
+  if (!header) return;
+  const height = Math.ceil(header.getBoundingClientRect().height);
+  document.documentElement.style.setProperty('--sw-header-height', `${height}px`);
+}
+syncHeaderHeight();
+const headerResize =
+  header && typeof ResizeObserver === 'function' ? new ResizeObserver(syncHeaderHeight) : null;
+if (header) headerResize?.observe(header);
+
 // The document (path and query) the page shows (2.15.0). A link or a Back and
 // Forward that only changes the #fragment does not fetch it again: the page
-// scrolls to the fragment, or the browser restores the scroll on its own.
+// scrolls to the fragment, or goes back to where the reader was on that entry.
 let shownDocument: string | null = window.location.pathname + window.location.search;
+
+// Back and Forward put the reader where they were (issue #71). The browser
+// cannot do it here: it restores the scroll when the address changes, and the
+// page of that address arrives later, over a page of another height. So the
+// client restores it, per history entry, once the page is on screen. It takes
+// the job from the browser only when the reader first leaves a page
+// (`rememberScroll`), never while the document loads: after a reload the
+// browser restores the scroll itself, as the page grows, and "manual" set at
+// the start stopped it half way (seen in Chromium). The positions live in
+// memory, so the browser gets the job back when the page is left.
+window.addEventListener('pagehide', () => (history.scrollRestoration = 'auto'), {
+  signal: pageLifecycle.signal,
+});
+
+const scrollPositions = new Map<string, { left: number; top: number }>();
+// Keys of this load never match the ones an earlier load left in the history.
+const entryKeyPrefix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+let entriesPushed = 0;
+
+/** The state of an entry the client pushes: its key in `scrollPositions`. */
+function newEntryState(): { swEntry: string } {
+  return { swEntry: `${entryKeyPrefix}-${++entriesPushed}` };
+}
+
+/** The key of the entry the address is on; an entry the client did not push has its URL for key. */
+function entryKey(): string {
+  const state: unknown = history.state;
+  const key = state && typeof state === 'object' ? (state as { swEntry?: unknown }).swEntry : null;
+  if (typeof key === 'string') return key;
+  return `url:${window.location.pathname}${window.location.search}${window.location.hash}`;
+}
+
+// The entry whose page is on screen; null while the address is not the page
+// shown (a navigation waits for its page, or did not show it).
+let shownEntry: string | null = entryKey();
+
+/**
+ * The reader leaves the entry of the address: keeps where they are, for the
+ * entry whose page is on screen. From here on the client restores the scroll
+ * of this entry, and of the entries pushed from it, which take its mode.
+ */
+function rememberScroll(): void {
+  history.scrollRestoration = 'manual';
+  if (shownEntry === null) return;
+  scrollPositions.set(shownEntry, { left: window.scrollX, top: window.scrollY });
+}
+
+/** The address moved to another entry of the page on screen (only the #fragment changed). */
+function followFragmentEntry(): void {
+  if (shownEntry !== null) shownEntry = entryKey();
+}
+
+/** Puts the reader where they were on the entry of the address; false when nothing was kept. */
+function restoreScroll(): boolean {
+  const kept = scrollPositions.get(entryKey());
+  if (!kept) return false;
+  // At once: the smooth scroll of the stylesheet is for jumps inside a page.
+  window.scrollTo({ ...kept, behavior: 'instant' });
+  return true;
+}
+
+/**
+ * The page of the address is on screen: after Back or Forward the reader is
+ * where they were on that entry; otherwise at its #fragment (when `fragment`),
+ * else at the top.
+ */
+function placeScroll(source: NavigationSource | null, fragment = false): void {
+  shownEntry = entryKey();
+  if (source?.via === 'history' && restoreScroll()) return;
+  if (fragment && scrollToFragment()) return;
+  window.scrollTo(0, 0);
+}
 
 /** Scrolls to the element the #fragment of the address names; false when there is none. */
 function scrollToFragment(): boolean {
@@ -108,24 +203,42 @@ function abortDocumentLoad(): void {
 
 const explorer = new ResourceExplorer(
   container,
-  (path, entity) => {
+  (path, entity, found) => {
     cancelPending();
     abortDocumentLoad();
     const generation = ++navigationGeneration;
-    if (window.location.pathname !== path) history.pushState(null, '', path);
+    const arrival = explorerNavigation;
+    if (window.location.pathname !== path) {
+      rememberScroll();
+      history.pushState(newEntryState(), '', path);
+    }
+    // The explorer's page is the document shown, also when it opened it on its
+    // own (Random, a WebMCP tool): Back to the address before is a navigation.
+    shownDocument = window.location.pathname + window.location.search;
+    shownEntry = entryKey();
     updateActiveNav(getRoute(path).page);
     // Written after the record arrived, from the record: a record address never
     // shows its fallback title ("Films #1") on the way to its real one.
     const title = writeHead(path, { entity });
+    if (found !== undefined) {
+      // A search on the list shown: the page is the same, so the reader stays
+      // where they are (scroll, focus) and hears the news, the count.
+      announce(resultCount(found));
+      return;
+    }
     requestAnimationFrame(() => {
       if (generation !== navigationGeneration) return;
-      window.scrollTo(0, 0);
+      placeScroll(arrival);
       container.focus({ preventScroll: true });
       announce(spokenTitle(title));
     });
   },
   () => {
     abortDocumentLoad();
+    // The reader acted on the page still shown: the navigation that waited for
+    // its page will not show it.
+    const interrupted = waitingNavigation();
+    if (interrupted) keepShownPage(interrupted);
     navigationGeneration++;
   },
 );
@@ -151,9 +264,80 @@ function bindPage(page: Page): void {
 /**
  * How a navigation started. A link click carries the full URL it left (path,
  * query and fragment), so a failed fetch can put the address back; Back and
- * Forward ('history') never have their history rewritten.
+ * Forward ('history') never have their history rewritten. `fromShown` is false
+ * when that URL was not the page on screen: the click came while a Back or
+ * Forward still waited for its page.
  */
-type NavigationSource = { via: 'start' } | { via: 'history' } | { via: 'link'; from: string };
+type NavigationSource =
+  | { via: 'start' }
+  | { via: 'history' }
+  | { via: 'link'; from: string; fromShown: boolean };
+
+// The navigation that waits for its page (the document of a server-rendered
+// page or of a record) while the page before is still on screen.
+let waiting: { source: NavigationSource; generation: number } | null = null;
+
+function waitingNavigation(): NavigationSource | null {
+  return waiting?.generation === navigationGeneration ? waiting.source : null;
+}
+
+/** Runs the wait of a navigation for its page, as the waiting one while it lasts. */
+async function whileWaiting<T>(
+  source: NavigationSource,
+  generation: number,
+  wait: () => Promise<T>,
+): Promise<T> {
+  const entry = { source, generation };
+  waiting = entry;
+  try {
+    return await wait();
+  } finally {
+    if (waiting === entry) waiting = null;
+  }
+}
+
+/**
+ * A navigation did not show its page (it failed, or the reader acted on the
+ * page still shown): the content and the head stay those of the page that was
+ * there. After a link the address goes back to the full URL it left, which is
+ * again the document shown (unless a Back or Forward had moved the address
+ * first); after Back or Forward the history is left alone (rewriting it would
+ * lose an entry). When the address is not the page shown, no document is taken
+ * for the one shown, so the next navigation fetches whatever it names.
+ */
+function keepShownPage(source: NavigationSource): void {
+  updateActiveNav(getRoute(headPath).page);
+  if (source.via === 'link') {
+    // The entry keeps its state: it is now an entry of the page shown, and the
+    // reader's place on it is kept under its key when they leave.
+    history.replaceState(history.state, '', source.from);
+    if (source.fromShown) {
+      shownDocument = window.location.pathname + window.location.search;
+      shownEntry = entryKey();
+      return;
+    }
+  }
+  shownDocument = null;
+  shownEntry = null;
+}
+
+// The navigation the explorer is opening a page for, so its commit places the
+// scroll as that navigation asks (Back and Forward: where the reader was).
+let explorerNavigation: NavigationSource | null = null;
+
+/** Runs the explorer for a navigation: the list or the record of the address. */
+async function openWithExplorer(
+  source: NavigationSource,
+  tool: 'sw_list' | 'sw_get',
+  args: { resource: string; id?: number },
+): Promise<ActionResult> {
+  explorerNavigation = source;
+  try {
+    return await explorer.execute(tool, args, { human: true });
+  } finally {
+    if (explorerNavigation === source) explorerNavigation = null;
+  }
+}
 
 /**
  * A page whose <main> the server draws (2.11.0, slice E1). The first load adopts
@@ -182,11 +366,13 @@ async function showServerPage(
   const controller = new AbortController();
   documentLoad = controller;
   container.setAttribute('aria-busy', 'true');
-  const result = await loadServerMain(container, path, route, {
-    signal: controller.signal,
-    isCurrent: () => generation === navigationGeneration,
-    search: window.location.search,
-  });
+  const result = await whileWaiting(source, generation, () =>
+    loadServerMain(container, path, route, {
+      signal: controller.signal,
+      isCurrent: () => generation === navigationGeneration,
+      search: window.location.search,
+    }),
+  );
   if (documentLoad === controller) documentLoad = null;
   if (generation !== navigationGeneration) return;
   container.removeAttribute('aria-busy');
@@ -206,23 +392,15 @@ async function showServerPage(
       title = writeHead(path);
       break;
     case 'error':
-      // The content and the head stay those of the page that was there. After a
-      // link the address goes back to the full URL it left; after Back or
-      // Forward the history is left alone (rewriting it would lose an entry).
       showLoadFailure(container, path);
-      if (source.via === 'link') history.replaceState(null, '', source.from);
-      updateActiveNav(getRoute(headPath).page);
-      // The page shown is still the one before; after Back or Forward the
-      // address is not it, so the next navigation fetches whatever it names.
-      shownDocument =
-        source.via === 'link' ? window.location.pathname + window.location.search : null;
+      keepShownPage(source);
       return;
     default:
       // 'reload' (a full load is on its way) or 'aborted' (a newer navigation).
       return;
   }
   // A link to /faq#compare lands on the comparison, not on the top (2.15.0).
-  if (result !== 'ok' || !scrollToFragment()) window.scrollTo(0, 0);
+  placeScroll(source, result === 'ok');
   container.focus({ preventScroll: true });
   announce(spokenTitle(title));
 }
@@ -251,10 +429,11 @@ async function showRecord(
     return;
   }
 
-  const result = await explorer.execute(
-    'sw_get',
-    { resource: route.type!.toUpperCase(), id: Number(route.id) },
-    { human: true },
+  const result = await whileWaiting(source, generation, () =>
+    openWithExplorer(source, 'sw_get', {
+      resource: route.type!.toUpperCase(),
+      id: Number(route.id),
+    }),
   );
   if (generation !== navigationGeneration || result.ok) return;
   if (result.error.code === 'NOT_FOUND') {
@@ -267,11 +446,9 @@ async function showRecord(
     return;
   }
   if (result.error.code === 'SUPERSEDED' || result.error.code === 'CANCELLED') return;
-  // The document did not come (5xx, network): the content and the head stay
-  // those of the page that was there, with the explorer's alert. After a link
-  // the address goes back to the URL it left; Back and Forward are left alone.
-  if (source.via === 'link') history.replaceState(null, '', source.from);
-  updateActiveNav(getRoute(headPath).page);
+  // The document did not come (5xx, network): the explorer's alert is on the
+  // page that was there.
+  keepShownPage(source);
 }
 
 async function navigate(source: NavigationSource) {
@@ -323,11 +500,9 @@ async function navigate(source: NavigationSource) {
       heading.className = 'sw-page-title';
       heading.textContent = 'Loading resource…';
       container.appendChild(heading);
-      const result = await explorer.execute(
-        'sw_list',
-        { resource: route.type!.toUpperCase() },
-        { human: true },
-      );
+      const result = await openWithExplorer(source, 'sw_list', {
+        resource: route.type!.toUpperCase(),
+      });
       if (generation === navigationGeneration && !result.ok) {
         // The list did not arrive (network, 5xx): the fallback head of its type,
         // so the head no longer describes the page before.
@@ -351,7 +526,7 @@ async function navigate(source: NavigationSource) {
   // An async render can finish after another navigation: do not steal the new page's focus/announcement
   if (generation !== navigationGeneration) return;
 
-  window.scrollTo(0, 0);
+  placeScroll(source);
   container.focus({ preventScroll: true });
   announce(spokenTitle(title));
 }
@@ -369,6 +544,10 @@ document.addEventListener(
 
     const href = anchor.getAttribute('href');
     if (!href) return;
+    // A "#…" link is the browser's (the skip link moves the focus too): it adds
+    // an entry and scrolls. The reader's place before the jump is kept here,
+    // and the hashchange listener below follows the new entry.
+    if (href.startsWith('#')) rememberScroll();
 
     // Skip external links, anchor links (#), downloads, and links that open in new tabs
     if (
@@ -385,7 +564,11 @@ document.addEventListener(
     // redraw; the address takes the fragment and the page scrolls to it.
     const target = new URL(href, window.location.href);
     if (target.hash && target.pathname + target.search === shownDocument) {
-      if (target.hash !== window.location.hash) history.pushState(null, '', target.hash);
+      if (target.hash !== window.location.hash) {
+        rememberScroll();
+        history.pushState(newEntryState(), '', target.hash);
+        followFragmentEntry();
+      }
       scrollToFragment();
       return;
     }
@@ -394,12 +577,23 @@ document.addEventListener(
     // address the first click pushed, and a failure would put that address
     // back over the content that stayed: the URL and the page would disagree.
     if (linkInFlight === href) return;
-    const from = window.location.pathname + window.location.search + window.location.hash;
+    // A click while another link's navigation waits for its page: the page
+    // shown is still the one that link left, so a failure goes back there.
+    // While a Back or Forward waits, the address is already not the page shown.
+    const pending = waitingNavigation();
+    const from =
+      pending?.via === 'link'
+        ? pending.from
+        : window.location.pathname + window.location.search + window.location.hash;
+    const fromShown = pending?.via === 'link' ? pending.fromShown : pending === null;
+    // The reader leaves the page on screen: their place on it is kept for Back.
+    rememberScroll();
+    shownEntry = null;
     if (href !== window.location.pathname + window.location.search) {
-      history.pushState(null, '', href);
+      history.pushState(newEntryState(), '', href);
     }
     linkInFlight = href;
-    void navigate({ via: 'link', from }).finally(() => {
+    void navigate({ via: 'link', from, fromShown }).finally(() => {
       if (linkInFlight === href) linkInFlight = null;
     });
   },
@@ -409,20 +603,38 @@ document.addEventListener(
 window.addEventListener(
   'popstate',
   () => {
-    // Back or Forward between two fragments of the page shown (2.15.0): the
-    // browser restores the scroll; nothing to fetch or redraw.
-    if (window.location.pathname + window.location.search === shownDocument) return;
+    // An entry the client never left is still the browser's to restore (the
+    // address bar made it): its scroll is left alone below.
+    const browserRestores = history.scrollRestoration === 'auto';
+    // The reader left the page on screen: their place on it is kept.
+    rememberScroll();
+    // Back or Forward between two fragments of the page shown (2.15.0): nothing
+    // to fetch or redraw; the reader is where they were on that entry. When
+    // nothing was kept for it (a reload came between), at its fragment, and
+    // without one at the top.
+    if (window.location.pathname + window.location.search === shownDocument) {
+      followFragmentEntry();
+      if (restoreScroll() || scrollToFragment() || browserRestores) return;
+      if (!window.location.hash) window.scrollTo(0, 0);
+      return;
+    }
+    shownEntry = null;
     void navigate({ via: 'history' });
   },
   {
     signal: pageLifecycle.signal,
   },
 );
+// The browser moved the address to another fragment of the page on screen (a
+// "#…" link, the address bar): what the reader scrolls from here on belongs to
+// that entry. After Back and Forward, popstate has already done the same.
+window.addEventListener('hashchange', followFragmentEntry, { signal: pageLifecycle.signal });
 navigate({ via: 'start' });
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     pageLifecycle.abort();
+    headerResize?.disconnect();
     navigationGeneration++;
     explorer.dispose();
     webmcp.dispose();

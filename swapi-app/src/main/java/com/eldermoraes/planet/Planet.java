@@ -105,12 +105,7 @@ public class Planet extends SWObject {
     }
 
     public List<String> getResidents() {
-        if (residents != null && getBaseUrl() != null) {
-            return residents.stream()
-                    .map(resident -> getBaseUrl() + resident)
-                    .toList();
-        }
-        return residents;
+        return absolute(residents);
     }
 
     public void setResidents(List<String> residents) {
@@ -118,12 +113,7 @@ public class Planet extends SWObject {
     }
 
     public List<String> getFilms() {
-        if (films != null && getBaseUrl() != null) {
-            return films.stream()
-                    .map(film -> getBaseUrl() + film)
-                    .toList();
-        }
-        return films;
+        return absolute(films);
     }
 
     public void setFilms(List<String> films) {
@@ -147,7 +137,7 @@ public class Planet extends SWObject {
     }
 
     public String getUrl() {
-        return getBaseUrl() + url;
+        return absolute(url);
     }
 
     public void setUrl(String url) {

@@ -111,6 +111,16 @@ class SwapiPromptsTest {
         }
     }
 
+    // A format character outside the BMP (the Unicode tag block, U+E0000 to
+    // U+E007F, invisible text) is two UTF-16 units: checked unit by unit, each
+    // is a surrogate and the character passes.
+    @Test
+    void characterProfileRejectsFormatCharactersOutsideTheBmp() {
+        Map<String, String> arguments = new HashMap<>();
+        arguments.put("name", "Luke" + new String(Character.toChars(0xE0049)) + new String(Character.toChars(0xE0047)));
+        assertInvalid(arguments);
+    }
+
     // Review of 2.13.0: isISOControl misses the line and paragraph separators
     // (a new line to a model), the format characters (U+202E reverses the
     // text that follows, U+200B and U+FEFF hide), and the double quote, which

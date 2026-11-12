@@ -18,9 +18,10 @@ name: Native binary and deploy
 #   swapi-app/pom.xml (dependency changes, version bumps) or the server's code
 #   and resources (swapi-app/src/main/java, swapi-app/src/main/resources: a
 #   filter such as McpTransportFilter, application.properties, templates,
-#   data): runs the suite, the build, the GLIBC check and the native smoke
-#   without uploading or deploying anything, so a change to the pipeline, to
-#   the smoke or to what goes into the native image is proven before merge.
+#   data): runs the build, the GLIBC check and the native smoke without
+#   uploading or deploying anything, so a change to the pipeline, to the smoke
+#   or to what goes into the native image is proven before merge. The test
+#   job is skipped there: ci.yml already runs the suite on every pull request.
 #
 # Why the deploy is a job here (needs: build) and not a workflow_run of its
 # own: it gets the hash straight from the build job's output, in the same run,
@@ -75,22 +76,23 @@ env:
 
 jobs:
   test:
-    # Skipped on a redeploy (workflow_dispatch with sha256): the tag was
-    # already tested and built when it was released.
-    if: ${{ !inputs.sha256 }}
+    # Skipped on a pull request: ci.yml runs on every pull request and already
+    # runs this suite on the same commit, so a second run here proved nothing
+    # (issue #61). Skipped on a redeploy (workflow_dispatch with sha256): the
+    # tag was already tested and built when it was released.
+    if: ${{ github.event_name != 'pull_request' && !inputs.sha256 }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Validate the tag
-        if: github.event_name != 'pull_request'
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a release tag: '$TAG'"; exit 1; }
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.sha || format('refs/tags/{0}', env.TAG) }}
+          ref: refs/tags/${{ env.TAG }}
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: '25'
@@ -108,6 +110,14 @@ jobs:
 
   build:
     needs: test
+    # After a green suite, or on a pull request, where test is skipped on
+    # purpose. The condition is explicit because a skipped `needs` skips this
+    # job too unless its `if` has a status function. A suite that failed, or
+    # that was skipped by a redeploy, never builds; scripts/
+    # native-binary-triggers.test.sh checks every trigger in CI.
+    if: >-
+      ${{ !cancelled() && (needs.test.result == 'success' ||
+      (needs.test.result == 'skipped' && github.event_name == 'pull_request')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -123,7 +133,7 @@ jobs:
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a release tag: '$TAG'"; exit 1; }
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event_name == 'pull_request' && github.sha || format('refs/tags/{0}', env.TAG) }}
 
@@ -134,7 +144,7 @@ jobs:
           pom=$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p' pom.xml | head -1)
           [ "v$pom" = "$TAG" ] || { echo "tag $TAG does not match pom version $pom"; exit 1; }
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: '25'
@@ -186,8 +196,8 @@ jobs:
       # 2.11.0+: nobody ran the binary before this, and swapi-update restarts the
       # host before it knows the new version answers (docs/DEPLOY.md). Started
       # here on the runner (glibc 2.39 >= the 2.35 it needs), it must serve
-      # /api/people/1, /openapi.json and the four server-rendered pages
-      # (scripts/native-smoke.sh). A failure stops the job: nothing is attached
+      # /api/people/1, /openapi.json, the server-rendered pages, the Markdown
+      # copies and MCP (scripts/native-smoke.sh). A failure stops the job: nothing is attached
       # and the deploy never begins. Runs on pull requests too, like the build.
       - name: Native smoke
         run: |
@@ -246,7 +256,7 @@ jobs:
           [[ "$ORIGIN_IP" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || { echo "vars.SWAPI_ORIGIN_IP is not an IPv4 address"; exit 1; }
           [[ "$TS_HOST" =~ ^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])(\.[0-9]{1,3}){2}$ ]] || { echo "vars.ORACLE_TS_HOST is not a Tailscale IPv4 address (100.64.0.0/10)"; exit 1; }
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: refs/tags/${{ env.TAG }}
 

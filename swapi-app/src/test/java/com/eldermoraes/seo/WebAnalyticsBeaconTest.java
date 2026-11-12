@@ -3,6 +3,8 @@ package com.eldermoraes.seo;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
+import io.restassured.response.Response;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -52,6 +54,33 @@ class WebAnalyticsBeaconTest {
                 .statusCode(404)
                 .body(containsString("<script defer src=\"https://static.cloudflareinsights.com/beacon.min.js\" "
                         + "data-cf-beacon='{\"token\": \"" + TOKEN + "\"}'></script>\n  </body>"));
+    }
+
+    // #58: the validator is of the bytes sent, beacon included, so turning the
+    // beacon on or off on the host (a restart, not a release) changes it. The
+    // document without the beacon is the one the site serves with no token:
+    // SiteShell puts "  <beacon>\n  " before the closing body tag.
+    @ParameterizedTest
+    @ValueSource(strings = {"/", "/docs", "/privacy", "/resource/people/1"})
+    void validatorCoversTheBeacon(String path) {
+        Response response = given().accept("text/html").when().get(path);
+        String body = response.asString();
+        String beacon = "  <script defer src=\"https://static.cloudflareinsights.com/beacon.min.js\" "
+                + "data-cf-beacon='{\"token\": \"" + TOKEN + "\"}'></script>\n  </body>";
+        Assertions.assertTrue(body.contains(beacon), path);
+        Assertions.assertEquals(digestTag(response.asByteArray()), response.header("ETag"), path);
+    }
+
+    // Computed here, not with TaggedBody: the test must not ask the code under
+    // test what the tag of these bytes is.
+    private static String digestTag(byte[] body) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(body);
+            return '"' + java.util.Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(java.util.Arrays.copyOf(digest, 16)) + '"';
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @ParameterizedTest

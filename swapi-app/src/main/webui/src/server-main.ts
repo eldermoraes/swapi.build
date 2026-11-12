@@ -1,3 +1,4 @@
+import { FETCH_TIMEOUT_MS, withTimeout } from './fetch-timeout';
 import type { Route } from './routes';
 import { escapeHtml } from './utils';
 
@@ -17,9 +18,6 @@ export type LoadResult = 'ok' | 'not-found' | 'reload' | 'unavailable' | 'error'
 
 /** Paths kept in memory, so back and forward do not ask (or count) again. */
 export const CACHE_LIMIT = 32;
-
-/** A page that has not answered in this time is an error (the alert), not a wait forever. */
-export const FETCH_TIMEOUT_MS = 10_000;
 
 const cache = new Map<string, Element>();
 let documentPath = window.location.pathname;
@@ -85,19 +83,6 @@ export function swapServerMain(container: HTMLElement, main: Element): void {
 }
 
 /**
- * The request's signal: the caller's plus the timeout. The timeout aborts only
- * the request; the caller's signal alone means 'aborted'. A browser without
- * AbortSignal.any or AbortSignal.timeout (Safari before 17.4) keeps the
- * caller's signal and no timeout, rather than failing every navigation.
- */
-function withTimeout(signal?: AbortSignal): AbortSignal | undefined {
-  if (typeof AbortSignal.timeout !== 'function') return signal;
-  if (!signal) return AbortSignal.timeout(timeoutMs);
-  if (typeof AbortSignal.any !== 'function') return signal;
-  return AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
-}
-
-/**
  * The fetched document of `path`, without touching the page: `main` on 'ok'
  * (the swap is the caller's, swapServerMain), and on 'error' the HTTP status,
  * 0 when the request itself failed (network, timeout). The explorer uses this
@@ -125,7 +110,8 @@ export async function fetchServerMain(
   try {
     const res = await fetch(path, {
       headers: { Accept: 'text/html' },
-      signal: withTimeout(signal),
+      // The timeout aborts only the request; the caller's signal alone means 'aborted'.
+      signal: withTimeout(signal, timeoutMs),
     });
     if (res.status === 404) return { result: signal?.aborted ? 'aborted' : 'not-found' };
     const type = res.headers.get('Content-Type') ?? '';

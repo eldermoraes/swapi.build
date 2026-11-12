@@ -36,7 +36,12 @@ public class PublicSiteUrlResolver {
     }
 
     public String absoluteUrl(RoutingContext rc, String path) {
-        return URI.create(siteRoot(rc) + "/").resolve(stripLeadingSlash(path)).toString();
+        return absoluteUrl(siteRoot(rc), path);
+    }
+
+    /** The same address from a root already resolved, for a caller that builds many in one request. */
+    public static String absoluteUrl(String siteRoot, String path) {
+        return URI.create(siteRoot + "/").resolve(stripLeadingSlash(path)).toString();
     }
 
     private static String rootOf(String base) {
@@ -71,7 +76,20 @@ public class PublicSiteUrlResolver {
     }
 
     static boolean validHost(String host) {
-        return HOST.matcher(host).matches();
+        if (!HOST.matcher(host).matches()) {
+            return false;
+        }
+        if (host.charAt(0) != '[') {
+            return true;
+        }
+        // The pattern accepts any bracketed run of hex digits, colons and dots
+        // ("[1]", "[1.2.3.4]"); only a real IPv6 literal parses, and absoluteUrl
+        // parses the root on every page.
+        try {
+            return URI.create("http://" + host).getHost() != null;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     private static Optional<String> firstHeader(RoutingContext rc, String name) {

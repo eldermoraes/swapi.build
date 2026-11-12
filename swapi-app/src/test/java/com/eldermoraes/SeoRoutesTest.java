@@ -702,4 +702,18 @@ class SeoRoutesTest {
                 .statusCode(200)
                 .contentType(containsString("image/png"));
     }
+
+    // #57: the image is held in memory and one buffer serves every response,
+    // so a second request must get the whole file again, not what is left of it.
+    @Test
+    void ogImageIsTheFileOnEveryRequest() throws Exception {
+        byte[] file = java.nio.file.Files.readAllBytes(java.nio.file.Path.of("src/main/webui/public/og-image.png"));
+        for (int request = 1; request <= 3; request++) {
+            byte[] served = given().when().get("/og-image.png").then()
+                    .statusCode(200)
+                    .header("Cache-Control", "public, max-age=31536000, immutable")
+                    .extract().asByteArray();
+            Assertions.assertArrayEquals(file, served, "request " + request);
+        }
+    }
 }

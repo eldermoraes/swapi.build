@@ -31,9 +31,10 @@ import java.util.regex.Pattern;
  * canonical form and the entity is in the data. Anything else is a 404, so a
  * variant such as /resource/people/01 is never a copy of the page of id 1.
  *
- * The services match by {@code getUrl().endsWith("/<type>/<id>")}. getUrl()
+ * A record is the one whose getUrl() ends in {@code /<type>/<id>}: the lookup
+ * built at startup (#57) and, before it, the scan of the services. getUrl()
  * reads the request base URL from a ThreadLocal (RequestBaseUrl), which on the
- * event loop may be empty ("null/people/1") or hold another request's base;
+ * event loop may be empty (the address is then relative) or hold another request's base;
  * only the suffix is compared and nothing is serialized here, so no URL leaks
  * between requests. {@link #name} (2.12.0) reads only the name or title for
  * the breadcrumb; the record content itself is drawn by RecordViews, which sets
@@ -44,6 +45,14 @@ public class KnownEntities {
 
     /** At most 9 digits, no leading zero: never overflows an int. */
     private static final Pattern CANONICAL_ID = Pattern.compile("[1-9][0-9]{0,8}");
+
+    /**
+     * Whether the text is the one spelling of an id that names a record: the
+     * rule of the pages, and of /api/{type}/{id} since issue #55.
+     */
+    public static boolean isCanonicalId(String id) {
+        return id != null && CANONICAL_ID.matcher(id).matches();
+    }
 
     private final PeopleService people;
     private final FilmService films;
@@ -69,13 +78,13 @@ public class KnownEntities {
      * the event loop.
      */
     void warm(@Observes StartupEvent event) {
-        people.getAllPeople();
-        films.getAllFilms();
-        planets.getAllPlanets();
-        species.getAllSpecies();
-        starships.getAllStarships();
-        vehicles.getAllVehicles();
-        names = buildNames();
+        people.all();
+        films.all();
+        planets.all();
+        species.all();
+        starships.all();
+        vehicles.all();
+        buildLookups();
     }
 
     /**
@@ -85,37 +94,54 @@ public class KnownEntities {
      */
     private volatile Map<String, Map<String, String>> names;
 
-    private Map<String, Map<String, String>> buildNames() {
-        Map<String, Map<String, String>> byType = new HashMap<>();
+    /**
+     * Every record by type and canonical id (#57): a record address asks whether
+     * it exists, its head fields and the record itself, several times per
+     * request. Built once in warm(), from the suffix of getUrl() only, as in
+     * ids(); null until then, when record() scans. The first record of an id
+     * wins, as in the scan.
+     */
+    private volatile Map<String, Map<String, SWObject>> records;
+
+    private void buildLookups() {
+        Map<String, Map<String, String>> namesByType = new HashMap<>();
+        Map<String, Map<String, SWObject>> recordsByType = new HashMap<>();
         for (String type : TYPES) {
             List<? extends SWObject> all = all(type);
-            Map<String, String> byId = new HashMap<>();
+            Map<String, String> nameById = new HashMap<>();
+            Map<String, SWObject> recordById = new HashMap<>();
             String prefix = "/" + type + "/";
             for (SWObject entity : all == null ? List.<SWObject>of() : all) {
                 String url = url(entity);
                 int at = url == null ? -1 : url.lastIndexOf(prefix);
-                String name = nameOf(entity);
-                if (at < 0 || name == null) {
+                if (at < 0) {
                     continue;
                 }
                 String id = url.substring(at + prefix.length());
-                if (CANONICAL_ID.matcher(id).matches()) {
-                    byId.putIfAbsent(id, name);
+                if (!CANONICAL_ID.matcher(id).matches()) {
+                    continue;
+                }
+                recordById.putIfAbsent(id, entity);
+                String name = nameOf(entity);
+                if (name != null) {
+                    nameById.putIfAbsent(id, name);
                 }
             }
-            byType.put(type, Map.copyOf(byId));
+            namesByType.put(type, Map.copyOf(nameById));
+            recordsByType.put(type, Map.copyOf(recordById));
         }
-        return Map.copyOf(byType);
+        names = Map.copyOf(namesByType);
+        records = Map.copyOf(recordsByType);
     }
 
     private List<? extends SWObject> all(String type) {
         return switch (type == null ? "" : type) {
-            case "people" -> people.getAllPeople();
-            case "films" -> films.getAllFilms();
-            case "planets" -> planets.getAllPlanets();
-            case "species" -> species.getAllSpecies();
-            case "starships" -> starships.getAllStarships();
-            case "vehicles" -> vehicles.getAllVehicles();
+            case "people" -> people.all();
+            case "films" -> films.all();
+            case "planets" -> planets.all();
+            case "species" -> species.all();
+            case "starships" -> starships.all();
+            case "vehicles" -> vehicles.all();
             default -> List.of();
         };
     }
@@ -133,18 +159,36 @@ public class KnownEntities {
     }
 
     public boolean exists(String resource, String id) {
-        if (resource == null || id == null || !CANONICAL_ID.matcher(id).matches()) {
-            return false;
+        return record(resource, id).isPresent();
+    }
+
+    /**
+     * The record of a type with this id in its canonical form, as the services
+     * hold it; empty otherwise (same rule as exists). Its getUrl() and relations
+     * read RequestBaseUrl: whoever serializes it sets the base first (RecordViews).
+     */
+    public Optional<SWObject> record(String type, String id) {
+        if (type == null || !isCanonicalId(id)) {
+            return Optional.empty();
         }
-        int n = Integer.parseInt(id);
-        return switch (resource) {
-            case "people" -> people.getPeopleById(n) != null;
-            case "films" -> films.getFilmById(n) != null;
-            case "planets" -> planets.getPlanetById(n) != null;
-            case "species" -> species.getSpecieById(n) != null;
-            case "starships" -> starships.getStarshipById(n) != null;
-            case "vehicles" -> vehicles.getVehicleById(n) != null;
-            default -> false;
+        Map<String, Map<String, SWObject>> lookup = records;
+        if (lookup == null) {
+            return Optional.ofNullable(scan(type, Integer.parseInt(id)));
+        }
+        Map<String, SWObject> byId = lookup.get(type);
+        return byId == null ? Optional.empty() : Optional.ofNullable(byId.get(id));
+    }
+
+    /** The scan of the services: only before warm() has built the lookup. */
+    private SWObject scan(String type, int id) {
+        return switch (type) {
+            case "people" -> people.byId(id);
+            case "films" -> films.byId(id);
+            case "planets" -> planets.byId(id);
+            case "species" -> species.byId(id);
+            case "starships" -> starships.byId(id);
+            case "vehicles" -> vehicles.byId(id);
+            default -> null;
         };
     }
 
@@ -169,27 +213,18 @@ public class KnownEntities {
      * null value is left out, so the template falls back instead of saying "null".
      */
     public Optional<Map<String, String>> fields(String type, String id) {
-        if (!exists(type, id)) {
+        Optional<SWObject> record = record(type, id);
+        if (record.isEmpty()) {
             return Optional.empty();
         }
-        int n = Integer.parseInt(id);
         Map<String, String> values = new HashMap<>();
-        switch (type) {
-            case "films" -> {
-                Film film = films.getFilmById(n);
-                put(values, "title", film.getTitle());
-                put(values, "episode_id", Integer.toString(film.getEpisode_id()));
-                put(values, "director", film.getDirector());
-                put(values, "release_date", film.getRelease_date());
-            }
-            case "people" -> put(values, "name", people.getPeopleById(n).getName());
-            case "planets" -> put(values, "name", planets.getPlanetById(n).getName());
-            case "species" -> put(values, "name", species.getSpecieById(n).getName());
-            case "starships" -> put(values, "name", starships.getStarshipById(n).getName());
-            case "vehicles" -> put(values, "name", vehicles.getVehicleById(n).getName());
-            default -> {
-                return Optional.empty();
-            }
+        if (record.get() instanceof Film film) {
+            put(values, "title", film.getTitle());
+            put(values, "episode_id", Integer.toString(film.getEpisode_id()));
+            put(values, "director", film.getDirector());
+            put(values, "release_date", film.getRelease_date());
+        } else {
+            put(values, "name", nameOf(record.get()));
         }
         return Optional.of(Map.copyOf(values));
     }

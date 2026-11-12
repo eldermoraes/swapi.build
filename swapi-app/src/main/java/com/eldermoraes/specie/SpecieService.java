@@ -1,82 +1,14 @@
 package com.eldermoraes.specie;
 
-import com.eldermoraes.SWService;
-import com.eldermoraes.planet.Planet;
+import com.eldermoraes.RecordService;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.json.bind.Jsonb;
-import jakarta.json.bind.JsonbBuilder;
-import jakarta.json.bind.JsonbConfig;
 
-import java.io.InputStream;
-import java.lang.reflect.Type;
-import java.net.URL;
 import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 
 @ApplicationScoped
-public class SpecieService implements SWService {
-
-    private static List<Specie> specieList;
+public class SpecieService extends RecordService<Specie> {
 
     public SpecieService() {
-        if (specieList == null) {
-            loadJsonData();
-        }
-    }
-
-    @Override
-    public void loadJsonData() {
-        JsonbConfig config = new JsonbConfig().withFormatting(true);
-        URL url = getClass().getResource("/data/species.json");
-        if (url != null) {
-            try (Jsonb jsonb = JsonbBuilder.create(config);
-
-                 InputStream is = url.openStream()) {
-
-                if (is == null) {
-                    System.err.println("Could not get data from species.json");
-                    specieList = new ArrayList<>();
-                    return;
-                }
-
-                Type listType = new ArrayList<Specie>(){}.getClass().getGenericSuperclass();
-                specieList = jsonb.fromJson(is, listType);
-
-            } catch (Exception e) {
-                System.err.println("Error loading species: " + e.getMessage());
-                specieList = new ArrayList<>();
-            }
-        } else{
-            System.err.println("Could not find species.json in resources");
-        }
-    }
-
-    public List<Specie> getAllSpecies() {
-        return specieList;
-    }
-
-    public List<Specie> getSpecieByName(String name) {
-        return specieList.stream()
-                .filter(specie -> specie.getName().toLowerCase().contains(name.toLowerCase()))
-                .collect(java.util.stream.Collectors.toList());
-    }
-
-    public Specie getSpecieById(int id) {
-        if (specieList == null) {
-            return null;
-        }
-        String suffix = "/species/" + id;
-        return specieList.stream()
-                .filter(s -> s.getUrl() != null && s.getUrl().endsWith(suffix))
-                .findFirst()
-                .orElse(null);
-    }
-
-    public Specie getRandomSpecie() {
-        if (specieList == null || specieList.isEmpty()) {
-            return null;
-        }
-        return specieList.get(ThreadLocalRandom.current().nextInt(specieList.size()));
+        super("species", new ArrayList<Specie>(){}.getClass().getGenericSuperclass(), Specie::getName, Specie::getUrl);
     }
 }

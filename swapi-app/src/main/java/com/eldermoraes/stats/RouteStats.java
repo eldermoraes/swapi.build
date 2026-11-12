@@ -3,6 +3,7 @@ package com.eldermoraes.stats;
 import com.eldermoraes.stats.StatsPeriod.Granularity;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.inject.Singleton;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -32,11 +33,14 @@ import java.util.concurrent.atomic.LongAdder;
  * ({@link #record}) and once for its time ({@link #recordDuration}). Hours are
  * kept for {@link #RETAINED_HOURS} (the 7-day hourly view and the 7 days before
  * it, for the comparison), days for {@link #RETAINED_DAYS} (the 30-day view and
- * the 30 days before it). Memory is bounded twice: the route set is closed (45
- * templates), and older buckets are dropped. With every route busy every hour
- * that is 45 x (336 + 60) = 17,820 counters and as many {@link TimingCell}s of
- * about 0.5 KB each with their map entry, so under 9 MB in the worst case; in
- * practice a small fraction of that, since most routes are idle most hours.
+ * the 30 days before it). Memory is bounded twice: the route set is closed (59
+ * templates, {@link RouteNormalizer#TEMPLATE_COUNT}), and older buckets are
+ * dropped. With every route busy in every retained hour and day that is
+ * 59 x (336 + 60) = 23,364 counters and as many {@link TimingCell}s. Measured
+ * on the JVM with its map entry and key, a counter is about 0.1 KB and a cell
+ * about 0.5 KB ({@link #TIMING_CELL_BYTES}): 23,364 x 0.1 KB = 2.3 MB and
+ * 23,364 x 0.5 KB = 11.7 MB, so about 14 MB in the worst case; in practice a
+ * small fraction of that, since most routes are idle most hours.
  *
  * The counters live in memory. {@link StatsPersistence} copies them to a file
  * when the host gives the app a writable state directory, so a restart (a
@@ -55,6 +59,7 @@ public class RouteStats {
     static final int TIMING_CELL_BYTES = 512;
 
     private static final long HOUR_SECONDS = 3600;
+    private static final long DAY_SECONDS = 24 * HOUR_SECONDS;
 
     private final Map<Long, Map<String, LongAdder>> hours = new ConcurrentHashMap<>();
     private final Map<LocalDate, Map<String, LongAdder>> days = new ConcurrentHashMap<>();
@@ -158,7 +163,9 @@ public class RouteStats {
      * Hourly windows end with the current (partial) hour, daily windows with the
      * current (partial) UTC day; the previous window is the same number of
      * buckets right before. {@code from} and {@code to} name the first and the
-     * last bucket, both included.
+     * last bucket, both included. The two windows therefore do not cover the
+     * same time: {@link StatsView#lastBucketElapsed()} says how far the last
+     * bucket has filled, which is what a fair comparison needs (#54).
      *
      * @throws IllegalArgumentException if the period does not accept the granularity
      */
@@ -170,10 +177,12 @@ public class RouteStats {
         List<String> labels = new ArrayList<>();
         List<Map<String, Long>> current = new ArrayList<>();
         List<Map<String, Long>> before = new ArrayList<>();
-        List<Map<String, TimingData>> currentTimes = new ArrayList<>();
+        List<Map<String, TimingCell>> currentTimes = new ArrayList<>();
         String previousFrom;
         String previousTo;
+        long bucketSeconds;
         if (granularity == Granularity.HOUR) {
+            bucketSeconds = HOUR_SECONDS;
             int n = period.hours();
             long last = epochHour(now);
             long first = last - n + 1;
@@ -181,11 +190,12 @@ public class RouteStats {
                 labels.add(hourLabel(h));
                 current.add(counts(hours.get(h)));
                 before.add(counts(hours.get(h - n)));
-                currentTimes.add(times(hourTimes.get(h)));
+                currentTimes.add(hourTimes.get(h));
             }
             previousFrom = hourLabel(first - n);
             previousTo = hourLabel(first - 1);
         } else {
+            bucketSeconds = DAY_SECONDS;
             int n = period.days();
             LocalDate last = LocalDate.ofInstant(now, ZoneOffset.UTC);
             LocalDate first = last.minusDays(n - 1L);
@@ -193,7 +203,7 @@ public class RouteStats {
                 labels.add(d.toString());
                 current.add(counts(days.get(d)));
                 before.add(counts(days.get(d.minusDays(n))));
-                currentTimes.add(times(dayTimes.get(d)));
+                currentTimes.add(dayTimes.get(d));
             }
             previousFrom = first.minusDays(n).toString();
             previousTo = first.minusDays(1).toString();
@@ -201,11 +211,11 @@ public class RouteStats {
 
         Map<String, Long> routes = sorted(merge(current));
         Map<String, Long> previousRoutes = sorted(merge(before));
-        Map<String, TimingData> routeTimes = mergeTimes(currentTimes);
+        Performance performance = performance(labels, currentTimes);
         Map<String, String> routeGroups = new LinkedHashMap<>();
         routes.keySet().forEach(r -> routeGroups.put(r, RouteGroup.of(r).id()));
         previousRoutes.keySet().forEach(r -> routeGroups.putIfAbsent(r, RouteGroup.of(r).id()));
-        routeTimes.keySet().forEach(r -> routeGroups.putIfAbsent(r, RouteGroup.of(r).id()));
+        performance.routes().keySet().forEach(r -> routeGroups.putIfAbsent(r, RouteGroup.of(r).id()));
 
         List<Bucket> series = new ArrayList<>();
         for (int i = 0; i < labels.size(); i++) {
@@ -224,40 +234,66 @@ public class RouteStats {
                 groups(previousRoutes, true));
         return new StatsView(period.id(), granularity.id(), labels.getFirst(), labels.getLast(), period.days(),
                 countingSince().toString(), sum(routes), routes, groups(routes, true), routeGroups, series,
-                previous, daily, performance(labels, currentTimes, routeTimes));
+                previous, daily, performance, elapsedShare(now, bucketSeconds));
     }
 
-    /** Server times per route and per group over the window, and p50/p95 per bucket over all routes. */
-    static Performance performance(List<String> labels, List<Map<String, TimingData>> buckets,
-                                   Map<String, TimingData> routeTimes) {
+    /**
+     * The share of the UTC hour or day of {@code now} that has passed, in
+     * ten-thousandths rounded down: 0 at its first second, never 1.
+     */
+    private static double elapsedShare(Instant now, long bucketSeconds) {
+        long passed = Math.floorMod(now.getEpochSecond(), bucketSeconds);
+        return (passed * 10_000 / bucketSeconds) / 10_000.0;
+    }
+
+    /**
+     * Server times per route and per group over the window, and p50/p95 per
+     * bucket over all routes.
+     *
+     * Each live cell is read once, under its own lock, straight into its
+     * route's total and its bucket's: no copy of its histogram is made (#53).
+     *
+     * @param buckets the live cells of each bucket of the window, oldest first; null for a bucket without any
+     */
+    private static Performance performance(List<String> labels, List<Map<String, TimingCell>> buckets) {
+        Map<String, TimingSum> routeTimes = new HashMap<>();
+        List<LatencyPoint> series = new ArrayList<>(labels.size());
+        TimingSum all = new TimingSum();
+        for (int i = 0; i < labels.size(); i++) {
+            all.clear();
+            Map<String, TimingCell> cells = buckets.get(i);
+            if (cells != null) {
+                cells.forEach((route, cell) ->
+                        cell.addTo(routeTimes.computeIfAbsent(route, r -> new TimingSum()), all));
+            }
+            TimingData t = all.data();
+            series.add(new LatencyPoint(labels.get(i), t.count(), ms(t.percentileMicros(0.50)),
+                    ms(t.percentileMicros(0.95))));
+        }
+        // A cell restored from an empty line has no request: its route was not timed.
+        routeTimes.values().removeIf(t -> t.count() == 0);
+
+        Map<RouteGroup, TimingSum> byGroup = new EnumMap<>(RouteGroup.class);
+        for (RouteGroup g : RouteGroup.values()) {
+            byGroup.put(g, new TimingSum());
+        }
         Map<String, Latency> routes = new LinkedHashMap<>();
         routeTimes.entrySet().stream()
-                .sorted(Comparator.<Map.Entry<String, TimingData>>comparingLong(e -> e.getValue().count())
+                .sorted(Comparator.<Map.Entry<String, TimingSum>>comparingLong(e -> e.getValue().count())
                         .reversed()
                         .thenComparing(Map.Entry.comparingByKey()))
-                .forEach(e -> routes.put(e.getKey(), Latency.of(e.getValue())));
+                .forEach(e -> {
+                    routes.put(e.getKey(), Latency.of(e.getValue().data()));
+                    byGroup.get(RouteGroup.of(e.getKey())).add(e.getValue());
+                });
 
-        Map<RouteGroup, TimingData> byGroup = new EnumMap<>(RouteGroup.class);
-        for (RouteGroup g : RouteGroup.values()) {
-            byGroup.put(g, TimingData.EMPTY);
-        }
-        routeTimes.forEach((route, t) -> byGroup.merge(RouteGroup.of(route), t, TimingData::merge));
         Map<String, Latency> groups = new LinkedHashMap<>();
         byGroup.entrySet().stream()
-                .sorted(Comparator.<Map.Entry<RouteGroup, TimingData>>comparingLong(e -> e.getValue().count())
+                .sorted(Comparator.<Map.Entry<RouteGroup, TimingSum>>comparingLong(e -> e.getValue().count())
                         .reversed()
                         .thenComparing(Map.Entry.comparingByKey()))
-                .forEach(e -> groups.put(e.getKey().id(), Latency.of(e.getValue())));
+                .forEach(e -> groups.put(e.getKey().id(), Latency.of(e.getValue().data())));
 
-        List<LatencyPoint> series = new ArrayList<>();
-        for (int i = 0; i < labels.size(); i++) {
-            TimingData all = TimingData.EMPTY;
-            for (TimingData t : buckets.get(i).values()) {
-                all = all.merge(t);
-            }
-            series.add(new LatencyPoint(labels.get(i), all.count(), ms(all.percentileMicros(0.50)),
-                    ms(all.percentileMicros(0.95))));
-        }
         return new Performance("ms", routes, groups, series);
     }
 
@@ -384,12 +420,6 @@ public class RouteStats {
         return totals;
     }
 
-    static Map<String, TimingData> mergeTimes(List<Map<String, TimingData>> buckets) {
-        Map<String, TimingData> totals = new HashMap<>();
-        buckets.forEach(b -> b.forEach((route, t) -> totals.merge(route, t, TimingData::merge)));
-        return totals;
-    }
-
     /**
      * Totals per {@link RouteGroup}, by count. With {@code all}, every group is
      * present (zeros included) so the legend never changes shape; without it,
@@ -453,13 +483,24 @@ public class RouteStats {
      * @param previous      the window of the same length right before this one
      * @param daily         per-day route counts, daily windows only (absent for hourly ones)
      * @param performance   server times in the window (2.8.0+)
+     * @param lastBucketElapsed the share of the last bucket ({@code to}) that had passed when the
+     *                      numbers were read, from 0 to under 1. {@code total} covers
+     *                      {@code series.size() - 1 + lastBucketElapsed} buckets of time and
+     *                      {@code previous.total} covers {@code series.size()} (#54)
      */
     @RegisterForReflection
     public record StatsView(String period, String granularity, String from, String to, int days,
                             String countingSince, long total, Map<String, Long> routes,
                             Map<String, Long> groups, Map<String, String> routeGroups,
                             List<Bucket> series, Previous previous, List<Day> daily,
-                            Performance performance) {
+                            Performance performance,
+                            @Schema(description = LAST_BUCKET_ELAPSED) double lastBucketElapsed) {
+
+        static final String LAST_BUCKET_ELAPSED = "Share of the last bucket (the hour or UTC day named by "
+                + "to) that had passed when the numbers were read: 0 when it had just started, always "
+                + "under 1. total covers (number of buckets - 1 + lastBucketElapsed) buckets of time, "
+                + "previous.total the full number of buckets; multiply a count of previous by "
+                + "(number of buckets - 1 + lastBucketElapsed) / (number of buckets) before comparing.";
     }
 
     /** One point of the trend: requests in the bucket, per group (only groups with requests). */

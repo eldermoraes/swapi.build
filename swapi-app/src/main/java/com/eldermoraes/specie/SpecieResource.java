@@ -35,9 +35,9 @@ public class SpecieResource {
             @Parameter(description = "Filter by name (case-insensitive contains)", example = "wookiee")
             @QueryParam("search") String search) {
         if (search != null && !search.isEmpty()) {
-            return Response.ok().entity(specieService.getSpecieByName(search)).build();
+            return Response.ok().entity(specieService.search(search)).build();
         } else {
-            return Response.ok().entity(specieService.getAllSpecies()).build();
+            return Response.ok().entity(specieService.all()).build();
         }
 
     }
@@ -53,7 +53,7 @@ public class SpecieResource {
     public Response getSpecieById(
             @Parameter(description = "Numeric id of the species", example = "1")
             @PathParam("id") int id) {
-        Specie specie = specieService.getSpecieById(id);
+        Specie specie = specieService.byId(id);
         if (specie == null) {
             return Response.status(Response.Status.NOT_FOUND)
                     .type(MediaType.TEXT_PLAIN)
@@ -69,7 +69,7 @@ public class SpecieResource {
     @APIResponse(responseCode = "200", description = "A randomly selected species",
             content = @Content(schema = @Schema(implementation = Specie.class)))
     public Response getRandomSpecie() {
-        return Response.ok().entity(specieService.getRandomSpecie()).build();
+        return Response.ok().entity(specieService.random()).build();
     }
 
 }

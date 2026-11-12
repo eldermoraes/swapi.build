@@ -68,6 +68,43 @@ class MarkdownCopiesTest {
         }
     }
 
+    // #63: the page shows the crawl with white-space: pre-line; the copy keeps
+    // its paragraphs (a blank line) and its lines (a hard line break).
+    @Test
+    void filmCopyKeepsTheParagraphsAndLinesOfTheOpeningCrawl() {
+        String film = copy("/resource/films/1.md");
+        String crawl = """
+                ### Opening crawl
+
+                It is a period of civil war.\\
+                Rebel spaceships, striking\\
+                from a hidden base, have won\\
+                their first victory against\\
+                the evil Galactic Empire.
+
+                During the battle, Rebel\\
+                spies managed to steal secret\\
+                plans to the Empire's\\
+                ultimate weapon, the DEATH\\
+                STAR, an armored space\\
+                station with enough power\\
+                to destroy an entire planet.
+
+                Pursued by the Empire's\\
+                sinister agents, Princess\\
+                Leia races home aboard her\\
+                starship, custodian of the\\
+                stolen plans that can save her\\
+                people and restore\\
+                freedom to the galaxy....
+
+                ## Related records
+                """;
+        Assertions.assertTrue(film.contains(crawl), film);
+        Assertions.assertFalse(film.contains("civil war. Rebel"), "the one-line form is gone: " + film);
+        Assertions.assertFalse(film.contains("\r"), "no carriage return of the data in the copy: " + film);
+    }
+
     @Test
     void recordRelationsLinkToTheirCopies() {
         String film = copy("/resource/films/1.md");

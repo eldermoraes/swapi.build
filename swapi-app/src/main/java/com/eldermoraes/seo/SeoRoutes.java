@@ -6,17 +6,12 @@ import io.quarkus.vertx.web.RouteFilter;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpHeaders;
 import io.vertx.core.http.HttpMethod;
+import io.vertx.core.http.HttpServerResponse;
 import io.vertx.ext.web.RoutingContext;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @ApplicationScoped
 public class SeoRoutes {
@@ -26,16 +21,10 @@ public class SeoRoutes {
     private static final String MARKDOWN = "text/markdown; charset=utf-8";
     private static final String OG_IMAGE = "/og-image.png";
     private static final String OG_IMAGE_ALT = "swapi.build — Star Wars API and MCP server in a Holonet terminal style";
-    private static final Pattern EXISTING_SEO_TAG = Pattern.compile(
-            "(?is)\\s*<title>.*?</title>|" +
-            "\\s*<meta\\s+name=\\\"(?:description|robots|twitter:[^\\\"]+)\\\"[^>]*>|" +
-            "\\s*<meta\\s+property=\\\"og:[^\\\"]+\\\"[^>]*>|" +
-            "\\s*<link\\s+rel=\\\"canonical\\\"[^>]*>|" +
-            "\\s*<script\\s+type=\\\"application/ld\\+json\\\"[^>]*>.*?</script>");
 
     @Inject SeoMetadataRegistry metadata;
     @Inject PublicSiteUrlResolver urls;
-    @Inject WebAnalytics analytics;
+    @Inject SiteShell shell;
     @Inject ServerRendering rendering;
     @Inject KnownEntities known;
     @Inject MarkdownCopies copies;
@@ -62,6 +51,9 @@ public class SeoRoutes {
      * leaves with no-cache;</li>
      * <li>everything else: 404 with the document.</li>
      * </ol>
+     * A page, a Markdown copy and /llms-full.txt carry a strong ETag (#58,
+     * TaggedBody), and If-None-Match with it answers 304 (send); a 404, a 503 and
+     * a redirect carry none.
      * Pages are matched on the raw path (rc.request().path()), not on
      * rc.normalizedPath(), which percent-decodes: the browser keeps /resource/people/%31
      * as it is in location.pathname, so server and client agree it is not a page.
@@ -160,19 +152,18 @@ public class SeoRoutes {
      * or assets filters stamped: the path may start to exist in a release.
      */
     private void notFound(RoutingContext rc, String path) {
-        Optional<String> shell = readIndexHtml();
-        if (shell.isEmpty()) {
+        Optional<String> html = shell.document(notFoundBlock(metadata.notFound(path)));
+        if (html.isEmpty()) {
             noCacheOn404(rc);
             rc.next();
             return;
         }
-        SeoMetadata route = metadata.notFound(path);
         rc.response()
                 .setStatusCode(404)
                 .putHeader(HttpHeaders.CONTENT_TYPE, "text/html; charset=utf-8")
                 .putHeader(HttpHeaders.CACHE_CONTROL, "no-cache")
                 .putHeader(HttpHeaders.VARY, "Origin")
-                .end(inject(shell.get(), notFoundBlock(route)));
+                .end(html.get());
     }
 
     /** Every 404 the app answers leaves with no-cache, never with the assets' immutable year. */
@@ -203,13 +194,16 @@ public class SeoRoutes {
      * page misleads the agent.
      */
     private void llmsFull(RoutingContext rc) {
-        Optional<String> body = copies.llmsFull(urls.siteRoot(rc));
+        Optional<TaggedBody> body = copies.llmsFull(urls.siteRoot(rc));
         if (body.isEmpty()) {
             unavailable(rc);
             return;
         }
-        rc.response().putHeader("X-Robots-Tag", "noindex");
-        text(rc, "text/plain; charset=utf-8", body.get());
+        rc.response()
+                .putHeader("X-Robots-Tag", "noindex")
+                .putHeader(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL)
+                .putHeader(HttpHeaders.VARY, "Origin");
+        send(rc, "text/plain; charset=utf-8", body.get());
     }
 
     /**
@@ -221,7 +215,7 @@ public class SeoRoutes {
      * record copy.
      */
     private void markdownCopy(RoutingContext rc, String page) {
-        Optional<String> body = copies.copy(page, urls.siteRoot(rc));
+        Optional<TaggedBody> body = copies.copy(page, urls.siteRoot(rc));
         if (body.isEmpty()) {
             unavailable(rc);
             return;
@@ -231,7 +225,6 @@ public class SeoRoutes {
         boolean noindex = route.robots().startsWith(SeoMetadata.NOINDEX);
         rc.addHeadersEndHandler(v -> {
             var headers = rc.response().headers();
-            headers.set(HttpHeaders.CONTENT_TYPE, MARKDOWN);
             headers.set(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL);
             headers.set(HttpHeaders.VARY, "Origin");
             headers.set("Link", canonical);
@@ -239,7 +232,23 @@ public class SeoRoutes {
                 headers.set("X-Robots-Tag", "noindex");
             }
         });
-        rc.response().end(body.get());
+        send(rc, MARKDOWN, body.get());
+    }
+
+    /**
+     * Ends a 200 whose body has a validator (#58): with its ETag and the body,
+     * or, when If-None-Match names the body (TaggedBody.isNamedBy), as a 304
+     * with the ETag and no body and no Content-Type. Every other header is the
+     * caller's and is the same on both, so a cache refreshes what it stored
+     * under the same policy. The route only gets here for GET and HEAD.
+     */
+    private static void send(RoutingContext rc, String contentType, TaggedBody body) {
+        HttpServerResponse response = rc.response().putHeader(HttpHeaders.ETAG, body.etag());
+        if (body.isNamedBy(rc.request().headers().getAll(HttpHeaders.IF_NONE_MATCH))) {
+            response.setStatusCode(304).end();
+        } else {
+            response.putHeader(HttpHeaders.CONTENT_TYPE, contentType).end(body.buffer());
+        }
     }
 
     /** A copy or /llms-full.txt that could not be built: 503, never cached. */
@@ -260,9 +269,12 @@ public class SeoRoutes {
     private void sitemap(RoutingContext rc) {
         StringBuilder xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
                 .append("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
+        // The host of the request, read once: every address of the file is on it.
+        String root = urls.siteRoot(rc);
         for (SeoMetadata route : metadata.sitemapRoutes()) {
             xml.append("  <url>\n")
-                    .append("    <loc>").append(xml(urls.absoluteUrl(rc, route.canonicalPath()))).append("</loc>\n")
+                    .append("    <loc>").append(xml(PublicSiteUrlResolver.absoluteUrl(root, route.canonicalPath())))
+                    .append("</loc>\n")
                     .append("    <changefreq>").append(route.changeFrequency()).append("</changefreq>\n")
                     .append("    <priority>").append(route.priority()).append("</priority>\n")
                     .append("  </url>\n");
@@ -272,13 +284,12 @@ public class SeoRoutes {
     }
 
     private void document(RoutingContext rc, String path) {
-        Optional<String> shell = readIndexHtml();
-        if (shell.isEmpty()) {
+        Optional<String> document = shell.document(seoBlock(rc, metadata.forPath(path)));
+        if (document.isEmpty()) {
             rc.next();
             return;
         }
-        SeoMetadata route = metadata.forPath(path);
-        String html = inject(shell.get(), seoBlock(rc, route));
+        String html = document.get();
         // The <main> of a page marked ssr (2.11.0). After the head cleanup, so its
         // regex never reaches the content, and a literal replace: the content has
         // $ and \ (code samples) that a regex replacement would read. A failed
@@ -294,15 +305,12 @@ public class SeoRoutes {
         // 2.14.0: a page with a Markdown copy announces it (relative, like the HTML links).
         copies.copyPathOf(path).ifPresent(copy ->
                 rc.response().putHeader("Link", "<" + copy + ">; rel=\"alternate\"; type=\"text/markdown\""));
-        rc.response()
-                .putHeader(HttpHeaders.CONTENT_TYPE, "text/html; charset=utf-8")
-                .end(html);
+        // Not kept anywhere, so its validator is of this request's bytes (#58).
+        send(rc, "text/html; charset=utf-8", TaggedBody.of(html));
     }
 
     private void ogImage(RoutingContext rc) {
-        Optional<byte[]> image = readBytes("META-INF/resources/og-image.png")
-                .or(() -> readBytes("og-image.png"))
-                .or(() -> readFile("src/main/webui/public/og-image.png"));
+        Optional<Buffer> image = shell.previewImage();
         if (image.isEmpty()) {
             rc.next();
             return;
@@ -310,7 +318,7 @@ public class SeoRoutes {
         rc.response()
                 .putHeader(HttpHeaders.CONTENT_TYPE, "image/png")
                 .putHeader(HttpHeaders.CACHE_CONTROL, "public, max-age=31536000, immutable")
-                .end(Buffer.buffer(image.get()));
+                .end(image.get());
     }
 
     // Vary: Origin because CORS echoes the request Origin and these files carry s-maxage.
@@ -322,18 +330,9 @@ public class SeoRoutes {
                 .end(body);
     }
 
-    // The head block and the beacon. The <main> of an ssr page goes in after this
-    // (document()), so the head cleanup never reaches the content.
-    private String inject(String html, String block) {
-        String cleaned = EXISTING_SEO_TAG.matcher(html).replaceAll("");
-        String withSeo = cleaned.replaceFirst("(?i)</head>", Matcher.quoteReplacement(block + "\n  </head>"));
-        // The analytics beacon goes before </body>, where Cloudflare recommends it.
-        return analytics.beacon()
-                .map(beacon -> withSeo.replaceFirst("(?i)</body>",
-                        Matcher.quoteReplacement("  " + beacon + "\n  </body>")))
-                .orElse(withSeo);
-    }
-
+    // The head block of a document; SiteShell puts it in the shell, with the
+    // beacon. The <main> of an ssr page goes in after that (document()), so the
+    // head cleanup never reaches the content.
     private String seoBlock(RoutingContext rc, SeoMetadata route) {
         String canonical = urls.absoluteUrl(rc, route.canonicalPath());
         String image = urls.absoluteUrl(rc, OG_IMAGE);
@@ -427,41 +426,6 @@ public class SeoRoutes {
     private static String lastSegment(String path) {
         int slash = path.lastIndexOf('/');
         return slash >= 0 ? path.substring(slash + 1) : path;
-    }
-
-    private Optional<String> readIndexHtml() {
-        return readString("META-INF/resources/index.html")
-                .or(() -> readString("index.html"))
-                .or(() -> readFileString("src/main/webui/index.html"));
-    }
-
-    private Optional<String> readString(String resource) {
-        return readBytes(resource).map(bytes -> new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
-    }
-
-    private Optional<byte[]> readBytes(String resource) {
-        ClassLoader cl = Thread.currentThread().getContextClassLoader();
-        try (InputStream in = cl.getResourceAsStream(resource)) {
-            return in == null ? Optional.empty() : Optional.of(in.readAllBytes());
-        } catch (IOException e) {
-            return Optional.empty();
-        }
-    }
-
-    private Optional<String> readFileString(String file) {
-        return readFile(file).map(bytes -> new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
-    }
-
-    private Optional<byte[]> readFile(String file) {
-        Path path = Path.of(file);
-        if (!Files.isRegularFile(path)) {
-            return Optional.empty();
-        }
-        try {
-            return Optional.of(Files.readAllBytes(path));
-        } catch (IOException e) {
-            return Optional.empty();
-        }
     }
 
     private static String html(String value) {

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -17,6 +18,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
  * Which /resource/{type}/{id} pages exist (2.9.1). Plain JUnit: the services
@@ -121,9 +123,9 @@ class KnownEntitiesTest {
         int[] scans = {0};
         PeopleService counting = new PeopleService() {
             @Override
-            public com.eldermoraes.people.People getPeopleById(int id) {
+            public com.eldermoraes.people.People byId(int id) {
                 scans[0]++;
-                return super.getPeopleById(id);
+                return super.byId(id);
             }
         };
         KnownEntities warmed = new KnownEntities(counting, new FilmService(), new PlanetService(),
@@ -149,6 +151,63 @@ class KnownEntitiesTest {
                         warmed.name(type, String.valueOf(id)), type + "/" + id);
             }
         }
+    }
+
+    // #57: a record address asked existence, its head fields and the record
+    // itself, each a scan of the list that built a URL per entity. After warm()
+    // all three are lookups by (type, canonical id).
+    @Test
+    void afterWarmExistenceFieldsAndTheRecordAreLookupsNotScans() {
+        int[] scans = {0};
+        PeopleService counting = new PeopleService() {
+            @Override
+            public com.eldermoraes.people.People byId(int id) {
+                scans[0]++;
+                return super.byId(id);
+            }
+        };
+        KnownEntities warmed = new KnownEntities(counting, new FilmService(), new PlanetService(),
+                new SpecieService(), new StarshipService(), new VehicleService());
+        warmed.warm(null);
+        scans[0] = 0;
+        assertEquals(true, warmed.exists("people", "1"));
+        assertEquals(false, warmed.exists("people", "17"));
+        assertEquals(false, warmed.exists("people", "01"));
+        assertEquals(Optional.of(Map.of("name", "Luke Skywalker")), warmed.fields("people", "1"));
+        assertEquals(Optional.empty(), warmed.fields("people", "17"));
+        assertEquals("Luke Skywalker",
+                ((com.eldermoraes.people.People) warmed.record("people", "1").orElseThrow()).getName());
+        assertEquals(Optional.empty(), warmed.record("people", "17"));
+        assertEquals(0, scans[0]);
+    }
+
+    // The lookup and the scan agree on every id of every type: the records, the
+    // gaps between them, the ids past the end and the forms that are not canonical.
+    @Test
+    void theLookupAgreesWithTheScanOnEveryIdOfEveryType() {
+        KnownEntities warmed = new KnownEntities(new PeopleService(), new FilmService(), new PlanetService(),
+                new SpecieService(), new StarshipService(), new VehicleService());
+        warmed.warm(null);
+        for (String type : KnownEntities.TYPES) {
+            List<Integer> ids = entities.ids(type);
+            List<String> asked = new ArrayList<>(List.of("0", "-1", "01", "1.0", " 1", "1 ", "", "abc", "2147483648"));
+            for (int id = 1; id <= ids.get(ids.size() - 1) + 3; id++) {
+                asked.add(String.valueOf(id));
+            }
+            for (String id : asked) {
+                assertEquals(entities.exists(type, id), warmed.exists(type, id), type + "/" + id);
+                assertEquals(entities.fields(type, id), warmed.fields(type, id), type + "/" + id);
+                assertSame(entities.record(type, id).orElse(null), warmed.record(type, id).orElse(null),
+                        type + "/" + id);
+            }
+            assertEquals(ids.size(), asked.stream().filter(id -> warmed.exists(type, id)).count(), type);
+        }
+        assertEquals(false, warmed.exists("droids", "1"));
+        assertEquals(false, warmed.exists(null, "1"));
+        assertEquals(false, warmed.exists("people", null));
+        assertEquals(Optional.empty(), warmed.record("droids", "1"));
+        assertEquals(Optional.empty(), warmed.record(null, "1"));
+        assertEquals(Optional.empty(), warmed.record("people", null));
     }
 
     @Test

@@ -22,8 +22,10 @@
 #                                           page's indexing; the HTML Link alternate;
 #                                           /llms-full.txt with the five copies and the record
 #                                           index, noindex, 20-100 KB; their poisoning pairs),
+#                                           the validators (#58: a strong ETag on a page, a copy
+#                                           and /llms-full.txt, and 304 for If-None-Match),
 #                                           the trailing-slash 301, and the Caddy headers
-#                                           (HSTS, no Server)
+#                                           (HSTS, no Server, zstd/gzip compression)
 #        verify-deploy.sh redirect <from-host> <to-host>
 #                                          (a name that only redirects, today www.swapi.build ->
 #                                           swapi.build): without following redirects, GET /,
@@ -164,7 +166,9 @@ echo "$body" | grep -q "$BASE/api/people/1" && pass "REST embeds https URLs on t
   || fail "REST embedded URLs" "contain $BASE/api/people/1" "missing"
 
 # --- Usage counters (2.6.0+) -------------------------------------------------
-# The REST probe above was just counted, so /api/people/{id} is in the window.
+# The REST probe above was just counted, so /api/people/{id} is in the window,
+# unless a view built in the last 60 s is served (StatsViewMemo; docs/DEPLOY.md,
+# "View lifetime").
 stats=$("${CURL[@]}" -w '\n%{http_code}' "$BASE/api/stats")
 code="${stats##*$'\n'}"
 if [ "$code" = "200" ] && echo "$stats" | grep -q '"countingSince"' \
@@ -186,14 +190,18 @@ assert v["period"] == period and v["granularity"] == granularity
 assert len(v["series"]) == buckets
 assert set(v["groups"]) == {"rest", "mcp", "pages", "seo", "other"}
 assert "total" in v["previous"]
+# How far the last bucket has filled, for the comparison (#54).
+e = v["lastBucketElapsed"]
+assert isinstance(e, (int, float)) and not isinstance(e, bool) and 0 <= e < 1
 ' "$p" "$g" "$n" 2>/dev/null; then
-    pass "/api/stats?period=$p -> $n $g buckets, groups and previous window"
+    pass "/api/stats?period=$p -> $n $g buckets, groups, previous window and lastBucketElapsed"
   else
-    fail "/api/stats?period=$p" "$n $g buckets with groups and previous" "$(echo "$window" | head -c 160)"
+    fail "/api/stats?period=$p" "$n $g buckets with groups, previous and lastBucketElapsed" "$(echo "$window" | head -c 160)"
   fi
 done
 
-# Server times (2.8.0+): the REST probe above was timed under its template too.
+# Server times (2.8.0+): the REST probe above was timed under its template too
+# (same 60 s view caveat as above).
 perf=$("${CURL[@]}" "$BASE/api/stats?period=24h")
 if echo "$perf" | python3 -c '
 import json, sys
@@ -463,12 +471,13 @@ for p in / /resource/films/1 /openapi.json /robots.txt /sitemap.xml /llms.txt; d
   [ -z "$xrt" ] && pass "$p has no X-Robots-Tag" || fail "$p X-Robots-Tag" "absent" "$xrt"
 done
 cc=$("${CURL[@]}" -o /dev/null -w '%header{cache-control}' "$BASE/api/people/1")
-[ "$cc" = "public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400" ] \
+[ "$cc" = "public, max-age=300, s-maxage=300, stale-while-revalidate=86400" ] \
   && pass "/api/people/1 Cache-Control: $cc" \
-  || fail "/api/people/1 Cache-Control" "public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400" "${cc:-missing}"
+  || fail "/api/people/1 Cache-Control" "public, max-age=300, s-maxage=300, stale-while-revalidate=86400" "${cc:-missing}"
 
 # --- Server-rendered content (2.11.0+) --------------------------------------------
-# The <main> of the four fixed pages is drawn by the server (Qute), for whoever
+# The <main> of the fixed pages (five since 2.15.0, with /faq) is drawn by the
+# server (Qute), for whoever
 # does not run JavaScript. Each page: 200 text/html, its data-ssr-page marker on
 # the opening tag, its phrase in the text and at least 200 characters of text
 # (main_text cuts at the first </main>: the footer never counts). /docs/mcp
@@ -557,7 +566,8 @@ fi
 # marker resource-detail (with type and id), the name, the attributes, the
 # related records as links, the samples on the request host and the JSON.
 # Indexing does not change (slice D): people stay noindex,follow with the list
-# canonical, now with content. Any FAIL after a deploy = rollback to 2.11.0.
+# canonical, now with content. Any FAIL after a deploy = rollback to the
+# previous version.
 # record_probe <path> <type> <id> <need>...: each <need> is searched in the
 # markup of the <main> (main_html: the href of a link lives in a tag).
 record_probe() {
@@ -605,7 +615,7 @@ jsonld /resource/films/1 | grep -qF '"@type":"BreadcrumbList"' && pass "/resourc
 # Each copy: 200 text/markdown, the phrase of its page, no <main nor <html (the
 # shell never leaks), Link rel="canonical" on the HTML address, and the indexing
 # of its page (films indexable: no X-Robots-Tag). Any FAIL after a deploy =
-# rollback to 2.13.0 (docs/DEPLOY.md, "5. Rollback").
+# rollback to the previous version (docs/DEPLOY.md, "5. Rollback").
 # md_probe <copy> <canonical> <phrase>
 md_probe() {
   local p="$1" canonical="$2" phrase="$3" got meta body link xrt
@@ -684,6 +694,59 @@ if printf '%s' "$llms" | grep -qF "$BASE/llms-full.txt" && printf '%s' "$llms" |
   pass "llms.txt points to $BASE/llms-full.txt and $BASE/docs/mcp.md"
 else
   fail "llms.txt links" "$BASE/llms-full.txt and $BASE/docs/mcp.md" "missing"
+fi
+
+# --- Validators (#58) --------------------------------------------------------
+# A page, a Markdown copy and /llms-full.txt carry a strong ETag (a digest of
+# the bytes of the body), and a GET or HEAD with it in If-None-Match answers
+# 304 with no body, the same ETag, the Cache-Control of the address and
+# Vary: Origin; another tag gets the whole 200. Asked without Accept-Encoding,
+# so the proxy does not compress and the tag is the application's.
+# header_values <header dump> <name>: every value of that header, joined by ",".
+header_values() {
+  printf '%s\n' "$1" | awk -F': *' -v name="$2" 'tolower($1)==name{sub(/^[^:]*: */, ""); print}' | paste -sd, -
+}
+# etag_probe <path> <cache-control>
+etag_probe() {
+  local p="$1" policy="$2" etag answer got head other
+  etag=$("${CURL[@]}" -o /dev/null -w '%header{etag}' "$BASE$p")
+  # The header lines are read from the dump, every one of each name joined by
+  # a comma: two Cache-Control lines fail, and a proxy that adds its own Vary
+  # line to the 304 (Caddy: Accept-Encoding) does not hide Origin.
+  answer=$("${CURL[@]}" -o /dev/null -D - -H "If-None-Match: ${etag:-\"none\"}" \
+    -w '%{http_code} %{size_download}\n' "$BASE$p" | tr -d '\r')
+  got="${answer##*$'\n'} $(header_values "$answer" etag) | $(header_values "$answer" cache-control) | $(header_values "$answer" vary)"
+  head=$("${CURL[@]}" -o /dev/null -I -H "If-None-Match: ${etag:-\"none\"}" -w '%{http_code}' "$BASE$p")
+  other=$("${CURL[@]}" -o /dev/null -H 'If-None-Match: "not-the-tag"' -w '%{http_code} %header{etag}' "$BASE$p")
+  if [[ "$etag" == \"*\" ]] && [[ "$got" == "304 0 $etag | $policy | "*"Origin"* ]] \
+     && [ "$head" = "304" ] && [ "$other" = "200 $etag" ]; then
+    pass "$p: ETag $etag, If-None-Match -> 304 without a body (GET and HEAD), another tag -> 200"
+  else
+    fail "$p validator" "a strong ETag; with it: 304 0 <etag> | $policy | Origin (GET) and 304 (HEAD); another tag: 200 <etag>" \
+      "ETag ${etag:-missing}; with it: $got (GET), $head (HEAD); another tag: $other"
+  fi
+}
+etag_probe /docs 'public, max-age=0, must-revalidate, s-maxage=300'
+etag_probe /resource/films/1 'public, max-age=0, must-revalidate, s-maxage=300'
+etag_probe /docs.md 'public, max-age=300, s-maxage=86400'
+etag_probe /resource/films/1.md 'public, max-age=300, s-maxage=86400'
+etag_probe /llms-full.txt 'public, max-age=300, s-maxage=86400'
+# An error is not a representation to confirm: no ETag, and never a 304.
+got=$("${CURL[@]}" -o /dev/null -H 'If-None-Match: *' -w '%{http_code} %header{etag}' "$BASE/resource/people/9999")
+[ "$got" = "404 " ] && pass "/resource/people/9999 with If-None-Match: * -> 404 without an ETag" \
+  || fail "/resource/people/9999 validator" "404 and no ETag" "$got"
+# Informational, never fails: the same road with compression asked for, as a
+# browser does. A proxy that compresses must give a strong tag per encoding;
+# Caddy's encode appends "-<encoding>" to it and takes that off If-None-Match
+# before the application sees it. A 200 here means the proxy does not undo its
+# own change, so browsers still download the page on every revalidation.
+enc=$("${CURL[@]}" -o /dev/null -H 'Accept-Encoding: zstd, gzip' -w '%header{etag} %header{content-encoding}' "$BASE/docs")
+enc_tag="${enc%% *}"
+if [ -z "${enc#* }" ]; then
+  echo "INFO  /docs with Accept-Encoding: zstd, gzip: no Content-Encoding (the proxy does not compress), nothing to check"
+else
+  enc_code=$("${CURL[@]}" -o /dev/null -H 'Accept-Encoding: zstd, gzip' -H "If-None-Match: ${enc_tag:-\"none\"}" -w '%{http_code}' "$BASE/docs")
+  echo "INFO  /docs with Accept-Encoding: zstd, gzip: ETag ${enc_tag:-missing}, Content-Encoding ${enc#* }; If-None-Match with it -> $enc_code (304 = a compressed revalidation works)"
 fi
 
 # --- Cold start (informational, never fails) ---------------------------------
@@ -1082,6 +1145,43 @@ hsts=$(echo "$headers" | awk -F': ' 'tolower($1)=="strict-transport-security"{pr
   || fail "HSTS" "max-age=63072000" "${hsts:-missing}"
 server=$(echo "$headers" | awk -F': ' 'tolower($1)=="server"{print $2}')
 [ -z "$server" ] && pass "no Server header" || fail "Server header" "absent" "$server"
+
+# Compression is Caddy's (encode zstd gzip, docs/DEPLOY.md section 2.7); the
+# application sends every body plain. zstd when the client accepts it, gzip
+# otherwise, nothing when it accepts neither, and Vary names Accept-Encoding
+# so a cache never hands a compressed body to a client that cannot read it.
+# The body is not decoded here (the runner's curl may not have zstd): the
+# encoding, the Vary and a smaller download are what is checked. Caddy leaves
+# an answer under 512 bytes alone, so the paths asked here must stay above it.
+# Against the jar on localhost (no Caddy) these fail, like the HSTS line.
+# compress_probe <path> <accept-encoding> <content-encoding> <plain bytes>
+compress_probe() {
+  local p="$1" accept="$2" want="$3" plain="$4" dump enc vary bytes
+  dump=$("${CURL[@]}" -o /dev/null -D - -H "Accept-Encoding: $accept" -w 'bytes: %{size_download}\n' "$BASE$p" | tr -d '\r')
+  enc=$(printf '%s\n' "$dump" | awk -F': ' 'tolower($1)=="content-encoding"{print $2}')
+  vary=$(printf '%s\n' "$dump" | awk -F': ' 'tolower($1)=="vary"{print $2}' | paste -sd, -)
+  bytes=$(printf '%s\n' "$dump" | awk -F': ' '$1=="bytes"{print $2}')
+  if [ "$enc" = "$want" ] && printf '%s' "$vary" | grep -qi 'accept-encoding' \
+     && [ "${bytes:-0}" -gt 0 ] && [ "${bytes:-0}" -lt "$plain" ]; then
+    pass "$p with Accept-Encoding: $accept -> $want, $bytes of $plain bytes, Vary names Accept-Encoding"
+  else
+    fail "$p compression ($accept)" "Content-Encoding $want, fewer than $plain bytes, Vary with Accept-Encoding" \
+      "Content-Encoding ${enc:-none}, ${bytes:-?} bytes, Vary ${vary:-missing}"
+  fi
+}
+plain=$("${CURL[@]}" -o /dev/null -w '%{size_download} %header{content-encoding}' "$BASE/docs")
+if [ "${plain#* }" = "" ] && [ "${plain%% *}" -gt 0 ]; then
+  pass "/docs without Accept-Encoding -> no Content-Encoding (${plain%% *} bytes)"
+  compress_probe /docs 'zstd, gzip' zstd "${plain%% *}"
+  compress_probe /docs 'gzip' gzip "${plain%% *}"
+else
+  fail "/docs without Accept-Encoding" "no Content-Encoding and a body" "Content-Encoding ${plain#* } (${plain%% *} bytes)"
+fi
+plain=$("${CURL[@]}" -o /dev/null -w '%{size_download}' "$BASE/api/people/1")
+compress_probe /api/people/1 'zstd, gzip' zstd "$plain"
+# A Markdown copy too: text/markdown is in the encode list since 2026-11-12.
+plain=$("${CURL[@]}" -o /dev/null -w '%{size_download}' "$BASE/docs.md")
+compress_probe /docs.md 'zstd, gzip' zstd "$plain"
 
 echo
 if [ "$FAILURES" -eq 0 ]; then

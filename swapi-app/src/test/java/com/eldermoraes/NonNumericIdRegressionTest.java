@@ -52,6 +52,17 @@ public class NonNumericIdRegressionTest {
         assertContractual404("/api/vehicles/abc", "No vehicle found with id abc");
     }
 
+    // A path below a record is not an unknown id: person 1 exists, so the
+    // message must not say it was not found.
+    @Test
+    public void pathBelowARecordDoesNotBlameTheId() {
+        given().when().get("/api/people/1/films").then()
+                .statusCode(404)
+                .contentType("text/plain")
+                .body(containsString("No resource found at /api/people/1/films"))
+                .body(org.hamcrest.CoreMatchers.not(containsString("found with id")));
+    }
+
     // The failing set is not "non-numeric": it is "does not parse as int".
     @Test
     public void intOverflowIdIs404WithBody() {

@@ -4,6 +4,7 @@ import com.eldermoraes.seo.KnownEntities;
 import com.eldermoraes.seo.LlmsTxt;
 import com.eldermoraes.seo.SeoMetadataRegistry;
 import com.eldermoraes.seo.SeoSiteFile;
+import com.eldermoraes.seo.TaggedBody;
 import com.eldermoraes.seo.ssr.ServerRendering;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -33,6 +34,10 @@ import java.util.function.Supplier;
  * LRU of {@link #ROOTS} roots (the host comes from each request; in production
  * there is one root). Record copies are not cached (about 260 per root, each
  * small). The content only changes in a release. A failure is never cached.
+ *
+ * Every copy leaves as a TaggedBody (#58): the text with its validator. A cached
+ * copy is cached as that value, so its tag is computed once per cached body;
+ * a record copy is tagged on each request, like the rest of its build.
  */
 @ApplicationScoped
 public class MarkdownCopies {
@@ -56,9 +61,9 @@ public class MarkdownCopies {
     @Inject
     KnownEntities known;
 
-    private final Map<String, Map<String, String>> cache = new LinkedHashMap<>(8, 0.75f, true) {
+    private final Map<String, Map<String, TaggedBody>> cache = new LinkedHashMap<>(8, 0.75f, true) {
         @Override
-        protected boolean removeEldestEntry(Map.Entry<String, Map<String, String>> eldest) {
+        protected boolean removeEldestEntry(Map.Entry<String, Map<String, TaggedBody>> eldest) {
             return size() > ROOTS;
         }
     };
@@ -102,9 +107,9 @@ public class MarkdownCopies {
      *
      * @param siteRoot the root of this request, without a trailing slash
      */
-    public Optional<String> copy(String page, String siteRoot) {
+    public Optional<TaggedBody> copy(String page, String siteRoot) {
         if (recordOf(page).isPresent()) {
-            return build(page, siteRoot);
+            return build(page, siteRoot).map(TaggedBody::of);
         }
         return cached(siteRoot, page, () -> build(page, siteRoot));
     }
@@ -114,7 +119,7 @@ public class MarkdownCopies {
      * order of seo/site.json), separated by "---", and the index of every record
      * (its copy and its JSON). Empty when a copy is unavailable.
      */
-    public Optional<String> llmsFull(String siteRoot) {
+    public Optional<TaggedBody> llmsFull(String siteRoot) {
         return cached(siteRoot, LLMS_FULL, () -> buildLlmsFull(siteRoot));
     }
 
@@ -131,7 +136,7 @@ public class MarkdownCopies {
 
     boolean isCached(String siteRoot, String key) {
         synchronized (cache) {
-            Map<String, String> entries = cache.get(siteRoot);
+            Map<String, TaggedBody> entries = cache.get(siteRoot);
             return entries != null && entries.containsKey(key);
         }
     }
@@ -163,11 +168,11 @@ public class MarkdownCopies {
             if (copyPathOf(page.path()).isEmpty()) {
                 continue;
             }
-            Optional<String> copy = copy(page.path(), siteRoot);
+            Optional<TaggedBody> copy = copy(page.path(), siteRoot);
             if (copy.isEmpty()) {
                 return Optional.empty();
             }
-            out.append("\n---\n\n").append(copy.get());
+            out.append("\n---\n\n").append(copy.get().text());
         }
         out.append("\n---\n\n## Records\n\nEvery record has a Markdown copy and its JSON on the API.\n");
         for (SeoSiteFile.ResourceType type : metadata.site().resources()) {
@@ -183,20 +188,22 @@ public class MarkdownCopies {
         return Optional.of(out.toString());
     }
 
-    private Optional<String> cached(String siteRoot, String key, Supplier<Optional<String>> build) {
+    // The body is tagged outside the lock and kept with its tag. When two
+    // requests build the same one at once, both get the one that was kept.
+    private Optional<TaggedBody> cached(String siteRoot, String key, Supplier<Optional<String>> build) {
         synchronized (cache) {
-            Map<String, String> entries = cache.get(siteRoot);
+            Map<String, TaggedBody> entries = cache.get(siteRoot);
             if (entries != null && entries.containsKey(key)) {
                 return Optional.of(entries.get(key));
             }
         }
-        Optional<String> built = build.get();
-        built.ifPresent(value -> {
+        return build.get().map(TaggedBody::of).map(body -> {
             synchronized (cache) {
-                cache.computeIfAbsent(siteRoot, root -> new ConcurrentHashMap<>()).putIfAbsent(key, value);
+                Map<String, TaggedBody> entries = cache.computeIfAbsent(siteRoot, root -> new ConcurrentHashMap<>());
+                TaggedBody kept = entries.putIfAbsent(key, body);
+                return kept == null ? body : kept;
             }
         });
-        return built;
     }
 
     private Optional<String> pageName(String path) {
