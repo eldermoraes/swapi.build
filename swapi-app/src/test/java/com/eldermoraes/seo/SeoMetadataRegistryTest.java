@@ -100,6 +100,29 @@ class SeoMetadataRegistryTest {
         assertEquals(SeoMetadata.INDEX_FOLLOW, page.robots());
     }
 
+    // #57: the sitemap walked every record of every indexable type on each
+    // request, although the data only changes in a release. The list is worked
+    // out once; the file itself still follows the host of each request (SeoRoutes).
+    @Test
+    void theSitemapRoutesAreWalkedFromTheDataOnce() {
+        int[] walks = {0};
+        KnownEntities counting = new KnownEntities(new PeopleService(), new FilmService(), new PlanetService(),
+                new SpecieService(), new StarshipService(), new VehicleService()) {
+            @Override
+            public List<Integer> ids(String type) {
+                walks[0]++;
+                return super.ids(type);
+            }
+        };
+        SeoMetadataRegistry registry = new SeoMetadataRegistry(counting);
+        List<String> first = sitemapPaths(registry);
+        int walksOfTheFirst = walks[0];
+        assertTrue(walksOfTheFirst > 0, "the first sitemap walks the data");
+        assertEquals(first, sitemapPaths(registry));
+        assertEquals(walksOfTheFirst, walks[0]);
+        assertEquals(21, first.size(), first.toString());
+    }
+
     // seo/site.json is read when the app starts, not on the first page: an invalid
     // or missing file stops the startup with its message (and in production
     // swapi-update reports "is not answering") instead of serving untitled pages.

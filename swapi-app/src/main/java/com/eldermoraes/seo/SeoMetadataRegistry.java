@@ -60,6 +60,20 @@ public class SeoMetadataRegistry {
      * data has not changed since 2014), and the build or deploy date would be a lie.
      */
     public List<SeoMetadata> sitemapRoutes() {
+        List<SeoMetadata> kept = sitemap;
+        if (kept == null) {
+            kept = walkSitemapRoutes();
+            sitemap = kept;
+        }
+        return kept;
+    }
+
+    // Worked out on the first sitemap and kept (#57): the data and seo/site.json
+    // do not change while the process runs. Not in the constructor: this bean
+    // may be built before KnownEntities has warmed its lookup.
+    private volatile List<SeoMetadata> sitemap;
+
+    private List<SeoMetadata> walkSitemapRoutes() {
         List<SeoMetadata> sitemap = new ArrayList<>(routes);
         for (SeoSiteFile.ResourceType resource : site.resources()) {
             if (resource.detail().indexable()) {
