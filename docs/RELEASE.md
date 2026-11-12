@@ -76,20 +76,28 @@ the native binary in a container (`podman:<container>`, read as the `VmRSS` of
 its PID 1):
 
 ```bash
-scripts/mcp-listen-load.sh listens http://localhost:5432 <pid>   # 500 listens, held up to 60 s
-scripts/mcp-listen-load.sh calls   http://localhost:5432 <pid>   # 10000 tool calls on one connection
+# mcp-listen-load.sh listens <base-url> <target> [count=500] [hold=60]
+# mcp-listen-load.sh calls   <base-url> <target> [count=10000]
+scripts/mcp-listen-load.sh listens http://localhost:5432 <pid>
+scripts/mcp-listen-load.sh calls   http://localhost:5432 <pid>
+scripts/mcp-listen-load.sh listens http://localhost:<port> podman:<container>
 ```
 
-What to expect, with 2.12.1 as the baseline (`CHANGELOG.md`, its `Security`
-entry):
+What to expect, with the 2.12.1 measurements as the baseline (native binary in
+a container; `CHANGELOG.md`, 2.12.1, `Security` for the listens and `Changed`
+for the calls). The script prints the memory in kB (`rss_kb`); the changelog
+quotes it in MB.
 
-- `listens`: every listen answered within 2 s with `-32601`, and none still
-  open at 30 s. The first burst of connections costs memory once (142.2 to
-  170.9 MB on the native binary); a second run leaves it flat. A listen that
-  stays open is the 2.12.0 defect back.
-- `calls`: every call answers `200`, and the memory after the calls stays close
-  to the memory before them. A figure that grows with the number of calls is a
-  leak of the request context (fixed in `quarkus-mcp-server` 2.0.3).
+- `listens`: all 500 answered within 2 s with `-32601`, and none still open at
+  30 s. The first burst of connections costs memory once (142.2 to 170.9 MB);
+  a second run leaves it flat (169.3 MB). A listen that stays open is the
+  2.12.0 defect back.
+- `calls`: every call answers `200`, and the memory does not grow over the
+  10 000 calls (170.9 to 169.3 MB). The request context leak fixed in
+  `quarkus-mcp-server` 2.0.3 did not show as memory even on 2.12.0 (175.5 to
+  173.2 MB), so a flat figure does not prove that fix: `McpRequestContextTest`
+  does, in the suite. A figure that grows with the number of calls is
+  something new, to investigate before releasing.
 
 ## 5. Commit and merge to `main`
 
