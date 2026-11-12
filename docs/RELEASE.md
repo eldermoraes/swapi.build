@@ -61,6 +61,36 @@ of runs), and the count is wrong; do not publish it. The schedule gives about 70
 runs a day (647 by 28 October 2026), so the history passes 1000 runs in early
 November 2026 and 5000 around the end of December 2026.
 
+### Optional: MCP load rehearsal
+
+Not a gate, and not part of the pipeline: it needs a running instance, takes
+minutes and gives numbers to read, not a pass or a fail. Worth running only for
+a release that changes how `/mcp` handles a request: `McpTransportFilter`, the
+version of the MCP server extension, or `quarkus.http.limits.max-body-size`.
+
+`scripts/mcp-listen-load.sh` measures what the suite cannot: the cost of many
+concurrent `subscriptions/listen` requests, and the memory over many tool
+calls. **Never run it against production**: it opens hundreds of connections on
+purpose. The target is a local instance of the release candidate (its pid), or
+the native binary in a container (`podman:<container>`, read as the `VmRSS` of
+its PID 1):
+
+```bash
+scripts/mcp-listen-load.sh listens http://localhost:5432 <pid>   # 500 listens, held up to 60 s
+scripts/mcp-listen-load.sh calls   http://localhost:5432 <pid>   # 10000 tool calls on one connection
+```
+
+What to expect, with 2.12.1 as the baseline (`CHANGELOG.md`, its `Security`
+entry):
+
+- `listens`: every listen answered within 2 s with `-32601`, and none still
+  open at 30 s. The first burst of connections costs memory once (142.2 to
+  170.9 MB on the native binary); a second run leaves it flat. A listen that
+  stays open is the 2.12.0 defect back.
+- `calls`: every call answers `200`, and the memory after the calls stays close
+  to the memory before them. A figure that grows with the number of calls is a
+  leak of the request context (fixed in `quarkus-mcp-server` 2.0.3).
+
 ## 5. Commit and merge to `main`
 
 Never release from a feature branch: the tag must point at `main`.
