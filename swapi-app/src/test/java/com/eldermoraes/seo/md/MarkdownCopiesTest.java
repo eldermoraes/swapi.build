@@ -101,6 +101,7 @@ class MarkdownCopiesTest {
                 ## Related records
                 """;
         Assertions.assertTrue(film.contains(crawl), film);
+        Assertions.assertFalse(film.contains("civil war. Rebel"), "the one-line form is gone: " + film);
         Assertions.assertFalse(film.contains("\r"), "no carriage return of the data in the copy: " + film);
     }
 
