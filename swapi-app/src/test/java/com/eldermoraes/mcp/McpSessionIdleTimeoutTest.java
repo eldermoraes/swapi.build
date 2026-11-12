@@ -17,8 +17,8 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.function.BooleanSupplier;
 
+import static com.eldermoraes.mcp.Within.within;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -88,17 +88,6 @@ class McpSessionIdleTimeoutTest {
             ids.add(connection.id());
         }
         return ids;
-    }
-
-    private static boolean within(long millis, BooleanSupplier condition) throws InterruptedException {
-        long deadline = System.nanoTime() + millis * 1_000_000;
-        while (System.nanoTime() < deadline) {
-            if (condition.getAsBoolean()) {
-                return true;
-            }
-            Thread.sleep(100);
-        }
-        return condition.getAsBoolean();
     }
 
     @Test

@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.eldermoraes.mcp.Within.within;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -39,6 +40,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class McpDeleteSessionTest {
 
     private static final String SESSION_ERA = "2025-11-25";
+    // The idle timeout here is minutes, so only the end-of-request removal can
+    // take a throwaway session out within this; the rest is slow-runner margin.
+    private static final long THROWAWAY_GONE_WITHIN_MS = 5000;
 
     @TestHTTPResource("/mcp")
     URI mcp;
@@ -159,6 +163,14 @@ class McpDeleteSessionTest {
     // A client that deleted its session and uses the id again is served like
     // one whose session was dropped (auto-init), and that request does not
     // bring the session back.
+    //
+    // Extension 2.0.3 writes the answer (response.end in HttpMcpRequest.send)
+    // before it removes the throwaway session (handle(...).onComplete in
+    // StreamableHttpMcpMessageHandler.handleStateful), so right after the
+    // response that session can still be in the heap. The test waits a few
+    // seconds for it to go: a session really left behind stays past that and
+    // still fails it. "Left" means held now and not held before, so a session
+    // of another test going away meanwhile does not count.
     @Test
     void aDeletedSessionIdKeepsWorking() throws Exception {
         String session = openSession();
@@ -173,6 +185,10 @@ class McpDeleteSessionTest {
         assertEquals(200, call.statusCode(), call.body());
         assertTrue(call.body().contains("Luke Skywalker"), call.body());
         assertFalse(sessions.has(session), "the deleted session came back");
-        assertEquals(heldBefore, heldSessions(), "the request after the DELETE left a session");
+        within(THROWAWAY_GONE_WITHIN_MS, () -> heldBefore.containsAll(heldSessions()));
+        List<String> left = new ArrayList<>(heldSessions());
+        left.removeAll(heldBefore);
+        assertEquals(List.of(), left, "the request after the DELETE left a session (before: "
+                + heldBefore + ", " + THROWAWAY_GONE_WITHIN_MS + " ms after the response: " + heldSessions() + ")");
     }
 }
