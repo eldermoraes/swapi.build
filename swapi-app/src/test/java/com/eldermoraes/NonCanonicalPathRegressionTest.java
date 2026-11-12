@@ -5,6 +5,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayOutputStream;
@@ -140,6 +141,84 @@ class NonCanonicalPathRegressionTest {
         for (String template : routes.keySet()) {
             assertEquals(Optional.of(template), RouteNormalizer.normalize(template), template);
         }
+    }
+
+    // --- issue #107: a refused alias is counted like any other 404 ---
+
+    /**
+     * A refused alias is counted under the template of the path it spells, as
+     * the ordinary 404 of the same address is: the counters count requests
+     * that reached a route, whatever the answer.
+     */
+    @ParameterizedTest
+    @CsvSource({
+            // the ordinary 404 the others are compared with
+            "/api/people/9999, /api/people/{id}",
+            // #105: the path before the id
+            "/api//people/1, /api/people/{id}",
+            "//api/people/1, /api/people/{id}",
+            "/api/people/1//, /api/people/{id}",
+            "/api/./people/1, /api/people/{id}",
+            "/api/films/../people/1, /api/people/{id}",
+            "/api/%70eople/1, /api/people/{id}",
+            "/%61pi/people/1, /api/people/{id}",
+            // #55: the id
+            "/api/people/01, /api/people/{id}",
+            "/api/people/%31, /api/people/{id}",
+            "/api/people/1;x=1, /api/people/{id}",
+            // a list, /random and the root
+            "/api//people, /api/people",
+            "/api//people/random, /api/people/random",
+            "//api, /api",
+            // a type segment no route has: other, like an unknown path
+            "/api/people;x=1/1, other",
+            "/api/People/1, other",
+            "/api/zz-unknown, other"})
+    void refusedAliasIsCountedLikeAnyOther404(String alias, String template) throws IOException {
+        long before = routeCount(template);
+        assertEquals(404, send("GET", alias).status, alias);
+        assertEquals(before + 1, routeCount(template), alias + " under " + template);
+    }
+
+    /** /api/stats counts the read of the counters too, so its alias is checked on its own. */
+    @Test
+    void aliasOfTheStatsIsCountedUnderTheStats() throws IOException {
+        long before = routeCount("/api/stats");
+        assertEquals(404, send("GET", "/api//stats").status);
+        // the alias, then the read of the counters itself
+        assertEquals(before + 2, routeCount("/api/stats"));
+    }
+
+    /** A route is timed exactly when it is counted: refused aliases included. */
+    @Test
+    void refusedAliasIsTimedUnderTheTemplateItIsCountedUnder() throws IOException, InterruptedException {
+        String[] aliases = {"/api//people/1", "/api/%70eople/1", "/api/people/01", "/api/people/1;x=1"};
+        long before = timed("/api/people/{id}");
+        for (String alias : aliases) {
+            assertEquals(404, send("GET", alias).status, alias);
+        }
+        assertEquals(before + aliases.length, awaitTimed("/api/people/{id}", before + aliases.length));
+    }
+
+    private static long routeCount(String route) {
+        Number n = given().get("/api/stats").then().statusCode(200).extract().path("routes.'" + route + "'");
+        return n == null ? 0 : n.longValue();
+    }
+
+    /** Timed requests of a route in the last 24 hours (the time is recorded once the response has ended). */
+    private static long timed(String route) {
+        Number n = given().get("/api/stats?period=24h").then().statusCode(200)
+                .extract().path("performance.routes.'" + route + "'.count");
+        return n == null ? 0 : n.longValue();
+    }
+
+    private static long awaitTimed(String route, long expected) throws InterruptedException {
+        long n = timed(route);
+        for (int i = 0; i < 100 && n < expected; i++) {
+            Thread.sleep(20);
+            n = timed(route);
+        }
+        return n;
     }
 
     // --- a minimal HTTP/1.1 client that sends the path exactly as written ---
