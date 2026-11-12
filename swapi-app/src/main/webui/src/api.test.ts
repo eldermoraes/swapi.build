@@ -45,3 +45,18 @@ it('lets a stats request opt out of navigation cancellation with its own signal'
   expect(urls).toEqual(['/api/stats?period=24h']);
   await expect(pending).resolves.toEqual({ data: { total: 3 }, status: 200 });
 });
+
+it('does not end an HTTP error in a bare colon when the status text is empty', async () => {
+  // HTTP/2 and HTTP/3 carry no reason phrase, so statusText is ''.
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => Promise.resolve(new Response('nope', { status: 404, statusText: '' }))),
+  );
+  const own = new AbortController();
+  await expect(fetchResources('people', own.signal)).rejects.toThrow(/^HTTP 404$/);
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => Promise.resolve(new Response('nope', { status: 404, statusText: 'Not Found' }))),
+  );
+  await expect(fetchResources('people', own.signal)).rejects.toThrow(/^HTTP 404: Not Found$/);
+});

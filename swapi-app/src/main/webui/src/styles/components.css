@@ -175,6 +175,13 @@
   padding: 0.75rem 0.5rem;
 }
 
+/* The input drops its own outline (it would cut through the prompt row), so
+   the row shows the focus ring instead. */
+.sw-term-prompt:focus-within {
+  outline: 2px solid var(--sw-gold);
+  outline-offset: -2px;
+}
+
 .sw-term-exec {
   background: var(--sw-gold);
   color: var(--sw-ink);
