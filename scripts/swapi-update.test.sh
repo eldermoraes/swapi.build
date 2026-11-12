@@ -113,54 +113,45 @@ left() {
   fi
 }
 
+# deploys <description> <tag> <expected versions>: the script succeeds, the tag
+# is the active version and exactly these versions are left.
+deploys() {
+  if update "$2"; then
+    left "$1" "$3" "$2"
+  else
+    fail "$1: the script failed"
+    sed 's/^/      /' "$TMP/output"
+  fi
+}
+
+# does_not_answer <description> <tag> <expected versions>: the script fails
+# after the switch, and exactly these versions are left.
+does_not_answer() {
+  if update "$2"; then
+    fail "$1: exit 0"
+  else
+    left "$1" "$3" "$2"
+  fi
+}
+
 host v2.0.0 v1.0.0 v1.9.0
-if update v2.1.0; then
-  left "an upgrade keeps the new version and the one before it" "v2.0.0 v2.1.0" v2.1.0
-else
-  fail "an upgrade: the script failed"; sed 's/^/      /' "$TMP/output"
-fi
+deploys "an upgrade keeps the new version and the one before it" v2.1.0 "v2.0.0 v2.1.0"
 
 host v2.0.0 v1.9.0
-if update v2.0.0; then
-  left "a redeploy of the active version keeps the previous one" "v1.9.0 v2.0.0" v2.0.0
-else
-  fail "a redeploy of the active version: the script failed"; sed 's/^/      /' "$TMP/output"
-fi
-
+deploys "a redeploy of the active version keeps the previous one" v2.0.0 "v1.9.0 v2.0.0"
 # Same host, no reset: the redeploy left nothing behind for good.
-if update v2.1.0; then
-  left "an upgrade after a redeploy prunes again" "v2.0.0 v2.1.0" v2.1.0
-else
-  fail "an upgrade after a redeploy: the script failed"; sed 's/^/      /' "$TMP/output"
-fi
+deploys "an upgrade after a redeploy prunes again" v2.1.0 "v2.0.0 v2.1.0"
 
 host ""
-if update v1.0.0; then
-  left "the first install leaves one version" "v1.0.0" v1.0.0
-else
-  fail "the first install: the script failed"; sed 's/^/      /' "$TMP/output"
-fi
+deploys "the first install leaves one version" v1.0.0 "v1.0.0"
 
 host v2.0.0 v1.9.0
 : > "$TMP/down"
-if update v2.1.0; then
-  fail "a version that does not answer: exit 0"
-else
-  left "a version that does not answer removes nothing" "v1.9.0 v2.0.0 v2.1.0" v2.1.0
-fi
-
-# The retry of that tag, without a rollback in between, still does not answer.
-if update v2.1.0; then
-  fail "a retry that does not answer: exit 0"
-else
-  left "a retry of the same tag keeps the last working version" "v1.9.0 v2.0.0 v2.1.0" v2.1.0
-fi
+does_not_answer "a version that does not answer removes nothing" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
+# The retry of that tag, without a rollback in between.
+does_not_answer "a retry that does not answer removes nothing" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
 rm -f "$TMP/down"
-if update v2.1.0; then
-  left "a retry that answers keeps the last working version" "v1.9.0 v2.0.0 v2.1.0" v2.1.0
-else
-  fail "a retry that answers: the script failed"; sed 's/^/      /' "$TMP/output"
-fi
+deploys "a retry that answers keeps the last working version" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
 
 echo
 if [ "$FAILURES" -eq 0 ]; then

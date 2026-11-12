@@ -1109,7 +1109,7 @@ active version removes nothing (section 2.5; the host copy of the script must
 be the current one).
 
 ```bash
-ls /opt/swapi/                                   # v<previous> and v<current>
+ls /opt/swapi/                                   # v<current>, v<previous>; more after a redeploy or a retry
 sudo ln -sfn /opt/swapi/<previous tag> /opt/swapi/current
 sudo systemctl restart swapi
 curl -fsS https://swapi.build/openapi.json | grep -o '"version"[^,]*'
