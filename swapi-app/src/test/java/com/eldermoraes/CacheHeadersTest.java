@@ -14,14 +14,15 @@ import static org.hamcrest.Matchers.nullValue;
 @QuarkusTest
 class CacheHeadersTest {
 
-    private static final String EDGE_TTL = "s-maxage=31536000";
-
     // Exact required value, locked down here: in production code it exists
-    // exactly once, in the swapi.cache-control.public property.
+    // exactly once, in the swapi.cache-control.public property. The shared
+    // lifetime is the HTML's five minutes (s-maxage=300): nothing in front of the
+    // self-hosted origin is invalidated by a deploy, so a long s-maxage would hold
+    // a data fix, or a 404 that became a 200, in a cache nobody here can purge.
     private static final String CACHE_CONTROL =
-            "public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400";
+            "public, max-age=300, s-maxage=300, stale-while-revalidate=86400";
 
-    // Static data invalidated by deploy: the edge may hold onto it for a long time.
+    // Static data, but a release can fix it: a shared cache keeps it for minutes.
     @Test
     void successfulResourceIsCacheableAtTheEdge() {
         given()
@@ -32,8 +33,8 @@ class CacheHeadersTest {
                 .header("Cache-Control", equalTo(CACHE_CONTROL));
     }
 
-    // A nonexistent id only comes into existence in a new deploy, which already
-    // invalidates the cache. Caching 404 is what absorbs id scans.
+    // Caching 404 is what absorbs id scans. A nonexistent id only comes into
+    // existence in a release, and no cache is invalidated by one: five minutes.
     @Test
     void notFoundIsCacheableAtTheEdge() {
         given()
@@ -41,7 +42,7 @@ class CacheHeadersTest {
                 .get("/api/people/9999")
         .then()
                 .statusCode(404)
-                .header("Cache-Control", containsString(EDGE_TTL));
+                .header("Cache-Control", equalTo(CACHE_CONTROL));
     }
 
     // Caching /random would make the edge always return the same draw.
@@ -89,10 +90,10 @@ class CacheHeadersTest {
                 .get("/api")
         .then()
                 .statusCode(200)
-                .header("Cache-Control", containsString(EDGE_TTL));
+                .header("Cache-Control", equalTo(CACHE_CONTROL));
     }
 
-    // The spec is the canonical contract and only changes on deploy. The /docs
+    // The spec is the canonical contract and only changes on a release. The /docs
     // page fetches this file on every visit, so it is one of the most requested paths.
     @Test
     void openApiSpecIsCacheableAtTheEdge() {
@@ -102,13 +103,13 @@ class CacheHeadersTest {
                 .get("/openapi.json")
         .then()
                 .statusCode(200)
-                .header("Cache-Control", containsString(EDGE_TTL));
+                .header("Cache-Control", equalTo(CACHE_CONTROL));
     }
 
     // The CORS filter echoes the request's Origin and emits no Vary. Without
-    // Vary the edge serves one origin's variant (or the no-origin variant) to
+    // Vary a shared cache serves one origin's variant (or the no-origin variant) to
     // another client — intermittently broken CORS, and a third party's ACAO
-    // stuck at the edge for a year.
+    // kept by a shared cache for as long as the entry lives.
     @Test
     void cacheableResponseVariesByOrigin() {
         given()

@@ -149,7 +149,7 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   `/resource/films/1`, `/openapi.json`, `robots.txt`, `sitemap.xml` and
   `llms.txt` have no `X-Robots-Tag` at all: on a page it would deindex the
   site. `/api/people/1` keeps exactly
-  `Cache-Control: public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400`.
+  `Cache-Control: public, max-age=300, s-maxage=300, stale-while-revalidate=86400`.
 - **Server-rendered content (2.11.0+)**: the `<main>` of `/`, `/docs`,
   `/docs/mcp` and `/about` is drawn by the server (Qute) for whoever does not
   run JavaScript (GPTBot, ClaudeBot, PerplexityBot, agents that `fetch`). Each

@@ -463,9 +463,9 @@ for p in / /resource/films/1 /openapi.json /robots.txt /sitemap.xml /llms.txt; d
   [ -z "$xrt" ] && pass "$p has no X-Robots-Tag" || fail "$p X-Robots-Tag" "absent" "$xrt"
 done
 cc=$("${CURL[@]}" -o /dev/null -w '%header{cache-control}' "$BASE/api/people/1")
-[ "$cc" = "public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400" ] \
+[ "$cc" = "public, max-age=300, s-maxage=300, stale-while-revalidate=86400" ] \
   && pass "/api/people/1 Cache-Control: $cc" \
-  || fail "/api/people/1 Cache-Control" "public, max-age=300, s-maxage=31536000, stale-while-revalidate=86400" "${cc:-missing}"
+  || fail "/api/people/1 Cache-Control" "public, max-age=300, s-maxage=300, stale-while-revalidate=86400" "${cc:-missing}"
 
 # --- Server-rendered content (2.11.0+) --------------------------------------------
 # The <main> of the four fixed pages is drawn by the server (Qute), for whoever
