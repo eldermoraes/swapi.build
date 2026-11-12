@@ -13,9 +13,9 @@ import java.util.regex.Pattern;
  * The Cloudflare Web Analytics beacon, the one third-party script the site loads.
  *
  * It sets no cookie and uses no local storage; it reports the page URL, the
- * referrer and load timings to Cloudflare. It is injected by {@link SeoRoutes}
- * into the SPA HTML only when {@code swapi.analytics.cloudflare-token} is set
- * (environment variable {@code CF_WEB_ANALYTICS_TOKEN} on the host, read at
+ * referrer and load timings to Cloudflare. It is injected by {@link SiteShell}
+ * (for {@link SeoRoutes}) into the SPA HTML only when
+ * {@code swapi.analytics.cloudflare-token} is set (environment variable {@code CF_WEB_ANALYTICS_TOKEN} on the host, read at
  * runtime — see docs/DEPLOY.md). Without a token nothing is injected.
  *
  * The token is not a secret (it is visible in every page), but it is still
