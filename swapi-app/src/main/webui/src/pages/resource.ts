@@ -4,6 +4,42 @@ import { escapeHtml } from '../utils';
 import { getResourceMeta } from '../constants';
 import type { Entity, ResourceTool } from '../resource-actions';
 
+/** The cards of a list, or the "no results" line. */
+function resultsMarkup(type: string, items: Entity[]): string {
+  if (items.length === 0) return '<p class="no-results">No results found.</p>';
+  const meta = getResourceMeta(type);
+  return `<div class="item-list">${items
+    .map(
+      (item) => `
+          <a href="/resource/${type}/${String(item.url).match(/\/(\d+)\/?$/)![1]}" class="item-card sw-panel">
+            <div class="item-name">${escapeHtml(String(item[meta.nameField]))}</div>
+            <div class="item-detail">${escapeHtml(String(item[meta.detailField] ?? ''))}</div>
+          </a>`,
+    )
+    .join('')}</div>`;
+}
+
+/** The results region of the list of `type`, when that list is the page shown. */
+function shownResults(container: HTMLElement, type: string): Element | null {
+  return container.querySelector(`[data-resource-list="${type}"] #resource-content`);
+}
+
+/** True when the page shown is the list of `type` (drawn by renderResourceList). */
+export function showsResourceList(container: HTMLElement, type: string): boolean {
+  return shownResults(container, type) !== null;
+}
+
+/**
+ * A search on the list shown (issue #71): only the results change. The title,
+ * the search box (with what the reader typed, and the focus) and the buttons
+ * are the same nodes. The count is announced by the caller's commit; the region
+ * is not a live region, which would read every card.
+ */
+export function updateResourceResults(container: HTMLElement, type: string, items: Entity[]): void {
+  const results = shownResults(container, type);
+  if (results) results.innerHTML = resultsMarkup(type, items);
+}
+
 export function renderResourceList(
   container: HTMLElement,
   type: string,
@@ -13,7 +49,7 @@ export function renderResourceList(
 ): void {
   const meta = getResourceMeta(type);
   container.innerHTML = `
-    <div class="resource-browser sw-inner-wide">
+    <div class="resource-browser sw-inner-wide" data-resource-list="${type}">
       <div class="browser-header">
         <h1 class="sw-page-title">${meta.title}</h1>
         <div class="browser-actions">
@@ -25,20 +61,8 @@ export function renderResourceList(
           <button class="sw-pill sw-pill--ghost sw-pill--sm" id="random-btn">Random</button>
         </div>
       </div>
-      <div id="resource-content" aria-live="polite">
-        ${
-          items.length === 0
-            ? '<p class="no-results">No results found.</p>'
-            : `<div class="item-list">${items
-                .map(
-                  (item) => `
-          <a href="/resource/${type}/${String(item.url).match(/\/(\d+)\/?$/)![1]}" class="item-card sw-panel">
-            <div class="item-name">${escapeHtml(String(item[meta.nameField]))}</div>
-            <div class="item-detail">${escapeHtml(String(item[meta.detailField] ?? ''))}</div>
-          </a>`,
-                )
-                .join('')}</div>`
-        }
+      <div id="resource-content">
+        ${resultsMarkup(type, items)}
       </div>
     </div>`;
   const input = container.querySelector<HTMLInputElement>('#search-input')!;

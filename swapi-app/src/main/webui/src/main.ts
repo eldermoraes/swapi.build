@@ -39,6 +39,12 @@ function announce(message: string) {
   });
 }
 
+/** What a search announces: the number of records it found. */
+function resultCount(found: number): string {
+  if (found === 0) return 'No results found.';
+  return found === 1 ? '1 result found.' : `${found} results found.`;
+}
+
 function updateActiveNav(page: Page) {
   const active = activeNavHref(page);
   document.querySelectorAll('.nav-link').forEach((link) => {
@@ -125,7 +131,7 @@ function abortDocumentLoad(): void {
 
 const explorer = new ResourceExplorer(
   container,
-  (path, entity) => {
+  (path, entity, found) => {
     cancelPending();
     abortDocumentLoad();
     const generation = ++navigationGeneration;
@@ -137,6 +143,12 @@ const explorer = new ResourceExplorer(
     // Written after the record arrived, from the record: a record address never
     // shows its fallback title ("Films #1") on the way to its real one.
     const title = writeHead(path, { entity });
+    if (found !== undefined) {
+      // A search on the list shown: the page is the same, so the reader stays
+      // where they are (scroll, focus) and hears the news, the count.
+      announce(resultCount(found));
+      return;
+    }
     requestAnimationFrame(() => {
       if (generation !== navigationGeneration) return;
       window.scrollTo(0, 0);
