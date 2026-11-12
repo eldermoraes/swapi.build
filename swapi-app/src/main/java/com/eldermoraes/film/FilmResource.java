@@ -37,9 +37,9 @@ public class FilmResource {
             @QueryParam("search") String search) {
 
         if (search != null && !search.isEmpty()) {
-            return Response.ok().entity(filmService.getFilmByTitle(search)).build();
+            return Response.ok().entity(filmService.search(search)).build();
         } else{
-            return Response.ok().entity(filmService.getAllFilms()).build();
+            return Response.ok().entity(filmService.all()).build();
         }
     }
 
@@ -54,7 +54,7 @@ public class FilmResource {
     public Response getFilmById(
             @Parameter(description = "Numeric id of the film", example = "1")
             @PathParam("id") int id){
-        Film film = filmService.getFilmById(id);
+        Film film = filmService.byId(id);
         if (film == null) {
             return Response.status(Response.Status.NOT_FOUND)
                     .type(MediaType.TEXT_PLAIN)
@@ -70,7 +70,7 @@ public class FilmResource {
     @APIResponse(responseCode = "200", description = "A randomly selected film",
             content = @Content(schema = @Schema(implementation = Film.class)))
     public Response getRandomFilm() {
-        return Response.ok().entity(filmService.getRandomFilm()).build();
+        return Response.ok().entity(filmService.random()).build();
     }
 
 }

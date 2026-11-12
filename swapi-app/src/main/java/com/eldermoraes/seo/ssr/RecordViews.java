@@ -133,12 +133,12 @@ public class RecordViews {
 
     private SWObject entity(String type, int id) {
         return switch (type) {
-            case "people" -> people.getPeopleById(id);
-            case "films" -> films.getFilmById(id);
-            case "planets" -> planets.getPlanetById(id);
-            case "species" -> species.getSpecieById(id);
-            case "starships" -> starships.getStarshipById(id);
-            case "vehicles" -> vehicles.getVehicleById(id);
+            case "people" -> people.byId(id);
+            case "films" -> films.byId(id);
+            case "planets" -> planets.byId(id);
+            case "species" -> species.byId(id);
+            case "starships" -> starships.byId(id);
+            case "vehicles" -> vehicles.byId(id);
             default -> throw new IllegalArgumentException("unknown record type: " + type);
         };
     }

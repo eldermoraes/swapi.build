@@ -121,9 +121,9 @@ class KnownEntitiesTest {
         int[] scans = {0};
         PeopleService counting = new PeopleService() {
             @Override
-            public com.eldermoraes.people.People getPeopleById(int id) {
+            public com.eldermoraes.people.People byId(int id) {
                 scans[0]++;
-                return super.getPeopleById(id);
+                return super.byId(id);
             }
         };
         KnownEntities warmed = new KnownEntities(counting, new FilmService(), new PlanetService(),

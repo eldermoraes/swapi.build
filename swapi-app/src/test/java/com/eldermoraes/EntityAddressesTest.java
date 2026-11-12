@@ -43,7 +43,7 @@ class EntityAddressesTest {
     @Test
     void withABaseEveryAddressIsAbsolute() {
         RequestBaseUrl.set(BASE);
-        People luke = new PeopleService().getPeopleById(1);
+        People luke = new PeopleService().byId(1);
         assertEquals(BASE + "/people/1", luke.getUrl());
         assertEquals(BASE + "/planets/1", luke.getHomeworld());
         assertEquals(List.of(BASE + "/films/1", BASE + "/films/2", BASE + "/films/3", BASE + "/films/6"),
@@ -52,12 +52,12 @@ class EntityAddressesTest {
         assertEquals(List.of(BASE + "/vehicles/14", BASE + "/vehicles/30"), luke.getVehicles());
         assertEquals(List.of(BASE + "/starships/12", BASE + "/starships/22"), luke.getStarships());
 
-        Specie human = new SpecieService().getSpecieById(1);
+        Specie human = new SpecieService().byId(1);
         assertEquals(BASE + "/species/1", human.getUrl());
         assertEquals(BASE + "/planets/9", human.getHomeworld());
         assertEquals(BASE + "/people/66", human.getPeople().getFirst());
 
-        Film hope = new FilmService().getFilmById(1);
+        Film hope = new FilmService().byId(1);
         assertEquals(BASE + "/films/1", hope.getUrl());
         assertEquals(BASE + "/people/1", hope.getCharacters().getFirst());
         assertEquals(BASE + "/planets/1", hope.getPlanets().getFirst());
@@ -65,17 +65,17 @@ class EntityAddressesTest {
         assertEquals(BASE + "/vehicles/4", hope.getVehicles().getFirst());
         assertEquals(BASE + "/species/1", hope.getSpecies().getFirst());
 
-        Planet tatooine = new PlanetService().getPlanetById(1);
+        Planet tatooine = new PlanetService().byId(1);
         assertEquals(BASE + "/planets/1", tatooine.getUrl());
         assertEquals(BASE + "/people/1", tatooine.getResidents().getFirst());
         assertEquals(BASE + "/films/1", tatooine.getFilms().getFirst());
 
-        Starship xwing = new StarshipService().getStarshipById(12);
+        Starship xwing = new StarshipService().byId(12);
         assertEquals(BASE + "/starships/12", xwing.getUrl());
         assertEquals(BASE + "/people/1", xwing.getPilots().getFirst());
         assertEquals(BASE + "/films/1", xwing.getFilms().getFirst());
 
-        Vehicle snowspeeder = new VehicleService().getVehicleById(14);
+        Vehicle snowspeeder = new VehicleService().byId(14);
         assertEquals(BASE + "/vehicles/14", snowspeeder.getUrl());
         assertEquals(BASE + "/people/1", snowspeeder.getPilots().getFirst());
         assertEquals(BASE + "/films/2", snowspeeder.getFilms().getFirst());
@@ -83,30 +83,30 @@ class EntityAddressesTest {
 
     @Test
     void withoutABaseTheListsAreAsInTheData() {
-        People luke = new PeopleService().getPeopleById(1);
+        People luke = new PeopleService().byId(1);
         assertEquals(List.of("/films/1", "/films/2", "/films/3", "/films/6"), luke.getFilms());
         assertEquals(List.of("/vehicles/14", "/vehicles/30"), luke.getVehicles());
-        assertEquals("/people/1", new FilmService().getFilmById(1).getCharacters().getFirst());
-        assertEquals("/people/1", new PlanetService().getPlanetById(1).getResidents().getFirst());
-        assertEquals("/people/66", new SpecieService().getSpecieById(1).getPeople().getFirst());
-        assertEquals("/people/1", new StarshipService().getStarshipById(12).getPilots().getFirst());
-        assertEquals("/people/1", new VehicleService().getVehicleById(14).getPilots().getFirst());
+        assertEquals("/people/1", new FilmService().byId(1).getCharacters().getFirst());
+        assertEquals("/people/1", new PlanetService().byId(1).getResidents().getFirst());
+        assertEquals("/people/66", new SpecieService().byId(1).getPeople().getFirst());
+        assertEquals("/people/1", new StarshipService().byId(12).getPilots().getFirst());
+        assertEquals("/people/1", new VehicleService().byId(14).getPilots().getFirst());
     }
 
     // One null rule (#62): without a base a single address is as in the data
     // too. It was "null/people/1", which no response could show.
     @Test
     void withoutABaseASingleAddressIsAsInTheData() {
-        People luke = new PeopleService().getPeopleById(1);
+        People luke = new PeopleService().byId(1);
         assertEquals("/people/1", luke.getUrl());
         assertEquals("/planets/1", luke.getHomeworld());
-        assertEquals("/films/1", new FilmService().getFilmById(1).getUrl());
-        assertEquals("/planets/1", new PlanetService().getPlanetById(1).getUrl());
-        Specie human = new SpecieService().getSpecieById(1);
+        assertEquals("/films/1", new FilmService().byId(1).getUrl());
+        assertEquals("/planets/1", new PlanetService().byId(1).getUrl());
+        Specie human = new SpecieService().byId(1);
         assertEquals("/species/1", human.getUrl());
         assertEquals("/planets/9", human.getHomeworld());
-        assertEquals("/starships/12", new StarshipService().getStarshipById(12).getUrl());
-        assertEquals("/vehicles/14", new VehicleService().getVehicleById(14).getUrl());
+        assertEquals("/starships/12", new StarshipService().byId(12).getUrl());
+        assertEquals("/vehicles/14", new VehicleService().byId(14).getUrl());
     }
 
     // A record that has no address has none with a base either, never "<base>null".
@@ -125,9 +125,9 @@ class EntityAddressesTest {
     // Droid (species 2) has no homeworld in the data: swapi.dev's null is "" here.
     @Test
     void anAbsentHomeworldIsEmptyWithOrWithoutABase() {
-        assertEquals("", new SpecieService().getSpecieById(2).getHomeworld());
+        assertEquals("", new SpecieService().byId(2).getHomeworld());
         RequestBaseUrl.set(BASE);
-        assertEquals("", new SpecieService().getSpecieById(2).getHomeworld());
+        assertEquals("", new SpecieService().byId(2).getHomeworld());
         People none = new People();
         assertEquals("", none.getHomeworld());
         none.setHomeworld("null");
@@ -142,48 +142,48 @@ class EntityAddressesTest {
             if (base != null) {
                 RequestBaseUrl.set(base);
             }
-            assertEquals("Luke Skywalker", new PeopleService().getPeopleById(1).getName());
-            assertEquals("A New Hope", new FilmService().getFilmById(1).getTitle());
-            assertEquals("Tatooine", new PlanetService().getPlanetById(1).getName());
-            assertEquals("Droid", new SpecieService().getSpecieById(2).getName());
-            assertEquals("X-wing", new StarshipService().getStarshipById(12).getName());
-            assertEquals("Snowspeeder", new VehicleService().getVehicleById(14).getName());
+            assertEquals("Luke Skywalker", new PeopleService().byId(1).getName());
+            assertEquals("A New Hope", new FilmService().byId(1).getTitle());
+            assertEquals("Tatooine", new PlanetService().byId(1).getName());
+            assertEquals("Droid", new SpecieService().byId(2).getName());
+            assertEquals("X-wing", new StarshipService().byId(12).getName());
+            assertEquals("Snowspeeder", new VehicleService().byId(14).getName());
             // people 17 was never in the data; 1 is not the end of 11.
-            assertNull(new PeopleService().getPeopleById(17));
-            assertNotNull(new PeopleService().getPeopleById(11));
-            assertNull(new FilmService().getFilmById(7));
-            assertNull(new PeopleService().getPeopleById(0));
-            assertNull(new PeopleService().getPeopleById(-1));
+            assertNull(new PeopleService().byId(17));
+            assertNotNull(new PeopleService().byId(11));
+            assertNull(new FilmService().byId(7));
+            assertNull(new PeopleService().byId(0));
+            assertNull(new PeopleService().byId(-1));
         }
     }
 
     @Test
     void aSearchMatchesAnyCaseAnywhereInTheNameOrTitle() {
         assertEquals(List.of("Luke Skywalker", "Anakin Skywalker", "Shmi Skywalker"),
-                new PeopleService().getPeopleByName("SKYWALKER").stream().map(People::getName).toList());
+                new PeopleService().search("SKYWALKER").stream().map(People::getName).toList());
         assertEquals(List.of("A New Hope"),
-                new FilmService().getFilmByTitle("hope").stream().map(Film::getTitle).toList());
+                new FilmService().search("hope").stream().map(Film::getTitle).toList());
         assertEquals(List.of("Tatooine"),
-                new PlanetService().getPlanetByName("tatoo").stream().map(Planet::getName).toList());
+                new PlanetService().search("tatoo").stream().map(Planet::getName).toList());
         assertEquals(List.of("Droid"),
-                new SpecieService().getSpecieByName("droid").stream().map(Specie::getName).toList());
+                new SpecieService().search("droid").stream().map(Specie::getName).toList());
         assertEquals(List.of("X-wing"),
-                new StarshipService().getStarshipByName("x-wing").stream().map(Starship::getName).toList());
+                new StarshipService().search("x-wing").stream().map(Starship::getName).toList());
         assertEquals(List.of("Snowspeeder"),
-                new VehicleService().getVehicleByName("snowsp").stream().map(Vehicle::getName).toList());
-        assertEquals(List.of(), new PeopleService().getPeopleByName("no such name"));
+                new VehicleService().search("snowsp").stream().map(Vehicle::getName).toList());
+        assertEquals(List.of(), new PeopleService().search("no such name"));
     }
 
     @Test
     void aTypeListsAllItsRecordsAndDrawsOneOfThem() {
-        assertEquals(82, new PeopleService().getAllPeople().size());
-        assertEquals(6, new FilmService().getAllFilms().size());
-        assertEquals(60, new PlanetService().getAllPlanets().size());
-        assertEquals(37, new SpecieService().getAllSpecies().size());
-        assertEquals(36, new StarshipService().getAllStarships().size());
-        assertEquals(39, new VehicleService().getAllVehicles().size());
+        assertEquals(82, new PeopleService().all().size());
+        assertEquals(6, new FilmService().all().size());
+        assertEquals(60, new PlanetService().all().size());
+        assertEquals(37, new SpecieService().all().size());
+        assertEquals(36, new StarshipService().all().size());
+        assertEquals(39, new VehicleService().all().size());
         PeopleService people = new PeopleService();
-        assertNotNull(people.getRandomPeople().getName());
-        assertTrue(people.getAllPeople().contains(people.getRandomPeople()));
+        assertNotNull(people.random().getName());
+        assertTrue(people.all().contains(people.random()));
     }
 }

@@ -122,15 +122,15 @@ class SeoMetadataRegistryTest {
         }
 
         @Override
-        public List<Film> getAllFilms() {
-            List<Film> all = new ArrayList<>(super.getAllFilms());
+        public List<Film> all() {
+            List<Film> all = new ArrayList<>(super.all());
             all.add(extra);
             return all;
         }
 
         @Override
-        public Film getFilmById(int id) {
-            return extra.getUrl().endsWith("/films/" + id) ? extra : super.getFilmById(id);
+        public Film byId(int id) {
+            return extra.getUrl().endsWith("/films/" + id) ? extra : super.byId(id);
         }
     }
 
@@ -142,15 +142,15 @@ class SeoMetadataRegistryTest {
         }
 
         @Override
-        public List<People> getAllPeople() {
-            List<People> all = new ArrayList<>(super.getAllPeople());
+        public List<People> all() {
+            List<People> all = new ArrayList<>(super.all());
             all.add(extra);
             return all;
         }
 
         @Override
-        public People getPeopleById(int id) {
-            return extra.getUrl().endsWith("/people/" + id) ? extra : super.getPeopleById(id);
+        public People byId(int id) {
+            return extra.getUrl().endsWith("/people/" + id) ? extra : super.byId(id);
         }
     }
 }

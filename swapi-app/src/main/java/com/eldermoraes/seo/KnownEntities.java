@@ -77,12 +77,12 @@ public class KnownEntities {
      * the event loop.
      */
     void warm(@Observes StartupEvent event) {
-        people.getAllPeople();
-        films.getAllFilms();
-        planets.getAllPlanets();
-        species.getAllSpecies();
-        starships.getAllStarships();
-        vehicles.getAllVehicles();
+        people.all();
+        films.all();
+        planets.all();
+        species.all();
+        starships.all();
+        vehicles.all();
         names = buildNames();
     }
 
@@ -118,12 +118,12 @@ public class KnownEntities {
 
     private List<? extends SWObject> all(String type) {
         return switch (type == null ? "" : type) {
-            case "people" -> people.getAllPeople();
-            case "films" -> films.getAllFilms();
-            case "planets" -> planets.getAllPlanets();
-            case "species" -> species.getAllSpecies();
-            case "starships" -> starships.getAllStarships();
-            case "vehicles" -> vehicles.getAllVehicles();
+            case "people" -> people.all();
+            case "films" -> films.all();
+            case "planets" -> planets.all();
+            case "species" -> species.all();
+            case "starships" -> starships.all();
+            case "vehicles" -> vehicles.all();
             default -> List.of();
         };
     }
@@ -146,12 +146,12 @@ public class KnownEntities {
         }
         int n = Integer.parseInt(id);
         return switch (resource) {
-            case "people" -> people.getPeopleById(n) != null;
-            case "films" -> films.getFilmById(n) != null;
-            case "planets" -> planets.getPlanetById(n) != null;
-            case "species" -> species.getSpecieById(n) != null;
-            case "starships" -> starships.getStarshipById(n) != null;
-            case "vehicles" -> vehicles.getVehicleById(n) != null;
+            case "people" -> people.byId(n) != null;
+            case "films" -> films.byId(n) != null;
+            case "planets" -> planets.byId(n) != null;
+            case "species" -> species.byId(n) != null;
+            case "starships" -> starships.byId(n) != null;
+            case "vehicles" -> vehicles.byId(n) != null;
             default -> false;
         };
     }
@@ -184,17 +184,17 @@ public class KnownEntities {
         Map<String, String> values = new HashMap<>();
         switch (type) {
             case "films" -> {
-                Film film = films.getFilmById(n);
+                Film film = films.byId(n);
                 put(values, "title", film.getTitle());
                 put(values, "episode_id", Integer.toString(film.getEpisode_id()));
                 put(values, "director", film.getDirector());
                 put(values, "release_date", film.getRelease_date());
             }
-            case "people" -> put(values, "name", people.getPeopleById(n).getName());
-            case "planets" -> put(values, "name", planets.getPlanetById(n).getName());
-            case "species" -> put(values, "name", species.getSpecieById(n).getName());
-            case "starships" -> put(values, "name", starships.getStarshipById(n).getName());
-            case "vehicles" -> put(values, "name", vehicles.getVehicleById(n).getName());
+            case "people" -> put(values, "name", people.byId(n).getName());
+            case "planets" -> put(values, "name", planets.byId(n).getName());
+            case "species" -> put(values, "name", species.byId(n).getName());
+            case "starships" -> put(values, "name", starships.byId(n).getName());
+            case "vehicles" -> put(values, "name", vehicles.byId(n).getName());
             default -> {
                 return Optional.empty();
             }

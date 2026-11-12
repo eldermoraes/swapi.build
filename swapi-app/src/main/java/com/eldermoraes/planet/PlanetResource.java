@@ -36,9 +36,9 @@ public class PlanetResource {
             @Parameter(description = "Filter by name (case-insensitive contains)", example = "tatooine")
             @QueryParam("search") String search) {
         if (search != null && !search.isEmpty()) {
-            return Response.ok().entity(planetService.getPlanetByName(search)).build();
+            return Response.ok().entity(planetService.search(search)).build();
         } else {
-            return Response.ok().entity(planetService.getAllPlanets()).build();
+            return Response.ok().entity(planetService.all()).build();
         }
 
     }
@@ -54,7 +54,7 @@ public class PlanetResource {
     public Response getPlanetById(
             @Parameter(description = "Numeric id of the planet", example = "1")
             @PathParam("id") int id) {
-        Planet planet = planetService.getPlanetById(id);
+        Planet planet = planetService.byId(id);
         if (planet == null) {
             return Response.status(Response.Status.NOT_FOUND)
                     .type(MediaType.TEXT_PLAIN)
@@ -70,6 +70,6 @@ public class PlanetResource {
     @APIResponse(responseCode = "200", description = "A randomly selected planet",
             content = @Content(schema = @Schema(implementation = Planet.class)))
     public Response getRandomPlanet() {
-        return Response.ok().entity(planetService.getRandomPlanet()).build();
+        return Response.ok().entity(planetService.random()).build();
     }
 }

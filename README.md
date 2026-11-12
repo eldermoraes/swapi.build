@@ -217,7 +217,8 @@ swapi-app/
       starship/               # Starship model, service, resource
       vehicle/                # Vehicle model, service, resource
       mcp/                    # MCP server tools (sw_list, sw_get, sw_random, sw_search)
-      SWObject.java           # Base model class
+      SWObject.java           # Base model class (and the one helper that makes an address absolute)
+      RecordService.java      # Base of the six services: load, list, by id, search, random
       ApiResource.java        # Root /api endpoint
       ApplicationPath.java    # Jakarta REST base path (/api)
     resources/

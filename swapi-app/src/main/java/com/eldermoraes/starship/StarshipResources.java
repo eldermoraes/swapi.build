@@ -35,9 +35,9 @@ public class StarshipResources {
             @Parameter(description = "Filter by name (case-insensitive contains)", example = "falcon")
             @QueryParam("search") String search) {
         if (search != null && !search.isEmpty()) {
-            return Response.ok().entity(starshipService.getStarshipByName(search)).build();
+            return Response.ok().entity(starshipService.search(search)).build();
         } else {
-            return Response.ok().entity(starshipService.getAllStarships()).build();
+            return Response.ok().entity(starshipService.all()).build();
         }
     }
 
@@ -52,7 +52,7 @@ public class StarshipResources {
     public Response getStarshipById(
             @Parameter(description = "Numeric id of the starship", example = "2")
             @PathParam("id") int id) {
-        Starship starship = starshipService.getStarshipById(id);
+        Starship starship = starshipService.byId(id);
         if (starship == null) {
             return Response.status(Response.Status.NOT_FOUND)
                     .type(MediaType.TEXT_PLAIN)
@@ -68,7 +68,7 @@ public class StarshipResources {
     @APIResponse(responseCode = "200", description = "A randomly selected starship",
             content = @Content(schema = @Schema(implementation = Starship.class)))
     public Response getRandomStarship() {
-        return Response.ok().entity(starshipService.getRandomStarship()).build();
+        return Response.ok().entity(starshipService.random()).build();
     }
 
 }

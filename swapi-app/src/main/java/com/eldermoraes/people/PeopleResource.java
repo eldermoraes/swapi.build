@@ -35,9 +35,9 @@ public class PeopleResource {
             @Parameter(description = "Filter by name (case-insensitive contains)", example = "luke")
             @QueryParam("search") String search) {
         if (search != null && !search.isEmpty()) {
-            return Response.ok().entity(peopleService.getPeopleByName(search)).build();
+            return Response.ok().entity(peopleService.search(search)).build();
         } else {
-            return Response.ok().entity(peopleService.getAllPeople()).build();
+            return Response.ok().entity(peopleService.all()).build();
         }
     }
 
@@ -52,7 +52,7 @@ public class PeopleResource {
     public Response getPeopleById(
             @Parameter(description = "Numeric id of the person", example = "1")
             @PathParam("id") int id) {
-        People people = peopleService.getPeopleById(id);
+        People people = peopleService.byId(id);
         if (people == null) {
             return Response.status(Response.Status.NOT_FOUND)
                     .type(MediaType.TEXT_PLAIN)
@@ -68,6 +68,6 @@ public class PeopleResource {
     @APIResponse(responseCode = "200", description = "A randomly selected person",
             content = @Content(schema = @Schema(implementation = People.class)))
     public Response getRandomPeople() {
-        return Response.ok().entity(peopleService.getRandomPeople()).build();
+        return Response.ok().entity(peopleService.random()).build();
     }
 }
