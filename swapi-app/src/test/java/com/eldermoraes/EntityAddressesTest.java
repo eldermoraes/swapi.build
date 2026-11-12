@@ -93,6 +93,35 @@ class EntityAddressesTest {
         assertEquals("/people/1", new VehicleService().getVehicleById(14).getPilots().getFirst());
     }
 
+    // One null rule (#62): without a base a single address is as in the data
+    // too. It was "null/people/1", which no response could show.
+    @Test
+    void withoutABaseASingleAddressIsAsInTheData() {
+        People luke = new PeopleService().getPeopleById(1);
+        assertEquals("/people/1", luke.getUrl());
+        assertEquals("/planets/1", luke.getHomeworld());
+        assertEquals("/films/1", new FilmService().getFilmById(1).getUrl());
+        assertEquals("/planets/1", new PlanetService().getPlanetById(1).getUrl());
+        Specie human = new SpecieService().getSpecieById(1);
+        assertEquals("/species/1", human.getUrl());
+        assertEquals("/planets/9", human.getHomeworld());
+        assertEquals("/starships/12", new StarshipService().getStarshipById(12).getUrl());
+        assertEquals("/vehicles/14", new VehicleService().getVehicleById(14).getUrl());
+    }
+
+    // A record that has no address has none with a base either, never "<base>null".
+    @Test
+    void aRecordWithoutAnAddressHasNone() {
+        RequestBaseUrl.set(BASE);
+        assertNull(new People().getUrl());
+        assertNull(new People().getFilms());
+        assertNull(new Film().getUrl());
+        assertNull(new Planet().getUrl());
+        assertNull(new Specie().getUrl());
+        assertNull(new Starship().getUrl());
+        assertNull(new Vehicle().getUrl());
+    }
+
     // Droid (species 2) has no homeworld in the data: swapi.dev's null is "" here.
     @Test
     void anAbsentHomeworldIsEmptyWithOrWithoutABase() {

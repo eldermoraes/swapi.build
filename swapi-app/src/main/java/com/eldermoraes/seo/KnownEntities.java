@@ -33,7 +33,7 @@ import java.util.regex.Pattern;
  *
  * The services match by {@code getUrl().endsWith("/<type>/<id>")}. getUrl()
  * reads the request base URL from a ThreadLocal (RequestBaseUrl), which on the
- * event loop may be empty ("null/people/1") or hold another request's base;
+ * event loop may be empty (the address is then relative) or hold another request's base;
  * only the suffix is compared and nothing is serialized here, so no URL leaks
  * between requests. {@link #name} (2.12.0) reads only the name or title for
  * the breadcrumb; the record content itself is drawn by RecordViews, which sets

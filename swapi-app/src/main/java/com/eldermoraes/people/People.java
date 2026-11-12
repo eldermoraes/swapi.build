@@ -98,11 +98,7 @@ public class People extends SWObject {
     }
 
     public String getHomeworld() {
-        if (homeworld == null || homeworld.equals("null") || homeworld.isEmpty()) {
-            return "";
-        } else{
-            return getBaseUrl() + homeworld;
-        }
+        return absoluteOrEmpty(homeworld);
     }
 
     public void setHomeworld(String homeworld) {
@@ -110,12 +106,7 @@ public class People extends SWObject {
     }
 
     public List<String> getFilms() {
-        if (films != null && getBaseUrl() != null) {
-            return films.stream()
-                    .map(film -> getBaseUrl() + film)
-                    .toList();
-        }
-        return films;
+        return absolute(films);
     }
 
     public void setFilms(List<String> films) {
@@ -123,12 +114,7 @@ public class People extends SWObject {
     }
 
     public List<String> getSpecies() {
-        if (species != null && getBaseUrl() != null) {
-            return species.stream()
-                    .map(specie -> getBaseUrl() + specie)
-                    .toList();
-        }
-        return species;
+        return absolute(species);
     }
 
     public void setSpecies(List<String> species) {
@@ -136,12 +122,7 @@ public class People extends SWObject {
     }
 
     public List<String> getVehicles() {
-        if (vehicles != null && getBaseUrl() != null) {
-            return vehicles.stream()
-                    .map(vehicle -> getBaseUrl() + vehicle)
-                    .toList();
-        }
-        return vehicles;
+        return absolute(vehicles);
     }
 
     public void setVehicles(List<String> vehicles) {
@@ -149,12 +130,7 @@ public class People extends SWObject {
     }
 
     public List<String> getStarships() {
-        if (starships != null && getBaseUrl() != null) {
-            return starships.stream()
-                    .map(starship -> getBaseUrl() + starship)
-                    .toList();
-        }
-        return starships;
+        return absolute(starships);
     }
 
     public void setStarships(List<String> starships) {
@@ -178,7 +154,7 @@ public class People extends SWObject {
     }
 
     public String getUrl() {
-        return getBaseUrl() + url;
+        return absolute(url);
     }
 
     public void setUrl(String url) {

@@ -141,12 +141,7 @@ public class Starship extends SWObject {
     }
 
     public List<String> getPilots() {
-        if (pilots != null && getBaseUrl() != null) {
-            return pilots.stream()
-                    .map(pilot -> getBaseUrl() + pilot)
-                    .toList();
-        }
-        return pilots;
+        return absolute(pilots);
     }
 
     public void setPilots(List<String> pilots) {
@@ -154,12 +149,7 @@ public class Starship extends SWObject {
     }
 
     public List<String> getFilms() {
-        if (films != null && getBaseUrl() != null) {
-            return films.stream()
-                    .map(film -> getBaseUrl() + film)
-                    .toList();
-        }
-        return films;
+        return absolute(films);
     }
 
     public void setFilms(List<String> films) {
@@ -183,7 +173,7 @@ public class Starship extends SWObject {
     }
 
     public String getUrl() {
-        return getBaseUrl() + url;
+        return absolute(url);
     }
 
     public void setUrl(String url) {

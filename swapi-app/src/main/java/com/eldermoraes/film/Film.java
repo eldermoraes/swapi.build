@@ -80,12 +80,7 @@ public class Film extends SWObject {
     }
 
     public List<String> getCharacters() {
-        if (characters != null && getBaseUrl() != null) {
-            return characters.stream()
-                .map(character -> getBaseUrl() + character)
-                .toList();
-        }
-        return characters;
+        return absolute(characters);
     }
 
     public void setCharacters(List<String> characters) {
@@ -93,12 +88,7 @@ public class Film extends SWObject {
     }
 
     public List<String> getPlanets() {
-        if (planets != null && getBaseUrl() != null) {
-            return planets.stream()
-                .map(planet -> getBaseUrl() + planet)
-                .toList();
-        }
-        return planets;
+        return absolute(planets);
     }
 
     public void setPlanets(List<String> planets) {
@@ -106,12 +96,7 @@ public class Film extends SWObject {
     }
 
     public List<String> getStarships() {
-        if (starships != null && getBaseUrl() != null) {
-            return starships.stream()
-                .map(starship -> getBaseUrl() + starship)
-                .toList();
-        }
-        return starships;
+        return absolute(starships);
     }
 
     public void setStarships(List<String> starships) {
@@ -119,12 +104,7 @@ public class Film extends SWObject {
     }
 
     public List<String> getVehicles() {
-        if (vehicles != null && getBaseUrl() != null) {
-            return vehicles.stream()
-                .map(vehicle -> getBaseUrl() + vehicle)
-                .toList();
-        }
-        return vehicles;
+        return absolute(vehicles);
     }
 
     public void setVehicles(List<String> vehicles) {
@@ -132,12 +112,7 @@ public class Film extends SWObject {
     }
 
     public List<String> getSpecies() {
-        if (species != null && getBaseUrl() != null) {
-            return species.stream()
-                .map(specie -> getBaseUrl() + specie)
-                .toList();
-        }
-        return species;
+        return absolute(species);
     }
 
     public void setSpecies(List<String> species) {
@@ -161,7 +136,7 @@ public class Film extends SWObject {
     }
 
     public String getUrl() {
-        return getBaseUrl() + url;
+        return absolute(url);
     }
 
     public void setUrl(String url) {
