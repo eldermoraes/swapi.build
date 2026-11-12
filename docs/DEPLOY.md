@@ -273,8 +273,8 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   `Accept-Encoding: zstd, gzip` answers `Content-Encoding: zstd`, with
   `Accept-Encoding: gzip` answers `gzip`, both smaller than the plain answer
   and with `Vary` naming `Accept-Encoding`; without `Accept-Encoding` there is
-  no `Content-Encoding`. `/api/people/1` (JSON) answers `zstd` too. One line is
-  informational: whether a Markdown copy is compressed (not today). A `FAIL`
+  no `Content-Encoding`. `/api/people/1` (JSON) and `/docs.md` (a Markdown
+  copy) answer `zstd` too. A `FAIL`
   here means the `Caddyfile` on the host lost its `encode` block or the list
   of types changed; the site still works, with larger answers, so it is a
   `Caddyfile` fix, not a rollback of the binary.
@@ -813,7 +813,7 @@ CPUWeight=50
 Caddy needs outbound network (Let's Encrypt), so it gets no `IPAddressDeny`.
 
 **`/etc/caddy/Caddyfile`** (as it is on the host: copied from it on 2026-11-12,
-Caddy v2.11.9. During the rehearsal the only site address was
+Caddy v2.11.9, after `text/markdown` joined the `encode` list that day. During the rehearsal the only site address was
 `oracle.swapi.build`, and there was no `www` block). On a new host do not
 paste the site names as they are: start with a name whose DNS already points
 at the host, and add each production name only after its DNS does (the rule
@@ -842,6 +842,7 @@ swapi.build {
 			header Content-Type application/xml*
 			header Content-Type text/xml*
 			header Content-Type image/svg+xml*
+			header Content-Type text/markdown*
 		}
 	}
 	header -Server
@@ -870,14 +871,10 @@ www.swapi.build {
   that accepts neither (Brotli is not offered). Only the content types in
   `match` are compressed, and only answers of at least 512 bytes (Caddy's
   default `minimum_length`): those carry `Vary: Accept-Encoding`, a smaller
-  one (`/robots.txt`, `/api/`) gets neither the encoding nor that `Vary`. Two
-  types are not in the list:
-  - `text/event-stream` is not in the list, so a streamed answer of `/mcp` is
-    never buffered by the encoder. Keep it out.
-  - `text/markdown` is not in the list either, so the Markdown copies leave
-    uncompressed (`/docs.md` is about 10 KB). Adding
-    `header Content-Type text/markdown*` would compress them; it is not on the
-    host today.
+  one (`/robots.txt`, `/api/`) gets neither the encoding nor that `Vary`.
+  `text/event-stream` is not in the list, so a streamed answer of `/mcp` is
+  never buffered by the encoder: keep it out. `text/markdown` is in it since
+  2026-11-12 (`/docs.md` went from about 10 KB to under 3 KB on the wire).
 - HSTS: two years, the value the site has always sent, no `preload`, no
   `includeSubDomains`.
 - `reverse_proxy` overwrites `X-Forwarded-*` coming from clients, which is what

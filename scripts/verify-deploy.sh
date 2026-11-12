@@ -1116,9 +1116,9 @@ else
 fi
 plain=$("${CURL[@]}" -o /dev/null -w '%{size_download}' "$BASE/api/people/1")
 compress_probe /api/people/1 'zstd, gzip' zstd "$plain"
-# Informational, never fails: text/markdown is not in the encode list today.
-md_enc=$("${CURL[@]}" -o /dev/null -H 'Accept-Encoding: zstd, gzip' -w '%header{content-encoding}' "$BASE/docs.md")
-echo "INFO  /docs.md with Accept-Encoding: zstd, gzip: Content-Encoding ${md_enc:-none} (none = text/markdown is not in the Caddyfile's encode list)"
+# A Markdown copy too: text/markdown is in the encode list since 2026-11-12.
+plain=$("${CURL[@]}" -o /dev/null -w '%{size_download}' "$BASE/docs.md")
+compress_probe /docs.md 'zstd, gzip' zstd "$plain"
 
 echo
 if [ "$FAILURES" -eq 0 ]; then
