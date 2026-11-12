@@ -52,14 +52,19 @@ that does not touch the FAQ: check each cell again (content type and body, not
 just the status), update the values and dates, and only then release. A release
 that touches the FAQ also recalculates the monitor count of the answer "How do I
 know it is up?" from the scheduled runs of the `Uptime` workflow:
-`gh run list --workflow Uptime --event schedule --limit 5000 --json conclusion,createdAt --jq '[length, (map(select(.conclusion=="success"))|length), (map(.createdAt)|min), (map(.createdAt)|max)]'`.
-The total and the successes go into the answer, the first and last day into its
-"between ... and ..." (in UTC). The earliest `createdAt` must be
-`2026-10-19T22:39:05Z`, the first scheduled run: a later one means the list was
-cut (by `--limit`, or by the 1000-result cap GitHub may apply to a filtered list
-of runs), and the count is wrong; do not publish it. The schedule gives about 70
-runs a day (647 by 28 October 2026), so the history passes 1000 runs in early
-November 2026 and 5000 around the end of December 2026.
+`scripts/uptime-run-count.sh` (from a checkout, with `gh` logged in; about a
+minute). The total and the successes go into the answer, the first and last day
+into its "between ... and ..." (in UTC). A run listed as "not successful" with
+`queued` or `in_progress` has not finished: it is neither a check that passed
+nor one that failed, so leave it out of the total you publish (the newest run
+finishes within minutes, but one has stayed `queued` since
+`2026-11-11T20:36:53Z`). Never count with `gh run list --limit N`: GitHub cuts a list of
+runs at 1000 results whatever the limit, and since early November 2026 that
+command returns only the newest 1000 (1978 scheduled runs on 12 November 2026).
+The script reads the history in windows of `created` date instead, and prints a
+count only when the earliest run is `2026-10-19T22:39:05Z`, the first scheduled
+run, and the runs add up to the total GitHub reports; if it exits with an
+error, the count is wrong: do not publish one.
 
 ### Optional: MCP load rehearsal
 
