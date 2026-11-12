@@ -36,9 +36,9 @@ public class VehicleResource {
             @Parameter(description = "Filter by name (case-insensitive contains)", example = "speeder")
             @QueryParam("search") String search) {
         if (search != null && !search.isEmpty()) {
-            return Response.ok().entity(vehicleService.getVehicleByName(search)).build();
+            return Response.ok().entity(vehicleService.search(search)).build();
         } else {
-            return Response.ok().entity(vehicleService.getAllVehicles()).build();
+            return Response.ok().entity(vehicleService.all()).build();
         }
 
     }
@@ -54,7 +54,7 @@ public class VehicleResource {
     public Response getVehicleById(
             @Parameter(description = "Numeric id of the vehicle", example = "4")
             @PathParam("id") int id) {
-        Vehicle vehicle = vehicleService.getVehicleById(id);
+        Vehicle vehicle = vehicleService.byId(id);
         if (vehicle == null) {
             return Response.status(Response.Status.NOT_FOUND)
                     .type(MediaType.TEXT_PLAIN)
@@ -70,6 +70,6 @@ public class VehicleResource {
     @APIResponse(responseCode = "200", description = "A randomly selected vehicle",
             content = @Content(schema = @Schema(implementation = Vehicle.class)))
     public Response getRandomVehicle() {
-        return Response.ok().entity(vehicleService.getRandomVehicle()).build();
+        return Response.ok().entity(vehicleService.random()).build();
     }
 }

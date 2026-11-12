@@ -34,7 +34,7 @@ import java.util.regex.Pattern;
  * A record is the one whose getUrl() ends in {@code /<type>/<id>}: the lookup
  * built at startup (#57) and, before it, the scan of the services. getUrl()
  * reads the request base URL from a ThreadLocal (RequestBaseUrl), which on the
- * event loop may be empty ("null/people/1") or hold another request's base;
+ * event loop may be empty (the address is then relative) or hold another request's base;
  * only the suffix is compared and nothing is serialized here, so no URL leaks
  * between requests. {@link #name} (2.12.0) reads only the name or title for
  * the breadcrumb; the record content itself is drawn by RecordViews, which sets
@@ -78,12 +78,12 @@ public class KnownEntities {
      * the event loop.
      */
     void warm(@Observes StartupEvent event) {
-        people.getAllPeople();
-        films.getAllFilms();
-        planets.getAllPlanets();
-        species.getAllSpecies();
-        starships.getAllStarships();
-        vehicles.getAllVehicles();
+        people.all();
+        films.all();
+        planets.all();
+        species.all();
+        starships.all();
+        vehicles.all();
         buildLookups();
     }
 
@@ -136,12 +136,12 @@ public class KnownEntities {
 
     private List<? extends SWObject> all(String type) {
         return switch (type == null ? "" : type) {
-            case "people" -> people.getAllPeople();
-            case "films" -> films.getAllFilms();
-            case "planets" -> planets.getAllPlanets();
-            case "species" -> species.getAllSpecies();
-            case "starships" -> starships.getAllStarships();
-            case "vehicles" -> vehicles.getAllVehicles();
+            case "people" -> people.all();
+            case "films" -> films.all();
+            case "planets" -> planets.all();
+            case "species" -> species.all();
+            case "starships" -> starships.all();
+            case "vehicles" -> vehicles.all();
             default -> List.of();
         };
     }
@@ -182,12 +182,12 @@ public class KnownEntities {
     /** The scan of the services: only before warm() has built the lookup. */
     private SWObject scan(String type, int id) {
         return switch (type) {
-            case "people" -> people.getPeopleById(id);
-            case "films" -> films.getFilmById(id);
-            case "planets" -> planets.getPlanetById(id);
-            case "species" -> species.getSpecieById(id);
-            case "starships" -> starships.getStarshipById(id);
-            case "vehicles" -> vehicles.getVehicleById(id);
+            case "people" -> people.byId(id);
+            case "films" -> films.byId(id);
+            case "planets" -> planets.byId(id);
+            case "species" -> species.byId(id);
+            case "starships" -> starships.byId(id);
+            case "vehicles" -> vehicles.byId(id);
             default -> null;
         };
     }

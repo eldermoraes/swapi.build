@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
  *
  * The entities build their URLs from RequestBaseUrl, a ThreadLocal that the
  * REST filter and the MCP tools set and never clear. This runs on the event
- * loop (SeoRoutes), where the ThreadLocal may be empty ("null/people/1") or hold
+ * loop (SeoRoutes), where the ThreadLocal may be empty (relative addresses) or hold
  * another request's base. So every getter (attributes, relations, the JSON-B
  * serialization, which is the one the REST API uses) is called inside one block
  * that sets the base of this request and then restores the value that was there

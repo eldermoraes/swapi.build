@@ -97,11 +97,7 @@ public class Specie extends SWObject {
     }
 
     public String getHomeworld() {
-        if (homeworld == null || homeworld.equals("null") || homeworld.isEmpty()) {
-            return "";
-        } else{
-            return getBaseUrl() + homeworld;
-        }
+        return absoluteOrEmpty(homeworld);
     }
 
     public void setHomeworld(String homeworld) {
@@ -117,12 +113,7 @@ public class Specie extends SWObject {
     }
 
     public List<String> getPeople() {
-        if (people != null && getBaseUrl() != null) {
-            return people.stream()
-                    .map(person -> getBaseUrl() + person)
-                    .toList();
-        }
-        return people;
+        return absolute(people);
     }
 
     public void setPeople(List<String> people) {
@@ -130,12 +121,7 @@ public class Specie extends SWObject {
     }
 
     public List<String> getFilms() {
-        if (films != null && getBaseUrl() != null) {
-            return films.stream()
-                    .map(film -> getBaseUrl() + film)
-                    .toList();
-        }
-        return films;
+        return absolute(films);
     }
 
     public void setFilms(List<String> films) {
@@ -159,7 +145,7 @@ public class Specie extends SWObject {
     }
 
     public String getUrl() {
-        return getBaseUrl() + url;
+        return absolute(url);
     }
 
     public void setUrl(String url) {

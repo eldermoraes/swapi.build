@@ -118,12 +118,12 @@ public class SwapiTools {
 
     private SWObject record(SwResource resource, int id) {
         return switch (resource) {
-            case PEOPLE -> peopleService.getPeopleById(id);
-            case FILMS -> filmService.getFilmById(id);
-            case PLANETS -> planetService.getPlanetById(id);
-            case SPECIES -> specieService.getSpecieById(id);
-            case STARSHIPS -> starshipService.getStarshipById(id);
-            case VEHICLES -> vehicleService.getVehicleById(id);
+            case PEOPLE -> peopleService.byId(id);
+            case FILMS -> filmService.byId(id);
+            case PLANETS -> planetService.byId(id);
+            case SPECIES -> specieService.byId(id);
+            case STARSHIPS -> starshipService.byId(id);
+            case VEHICLES -> vehicleService.byId(id);
         };
     }
 
@@ -139,12 +139,12 @@ public class SwapiTools {
             @ToolArg(description = FIELDS_ARG, required = false) List<String> fields) {
         Set<String> keep = expansion.fields(resource.type(), fields);
         return withBaseUrl(() -> expansion.project(jsonb.toJson(switch (resource) {
-            case PEOPLE -> peopleService.getAllPeople();
-            case FILMS -> filmService.getAllFilms();
-            case PLANETS -> planetService.getAllPlanets();
-            case SPECIES -> specieService.getAllSpecies();
-            case STARSHIPS -> starshipService.getAllStarships();
-            case VEHICLES -> vehicleService.getAllVehicles();
+            case PEOPLE -> peopleService.all();
+            case FILMS -> filmService.all();
+            case PLANETS -> planetService.all();
+            case SPECIES -> specieService.all();
+            case STARSHIPS -> starshipService.all();
+            case VEHICLES -> vehicleService.all();
         }), keep));
     }
 
@@ -184,12 +184,12 @@ public class SwapiTools {
     public String sw_random(
             @ToolArg(description = RESOURCE_ARG) SwResource resource) {
         return withBaseUrl(() -> jsonb.toJson(switch (resource) {
-            case PEOPLE -> peopleService.getRandomPeople();
-            case FILMS -> filmService.getRandomFilm();
-            case PLANETS -> planetService.getRandomPlanet();
-            case SPECIES -> specieService.getRandomSpecie();
-            case STARSHIPS -> starshipService.getRandomStarship();
-            case VEHICLES -> vehicleService.getRandomVehicle();
+            case PEOPLE -> peopleService.random();
+            case FILMS -> filmService.random();
+            case PLANETS -> planetService.random();
+            case SPECIES -> specieService.random();
+            case STARSHIPS -> starshipService.random();
+            case VEHICLES -> vehicleService.random();
         }));
     }
 
@@ -207,12 +207,12 @@ public class SwapiTools {
             @ToolArg(description = FIELDS_ARG, required = false) List<String> fields) {
         Set<String> keep = expansion.fields(resource.type(), fields);
         return withBaseUrl(() -> expansion.project(jsonb.toJson(switch (resource) {
-            case PEOPLE -> peopleService.getPeopleByName(query);
-            case FILMS -> filmService.getFilmByTitle(query);
-            case PLANETS -> planetService.getPlanetByName(query);
-            case SPECIES -> specieService.getSpecieByName(query);
-            case STARSHIPS -> starshipService.getStarshipByName(query);
-            case VEHICLES -> vehicleService.getVehicleByName(query);
+            case PEOPLE -> peopleService.search(query);
+            case FILMS -> filmService.search(query);
+            case PLANETS -> planetService.search(query);
+            case SPECIES -> specieService.search(query);
+            case STARSHIPS -> starshipService.search(query);
+            case VEHICLES -> vehicleService.search(query);
         }), keep));
     }
 }

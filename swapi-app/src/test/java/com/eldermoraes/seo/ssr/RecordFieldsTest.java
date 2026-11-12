@@ -70,19 +70,19 @@ class RecordFieldsTest {
     @Test
     void theValuesComeFromTheGettersAsTheyAreInTheData() {
         RequestBaseUrl.set("https://a.example/api");
-        var luke = new PeopleService().getPeopleById(1);
+        var luke = new PeopleService().byId(1);
         assertEquals(List.of("172", "77", "blond", "fair", "blue", "19BBY", "male"),
                 RecordFields.attributes("people").stream().map(f -> f.value().apply(luke)).toList());
         assertEquals("Height", RecordFields.attributes("people").getFirst().label());
-        var film = new FilmService().getFilmById(1);
+        var film = new FilmService().byId(1);
         assertEquals("4", RecordFields.attributes("films").getFirst().value().apply(film));
         assertEquals("Episode", RecordFields.attributes("films").getFirst().label());
-        var droid = new SpecieService().getSpecieById(2);
+        var droid = new SpecieService().byId(2);
         assertEquals(List.of(), RecordFields.relations("species").getFirst().urls().apply(droid),
                 "Droid has no homeworld: the block is left out");
         var relations = RecordFields.relations("people");
         assertEquals(List.of("https://a.example/api/planets/1"), relations.getFirst().urls().apply(luke));
-        var starship = new StarshipService().getStarshipById(10);
+        var starship = new StarshipService().byId(10);
         assertEquals("MGLT", RecordFields.attributes("starships").get(10).label());
         assertEquals("75", RecordFields.attributes("starships").get(10).value().apply(starship));
     }
