@@ -653,9 +653,16 @@ previous=
 if [ -L /opt/swapi/current ]; then previous=$(readlink -f /opt/swapi/current || true); fi
 # The version to roll back to: the last one `current` pointed at when a run
 # of this tag found it elsewhere, kept in the tag's directory, since a retry or
-# a redeploy finds the tag itself in `current`.
-if [ "$previous" != "/opt/swapi/$tag" ]; then
-  printf '%s\n' "$previous" > "/opt/swapi/$tag/previous"
+# a redeploy finds the tag itself in `current`. A version this script saw not
+# answering carries a `failed` mark and is never a rollback target: its own
+# target is taken over instead, so a run of failed tags all name the version
+# that served before the first one.
+target=$previous
+if [ -n "$previous" ] && [ -e "$previous/failed" ]; then
+  target=$(cat "$previous/previous" 2>/dev/null || true)
+fi
+if [ "$target" != "/opt/swapi/$tag" ]; then
+  printf '%s\n' "$target" > "/opt/swapi/$tag/previous"
 fi
 rollback=$(cat "/opt/swapi/$tag/previous" 2>/dev/null || true)
 ln -sfn "/opt/swapi/$tag" /opt/swapi/current
@@ -672,6 +679,7 @@ while [ "$answering" = no ] && [ "$checks" -lt 10 ]; do
   fi
 done
 if [ "$answering" = no ]; then
+  : > "/opt/swapi/$tag/failed"
   echo "$error" >&2                                # what the last check said
   if [ -n "$rollback" ] && [ "$rollback" != "/opt/swapi/$tag" ] && [ -d "$rollback" ]; then
     echo "swapi $tag is not answering. Roll back with:"
@@ -682,14 +690,16 @@ if [ "$answering" = no ]; then
   fi
   exit 1
 fi
+rm -f "/opt/swapi/$tag/failed"
 echo "swapi $tag is up"
 
-# Keep only the active version and the previous one. A redeploy of the version
-# that was already active removes nothing: the link pointed at this tag, so
-# nothing here names the real previous version, and it must stay on disk.
+# Keep only the active version and its rollback version (the one before it,
+# or the one before a run of failed tags). A redeploy of the version that was
+# already active removes nothing: the link pointed at this tag, so nothing
+# here names the real previous version, and it must stay on disk.
 if [ "$previous" != "/opt/swapi/$tag" ]; then
   for dir in /opt/swapi/v*; do
-    case "$dir" in "/opt/swapi/$tag" | "$previous") ;; *) rm -rf "$dir" ;; esac
+    case "$dir" in "/opt/swapi/$tag" | "$rollback") ;; *) rm -rf "$dir" ;; esac
   done
 fi
 ```
@@ -702,18 +712,32 @@ the host runs the old script. Before 2026-11-12 that copy removed the rollback
 version on a redeploy, accepted any `v*.*.*` glob as a tag, checked the
 health once, three seconds after the restart, and on a redeploy or a retry
 printed a rollback to the tag itself; a host that still has it keeps all four
-behaviours until the block is installed again.
+behaviours until the block is installed again. A copy older than the fix of
+issue #115 also treated a tag that did not answer as a working version: another tag after it
+named the failed tag in its rollback command and, once it answered, kept the
+failed tag and removed the last working version. A tag that failed under that
+copy carries no `failed` mark, so the new copy still treats it as working.
 
-After an upgrade, `/opt/swapi/` holds the new version and the one that was
-active before it. A redeploy of the active version (a reinstall, the proof of
-the deploy path, or a retry of a tag that did not answer) removes nothing, so
-the version to roll back to is still there; the next upgrade prunes as usual.
+After an upgrade, `/opt/swapi/` holds the new version and its rollback
+version: the one that was active before it, or, when that one did not answer,
+the version that served before it (see below). A redeploy of the active
+version (a reinstall, the proof of the deploy path, or a retry of a tag that
+did not answer) removes nothing, so the version to roll back to is still
+there; the next upgrade prunes as usual.
 
 The rollback command printed on "is not answering" names the version that
 served before the tag: each run of the tag that finds `current` pointing
 elsewhere records that version in `/opt/swapi/<tag>/previous`, and a redeploy
-or a retry (where `current` already points at the tag) reads it there. When
-there is no record (a first install, or a tag installed by the old copy) or the
+or a retry (where `current` already points at the tag) reads it there. A run
+that ends "is not answering" leaves an empty `/opt/swapi/<tag>/failed`, and a
+run that ends "is up" removes it, so the mark tells how the last run of that
+version went. A version with the mark is never recorded as a rollback version:
+a tag deployed while `current` points at a failed version records that
+version's own record instead, so after any number of failed tags in a row the
+command still names, and pruning still keeps, the version that served before
+the first of them. A version without the mark (installed by the old copy, or
+put back by hand) is recorded as it is. When there is no record (a first
+install, a failed first install, or a tag installed by the old copy) or the
 recorded version is no longer on disk (pruned since), it prints no `ln`
 command, says so, and points to `swapi-update` with an older tag.
 
@@ -1297,10 +1321,13 @@ without repository activity: re-enable it if so.
 The only way back is the previous version on the host. `swapi-update` keeps the
 active version and the one before it under `/opt/swapi/`, and a redeploy of the
 active version removes nothing (section 2.5; the host copy of the script must
-be the current one).
+be the current one). A tag that did not answer is never "the one before": after
+it, the next tag that answers keeps the version that served before the failed
+one and removes the failed one.
 
 ```bash
-ls /opt/swapi/                                   # v<current>, v<previous>; one more after a failed upgrade
+ls /opt/swapi/                                   # v<current>, v<previous>; more after failed upgrades
+ls /opt/swapi/*/failed 2>/dev/null               # versions whose last run did not answer
 sudo ln -sfn /opt/swapi/<previous tag> /opt/swapi/current
 sudo systemctl restart swapi
 curl -fsS https://swapi.build/openapi.json | grep -o '"version"[^,]*'
@@ -1308,7 +1335,8 @@ scripts/verify-deploy.sh origin swapi.build      # from a checkout of <previous 
 ```
 
 `swapi-update` prints the exact `ln` command when a new version does not
-answer, naming the version that served before that tag, also on a retry
+answer, naming the version that served before that tag, also on a retry, and
+never a tag that did not answer, also after several failed tags in a row
 (section 2.5); with no record of it, or with it no longer on disk, it prints
 none. A
 rollback is a host change (maintainer, or a session he opens for it); the next

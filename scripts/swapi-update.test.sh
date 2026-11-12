@@ -316,6 +316,7 @@ prints "a redeploy names the version before it" \
 
 # A recorded version pruned since: no `ln` to a directory that is gone.
 rm -f "$TMP/down"
+deploys "a retry of that redeploy that answers" v2.1.0 "v2.0.0 v2.1.0"
 deploys "the next upgrade prunes the oldest" v2.2.0 "v2.1.0 v2.2.0"
 ln -sfn "$ROOT/v2.1.0" "$ROOT/current"
 : > "$TMP/down"
@@ -336,6 +337,89 @@ does_not_answer "a first install that does not answer" v1.0.0 "v1.0.0"
 no_rollback "a first install names nothing" v1.0.0
 does_not_answer "a retry of the first install that does not answer" v1.0.0 "v1.0.0"
 no_rollback "a retry of the first install names nothing" v1.0.0
+
+# Another tag after one that did not answer (#115): the version that served
+# before the failed one stays the rollback target and stays on disk.
+host v2.0.0 v1.9.0
+: > "$TMP/down"
+does_not_answer "a tag that does not answer" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
+rm -f "$TMP/down"
+deploys "another tag after it that answers keeps the last working version" \
+  v2.2.0 "v2.0.0 v2.2.0"
+
+host v2.0.0 v1.9.0
+: > "$TMP/down"
+does_not_answer "a tag that does not answer, again" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
+does_not_answer "another tag after it that does not answer" \
+  v2.2.0 "v1.9.0 v2.0.0 v2.1.0 v2.2.0"
+prints "its hint names the last working version, not the failed tag" \
+  "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
+does_not_answer "a third failed tag in a row" \
+  v2.3.0 "v1.9.0 v2.0.0 v2.1.0 v2.2.0 v2.3.0"
+prints "a third failed tag still names the last working version" \
+  "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
+does_not_answer "a retry of the second failed tag" \
+  v2.2.0 "v1.9.0 v2.0.0 v2.1.0 v2.2.0 v2.3.0"
+prints "the retry of a tag reached from another failed tag names it too" \
+  "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
+rm -f "$TMP/down"
+deploys "a tag that answers after three failed ones prunes them" \
+  v2.4.0 "v2.0.0 v2.4.0"
+
+# A version that answered once and then did not answer on a redeploy: what
+# counts is its last run, so the next tag keeps the version before it.
+host v2.0.0 v1.9.0
+deploys "an upgrade that answers, then" v2.1.0 "v2.0.0 v2.1.0"
+: > "$TMP/down"
+does_not_answer "its redeploy that does not answer" v2.1.0 "v2.0.0 v2.1.0"
+rm -f "$TMP/down"
+deploys "the next tag keeps the version before the one that stopped answering" \
+  v2.2.0 "v2.0.0 v2.2.0"
+
+# A failed tag that answers on a retry is a working version again.
+host v2.0.0 v1.9.0
+: > "$TMP/down"
+does_not_answer "a tag that does not answer at first" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
+rm -f "$TMP/down"
+deploys "its retry answers" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
+deploys "the next tag keeps the retried version as the one before it" \
+  v2.2.0 "v2.1.0 v2.2.0"
+
+# A rollback by hand after a failed tag: the next tag keeps that version.
+host v2.0.0 v1.9.0
+: > "$TMP/down"
+does_not_answer "a failed tag before a hand rollback" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
+ln -sfn "$ROOT/v1.9.0" "$ROOT/current"
+rm -f "$TMP/down"
+deploys "the next tag keeps the version rolled back to by hand" \
+  v2.2.0 "v1.9.0 v2.2.0"
+
+# Back to a working version from a failed tag: it never becomes its own
+# rollback target, and the failed tag is pruned.
+host v2.0.0 v1.9.0
+deploys "a working upgrade" v2.1.0 "v2.0.0 v2.1.0"
+: > "$TMP/down"
+does_not_answer "a failed tag after it" v2.2.0 "v2.0.0 v2.1.0 v2.2.0"
+rm -f "$TMP/down"
+deploys "the working version again prunes the failed tag" v2.1.0 "v2.0.0 v2.1.0"
+
+host v2.0.0 v1.9.0
+deploys "a working upgrade, again" v2.1.0 "v2.0.0 v2.1.0"
+: > "$TMP/down"
+does_not_answer "a failed tag after it, again" v2.2.0 "v2.0.0 v2.1.0 v2.2.0"
+does_not_answer "the working version again, not answering this time" \
+  v2.1.0 "v2.0.0 v2.1.0 v2.2.0"
+prints "its hint names the version before it, not the failed tag" \
+  "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
+
+# A failed first install: nothing ever answered, so nothing to roll back to.
+host ""
+: > "$TMP/down"
+does_not_answer "a first install that never answers" v1.0.0 "v1.0.0"
+does_not_answer "another tag after it that does not answer" v1.1.0 "v1.0.0 v1.1.0"
+no_rollback "it names no failed first install" v1.1.0
+rm -f "$TMP/down"
+deploys "a tag that answers after a failed first install prunes it" v1.2.0 "v1.2.0"
 
 # The tag: v plus three numeric parts of 1 to 4 digits, as the deploy gate.
 accepts "a release tag" v2.5.3
