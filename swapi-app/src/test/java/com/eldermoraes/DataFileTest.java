@@ -13,9 +13,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A data file that cannot be loaded is an error naming the file, never an
- * empty list (#49): the six services load through DataFile, and
- * KnownEntities.warm touches them at startup, so the error stops the
- * application instead of serving a type with no records.
+ * empty list (#49). This covers the loader only: the six services call it
+ * with nothing caught in between, and KnownEntities touches them at startup,
+ * which is what stops the application; no test here boots a broken build.
  */
 class DataFileTest {
 
@@ -32,15 +32,16 @@ class DataFileTest {
     void aMissingFileFailsWithItsName() {
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> DataFile.load("datafile/absent.json", FILMS));
-        assertTrue(error.getMessage().contains("datafile/absent.json"), error.getMessage());
+        assertTrue(error.getMessage().startsWith("datafile/absent.json"), error.getMessage());
         assertTrue(error.getMessage().contains("missing from the classpath"), error.getMessage());
+        assertTrue(error.getMessage().contains("quarkus.native.resources.includes"), error.getMessage());
     }
 
     @Test
     void anUnparsableFileFailsWithItsName() {
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> DataFile.load("datafile/unparsable.json", FILMS));
-        assertTrue(error.getMessage().contains("datafile/unparsable.json"), error.getMessage());
+        assertTrue(error.getMessage().startsWith("datafile/unparsable.json"), error.getMessage());
         assertTrue(error.getMessage().contains("could not be read"), error.getMessage());
     }
 
@@ -48,7 +49,7 @@ class DataFileTest {
     void aFileWithoutRecordsFailsWithItsName() {
         IllegalStateException error = assertThrows(IllegalStateException.class,
                 () -> DataFile.load("datafile/empty.json", FILMS));
-        assertTrue(error.getMessage().contains("datafile/empty.json"), error.getMessage());
+        assertTrue(error.getMessage().startsWith("datafile/empty.json"), error.getMessage());
         assertTrue(error.getMessage().contains("holds no records"), error.getMessage());
     }
 }

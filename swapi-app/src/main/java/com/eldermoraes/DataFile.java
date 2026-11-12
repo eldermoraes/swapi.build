@@ -13,7 +13,9 @@ import java.util.List;
  * missing, cannot be read as its type or holds no records is an error naming
  * the file, never an empty list (#49): the services load in their constructor
  * and KnownEntities.warm touches them at startup, so the application does not
- * start with a type it cannot serve. Same contract as SeoSiteFile.load.
+ * start with a type it cannot serve. The message begins with the resource, as
+ * in SeoSiteFile.load; unlike it, the error is also logged here, because the
+ * old code reported a failed load on stderr only.
  */
 public final class DataFile {
 
@@ -50,7 +52,7 @@ public final class DataFile {
     }
 
     private static IllegalStateException failure(String message, Throwable cause) {
-        LOG.error(message);
+        LOG.error(message, cause);
         return new IllegalStateException(message, cause);
     }
 }
