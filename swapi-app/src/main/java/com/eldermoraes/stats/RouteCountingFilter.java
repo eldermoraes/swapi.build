@@ -17,12 +17,14 @@ import java.util.Optional;
  * llms.txt, the SPA HTML) is still counted and timed. Only the path is read; the filter never
  * looks at the client's address or headers.
  *
- * A request is counted under the template of the path it spells, whatever the
- * answer: a count is of requests that reached a route, not of records served.
- * So a 404 counts like a 200, and an alias that CanonicalIdFilter or
- * CanonicalPathFilter refuse later ("/api//people/1", "/api/people/01") counts
- * under /api/people/{id} like "/api/people/9999"; a path that spells no route
- * ("/api/people;x=1/1") is {@link RouteNormalizer#OTHER} (issue #107).
+ * A request is counted under the template of its normalised path (Vert.x
+ * collapses repeated slashes, removes dot segments and decodes percent-encoded
+ * letters, and keeps matrix parameters), whatever the answer: a count is of
+ * requests the server received, not of records served. So a 404 counts like a
+ * 200, and an alias that CanonicalIdFilter or CanonicalPathFilter refuse later
+ * ("/api//people/1", "/api/people/01") counts under /api/people/{id} like
+ * "/api/people/9999"; a path no template matches ("/api/people;x=1/1") is
+ * {@link RouteNormalizer#OTHER} (issue #107).
  *
  * The time is server time: from this filter, the first route handler to see the
  * request, to the end of the response, when its last byte has been handed to

@@ -192,12 +192,28 @@ class NonCanonicalPathRegressionTest {
     /** A route is timed exactly when it is counted: refused aliases included. */
     @Test
     void refusedAliasIsTimedUnderTheTemplateItIsCountedUnder() throws IOException, InterruptedException {
-        String[] aliases = {"/api//people/1", "/api/%70eople/1", "/api/people/01", "/api/people/1;x=1"};
-        long before = timed("/api/people/{id}");
+        String[] aliases = {"/api//people/1", "//api/people/1", "/api/people/1//", "/api/./people/1",
+                "/api/films/../people/1", "/api/%70eople/1", "/%61pi/people/1",
+                "/api/people/01", "/api/people/%31", "/api/people/1;x=1"};
+        endEarlierRequests();
+        long counted = routeCount("/api/people/{id}");
+        long timed = timed("/api/people/{id}");
         for (String alias : aliases) {
             assertEquals(404, send("GET", alias).status, alias);
         }
-        assertEquals(before + aliases.length, awaitTimed("/api/people/{id}", before + aliases.length));
+        endEarlierRequests();
+        assertEquals(counted + aliases.length, routeCount("/api/people/{id}"));
+        assertEquals(timed + aliases.length, timed("/api/people/{id}"));
+    }
+
+    /**
+     * Sends one timed request and waits until its time shows: a time is recorded
+     * once the response has ended, so every request sent before it has ended too.
+     */
+    private static void endEarlierRequests() throws InterruptedException {
+        long films = timed("/api/films");
+        given().get("/api/films").then().statusCode(200);
+        assertTrue(awaitTimed("/api/films", films + 1) >= films + 1);
     }
 
     private static long routeCount(String route) {
@@ -212,9 +228,9 @@ class NonCanonicalPathRegressionTest {
         return n == null ? 0 : n.longValue();
     }
 
-    private static long awaitTimed(String route, long expected) throws InterruptedException {
+    private static long awaitTimed(String route, long atLeast) throws InterruptedException {
         long n = timed(route);
-        for (int i = 0; i < 100 && n < expected; i++) {
+        for (int i = 0; i < 100 && n < atLeast; i++) {
             Thread.sleep(20);
             n = timed(route);
         }
