@@ -35,7 +35,9 @@ async function request<T>(url: string, signal?: AbortSignal): Promise<ApiRespons
   try {
     const res = await fetch(url, { signal: requestSignal });
     if (!res.ok) {
-      throw new ApiError(`HTTP ${res.status}: ${res.statusText}`, res.status, 'http');
+      // HTTP/2 and HTTP/3 carry no reason phrase: no bare colon then.
+      const reason = res.statusText ? `: ${res.statusText}` : '';
+      throw new ApiError(`HTTP ${res.status}${reason}`, res.status, 'http');
     }
     const data = (await res.json()) as T;
     requestSignal.throwIfAborted();
