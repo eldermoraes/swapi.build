@@ -20,6 +20,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @QuarkusTest
 class StatsResourceTest {
 
+    // CORS echoes the request Origin, so a publicly cacheable answer must vary
+    // by it, as every other cacheable response does (CacheControlFilter).
+    @Test
+    void cacheableAnswerVariesByOrigin() {
+        given().when().get("/api/stats").then()
+                .statusCode(200)
+                .header("Cache-Control", equalTo(StatsResource.CACHE_CONTROL))
+                .header("Vary", containsString("Origin"));
+    }
+
     @Test
     void countsRequestsByRouteTemplate() {
         given().get("/api/people/1").then().statusCode(200);

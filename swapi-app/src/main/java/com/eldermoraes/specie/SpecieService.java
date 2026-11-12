@@ -2,7 +2,6 @@ package com.eldermoraes.specie;
 
 import com.eldermoraes.DataFile;
 import com.eldermoraes.SWService;
-import com.eldermoraes.planet.Planet;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.lang.reflect.Type;

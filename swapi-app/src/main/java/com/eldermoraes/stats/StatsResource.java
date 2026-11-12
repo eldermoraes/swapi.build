@@ -65,6 +65,9 @@ public class StatsResource {
         StatsViewMemo.Served served = views.view(p, g);
         return RestResponse.ResponseBuilder.ok(served.view())
                 .header(HttpHeaders.CACHE_CONTROL, cacheControl(served.maxAgeSeconds()))
+                // Opting out of CacheControlFilter also drops its Vary: CORS
+                // echoes the request Origin, so a cacheable answer varies by it.
+                .header(HttpHeaders.VARY, "Origin")
                 .build();
     }
 

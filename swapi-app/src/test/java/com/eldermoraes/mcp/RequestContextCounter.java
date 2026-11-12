@@ -3,14 +3,12 @@ package com.eldermoraes.mcp;
 import io.quarkus.arc.Arc;
 import io.quarkus.arc.InjectableContext.ContextState;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.context.Destroyed;
 import jakarta.enterprise.context.Initialized;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.enterprise.event.Observes;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Test-only observer for McpRequestContextTest: keeps every request context
@@ -27,24 +25,16 @@ import java.util.concurrent.atomic.AtomicLong;
 @ApplicationScoped
 public class RequestContextCounter {
 
-    static final AtomicLong INITIALIZED = new AtomicLong();
-    static final AtomicLong DESTROYED = new AtomicLong();
-
     static volatile boolean recording;
     static final Map<ContextState, String> STARTED = new ConcurrentHashMap<>();
 
     void onInitialized(@Observes @Initialized(RequestScoped.class) Object event) {
-        INITIALIZED.incrementAndGet();
         if (recording) {
             ContextState state = Arc.container().requestContext().getState();
             if (state != null) {
                 STARTED.put(state, origin());
             }
         }
-    }
-
-    void onDestroyed(@Observes @Destroyed(RequestScoped.class) Object event) {
-        DESTROYED.incrementAndGet();
     }
 
     private static String origin() {
