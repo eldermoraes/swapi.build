@@ -390,7 +390,7 @@ class McpListenLimitTest {
     // carry nothing this server uses and auto-init serves a dropped id, so
     // minutes are enough. Read from the mapping the extension itself reads.
     @Test
-    void idleSessionsAreKeptForMinutes() {
+    void idleTimeoutIsMinutes() {
         Duration timeout = ConfigProvider.getConfig().unwrap(SmallRyeConfig.class)
                 .getConfigMapping(McpServersRuntimeConfig.class)
                 .servers().get(McpServer.DEFAULT).connectionIdleTimeout();

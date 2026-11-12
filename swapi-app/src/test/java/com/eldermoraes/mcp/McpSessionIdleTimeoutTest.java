@@ -26,9 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Issue #45: a session lives in the heap until the extension's idle timeout,
  * and the sessions carry nothing this server uses. application.properties
- * sets the timeout to minutes (McpListenLimitTest.idleSessionsAreKeptForMinutes
+ * sets the timeout to minutes (McpListenLimitTest.idleTimeoutIsMinutes
  * guards the value); this class shows what the key does, with a profile that
- * shortens it to a second, because a test cannot wait minutes.
+ * shortens it to two seconds, because a test cannot wait minutes.
  *
  * "Still in the heap" is read from the extension's ConnectionManager, the map
  * the sessions live in. Over HTTP a dropped session cannot be told from a live
@@ -41,14 +41,14 @@ class McpSessionIdleTimeoutTest {
     public static class ShortIdleTimeout implements QuarkusTestProfile {
         @Override
         public Map<String, String> getConfigOverrides() {
-            return Map.of("quarkus.mcp.server.connection-idle-timeout", "1s");
+            return Map.of("quarkus.mcp.server.connection-idle-timeout", "2s");
         }
     }
 
     private static final String SESSION_ERA = "2025-11-25";
-    // The sweep runs every half timeout: a session is gone at most 1.5 s after
-    // its last use. The rest is margin for a slow machine.
-    private static final long DROPPED_WITHIN_MS = 8000;
+    // The sweep runs every half timeout: a session is gone at most 3 s after
+    // its last use, and never before 2 s. The rest is margin for a slow machine.
+    private static final long DROPPED_WITHIN_MS = 10000;
 
     @TestHTTPResource("/mcp")
     URI mcp;
@@ -134,8 +134,9 @@ class McpSessionIdleTimeoutTest {
     // these requests end without removing it (StreamableHttpMcpMessageHandler.
     // handleStateful): none is initialized, so the removal of auto-init
     // sessions at the end of the request skips them. The idle timeout is what
-    // takes them out. The test asks only for that, so it keeps passing the day
-    // the extension stops leaving them.
+    // takes them out. Measured while writing this test: one session held after
+    // each of the three requests. The test asks only that none is left after
+    // the timeout, so it keeps passing the day the extension stops leaving them.
     @Test
     void sessionsLeftByRefusedRequestsAreDropped() throws Exception {
         // 1. An unsupported MCP-Protocol-Version without a session id: 400.
