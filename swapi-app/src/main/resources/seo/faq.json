@@ -26,7 +26,7 @@
       "question": "What data does it have?",
       "answer": [
         "Six types of records from the six films of Episodes I-VI: {count:films} films, {count:people} people, {count:planets} planets, {count:species} species, {count:starships} starships and {count:vehicles} vehicles.",
-        "There is nothing from the sequels, the series or the games. swapi.dev, swapi.tech and swapi.info cover the same six films and 82 people; the comparison below has the details."
+        "There is nothing from the sequels, the series or the games. The comparison below shows what the other Star Wars APIs cover."
       ],
       "links": [
         { "text": "Comparison", "path": "/faq#compare" }
@@ -36,7 +36,7 @@
       "id": "same-data-as-swapi",
       "question": "Is the data the same as SWAPI's?",
       "answer": [
-        "Yes. The records come from the original SWAPI, created by Paul Hallett and maintained by Juriy Bura, with the same ids and fields. The links inside each record point to this API instead of swapi.dev."
+        "Yes. The records come from the original SWAPI, created by Paul Hallett and maintained by Juriy Bura, and keep its ids and fields. The links inside each record point to this API."
       ],
       "links": [
         { "text": "The original SWAPI", "path": "https://swapi.dev" },
@@ -47,8 +47,8 @@
       "id": "different-from-swapi-dev",
       "question": "How is it different from swapi.dev?",
       "answer": [
-        "Lists and searches return a plain JSON array of every matching record, like swapi.info, instead of pages of count, next and results.",
-        "It also has a remote MCP server for AI agents and a published OpenAPI contract, which swapi.dev does not list in its documentation. Both serve the same records with no API key."
+        "Lists and searches return a plain JSON array of every matching record: there are no pages to follow.",
+        "It also has a remote MCP server for AI agents and a published OpenAPI contract. The comparison below has the same rows for the original SWAPI, each with its source and the day it was checked."
       ],
       "links": [
         { "text": "Comparison", "path": "/faq#compare" }

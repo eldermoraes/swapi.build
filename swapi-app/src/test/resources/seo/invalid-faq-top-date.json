@@ -1,0 +1,16 @@
+{
+  "checkedOn": "2026-01-01",
+  "questions": [
+    { "id": "one", "question": "One?", "answer": ["Yes."] }
+  ],
+  "comparison": {
+    "columns": ["swapi.build", "swapi.dev", "Pipeworx (swapi MCP)"],
+    "rows": [
+      { "label": "REST JSON", "cells": [
+        { "value": "Yes", "source": "https://swapi.build/api/people/1", "checkedOn": "2026-01-01" },
+        { "value": "Yes", "source": "https://swapi.dev/api/people/1/", "checkedOn": "2026-01-01" },
+        { "value": "n/a (MCP only)", "source": "https://gateway.pipeworx.io/swapi/mcp", "checkedOn": "2025-12-30" }
+      ] }
+    ]
+  }
+}

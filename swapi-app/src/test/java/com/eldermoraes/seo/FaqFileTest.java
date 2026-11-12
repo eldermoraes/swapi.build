@@ -143,6 +143,16 @@ class FaqFileTest {
         assertFalse(data.matches("(?s).*\\b\\d+ (films|planets|species|starships|vehicles)\\b.*"), data);
     }
 
+    /**
+     * "Checked on" above the table is the oldest cell date: after a partial
+     * re-check, the newest would say the whole table is fresher than it is.
+     */
+    @Test
+    void theTopDateIsTheOldestCellDate() {
+        FaqFile partial = FaqFile.load("seo/faq-partial-recheck.json");
+        assertEquals(LocalDate.parse("2026-01-01"), partial.checkedOn(), "one cell checked again a month later");
+    }
+
     @ParameterizedTest
     @CsvSource({
             "seo/invalid-faq-unknown-key.json, questions[0].html: unknown key",
@@ -152,6 +162,9 @@ class FaqFileTest {
             "seo/invalid-faq-html.json, questions[0].answer[1]: has < or >",
             "seo/invalid-faq-marker.json, questions[0].answer[0]: {count:droids} is not {count:<type>}",
             "seo/invalid-faq-link.json, questions[0].links[0].path: \"javascript:alert(1)\" must be a path on this site or an https URL",
+            "seo/invalid-faq-names-other-api.json, questions[0].answer[1]: names \"Pipeworx\"",
+            "seo/invalid-faq-literal-count.json, questions[0].answer[0]: \"82 People\" is a count of records written as a literal: use {count:people}",
+            "seo/invalid-faq-top-date.json, checkedOn: \"2026-01-01\" is not the oldest cell date: \"2025-12-30\" at comparison.rows[0].cells[2]",
             "seo/missing-faq.json, seo/missing-faq.json is missing from the classpath",
     })
     void invalidFilesFailWithTheKey(String file, String expected) {
