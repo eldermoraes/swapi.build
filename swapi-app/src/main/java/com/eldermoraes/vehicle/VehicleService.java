@@ -1,7 +1,6 @@
 package com.eldermoraes.vehicle;
 
 import com.eldermoraes.DataFile;
-import com.eldermoraes.SWService;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.lang.reflect.Type;
@@ -10,7 +9,7 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 @ApplicationScoped
-public class VehicleService implements SWService {
+public class VehicleService {
 
     private static List<Vehicle> vehicleList;
 
@@ -20,8 +19,7 @@ public class VehicleService implements SWService {
         }
     }
 
-    @Override
-    public void loadJsonData() {
+    private static void loadJsonData() {
         Type listType = new ArrayList<Vehicle>(){}.getClass().getGenericSuperclass();
         vehicleList = DataFile.load("data/vehicles.json", listType);
     }

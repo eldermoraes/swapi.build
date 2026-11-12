@@ -1,7 +1,6 @@
 package com.eldermoraes.starship;
 
 import com.eldermoraes.DataFile;
-import com.eldermoraes.SWService;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.lang.reflect.Type;
@@ -10,7 +9,7 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 @ApplicationScoped
-public class StarshipService implements SWService {
+public class StarshipService {
 
     private static List<Starship> starshipList;
 
@@ -20,8 +19,7 @@ public class StarshipService implements SWService {
         }
     }
 
-    @Override
-    public void loadJsonData() {
+    private static void loadJsonData() {
         Type listType = new ArrayList<Starship>(){}.getClass().getGenericSuperclass();
         starshipList = DataFile.load("data/starships.json", listType);
     }

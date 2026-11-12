@@ -1,7 +1,6 @@
 package com.eldermoraes.people;
 
 import com.eldermoraes.DataFile;
-import com.eldermoraes.SWService;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.lang.reflect.Type;
@@ -11,7 +10,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 
 @ApplicationScoped
-public class PeopleService implements SWService {
+public class PeopleService {
 
     private static List<People> peopleList;
 
@@ -21,8 +20,7 @@ public class PeopleService implements SWService {
         }
     }
 
-    @Override
-    public void loadJsonData() {
+    private static void loadJsonData() {
         Type listType = new ArrayList<People>(){}.getClass().getGenericSuperclass();
         peopleList = DataFile.load("data/people.json", listType);
     }

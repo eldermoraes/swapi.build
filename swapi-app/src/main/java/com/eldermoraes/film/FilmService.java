@@ -1,7 +1,6 @@
 package com.eldermoraes.film;
 
 import com.eldermoraes.DataFile;
-import com.eldermoraes.SWService;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.util.ArrayList;
 import java.util.List;
@@ -9,7 +8,7 @@ import java.lang.reflect.Type;
 import java.util.concurrent.ThreadLocalRandom;
 
 @ApplicationScoped
-public class FilmService implements SWService {
+public class FilmService {
 
     private static List<Film> filmList;
 
@@ -19,8 +18,7 @@ public class FilmService implements SWService {
         }
     }
 
-    @Override
-    public void loadJsonData() {
+    private static void loadJsonData() {
         Type listType = new ArrayList<Film>(){}.getClass().getGenericSuperclass();
         filmList = DataFile.load("data/films.json", listType);
     }

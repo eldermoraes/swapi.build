@@ -1,7 +1,6 @@
 package com.eldermoraes.specie;
 
 import com.eldermoraes.DataFile;
-import com.eldermoraes.SWService;
 import com.eldermoraes.planet.Planet;
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -11,7 +10,7 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 @ApplicationScoped
-public class SpecieService implements SWService {
+public class SpecieService {
 
     private static List<Specie> specieList;
 
@@ -21,8 +20,7 @@ public class SpecieService implements SWService {
         }
     }
 
-    @Override
-    public void loadJsonData() {
+    private static void loadJsonData() {
         Type listType = new ArrayList<Specie>(){}.getClass().getGenericSuperclass();
         specieList = DataFile.load("data/species.json", listType);
     }
