@@ -65,7 +65,16 @@ describe('privacy page', () => {
     expect(text()).not.toMatch(/no analytics/i);
   });
 
+  it('says the fonts are served by the site itself, not by a font service (#52)', () => {
+    // Regression: every page loaded its fonts from Google Fonts while this
+    // section named only the host and Cloudflare.
+    expect(text()).toContain(
+      'The fonts are served by swapi.build itself: no page loads anything from a font service',
+    );
+    expect(text()).not.toMatch(/google/i);
+  });
+
   it('carries the date of this revision', () => {
-    expect(text()).toContain('Last updated: October 20, 2026');
+    expect(text()).toContain('Last updated: November 12, 2026');
   });
 });

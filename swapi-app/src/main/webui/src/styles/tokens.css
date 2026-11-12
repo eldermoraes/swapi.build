@@ -1,11 +1,55 @@
 /*
+ * Web fonts, served by the site itself (#52): no page asks a font service for
+ * anything, which is what the privacy page says. The files in ../fonts/ are the
+ * woff2 files Google Fonts served for the latin subset of each family (Inter
+ * and JetBrains Mono are variable, one file for every weight the site uses),
+ * unmodified, each with its SIL Open Font License beside it. The relative
+ * address makes Vite fingerprint them under /assets/, immutable like the JS and
+ * the CSS. The unicode-range is the one of that subset: a character outside it
+ * falls through to the next family of the stack, as it always did.
+ * web-fonts.test.ts and no-third-party-hosts.test.ts guard this.
+ */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('../fonts/inter-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url('../fonts/jetbrains-mono-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Pathway Gothic One';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/pathway-gothic-one-latin.woff2') format('woff2');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/*
  * Metric-matched fallback faces (2.11.0). The pages drawn on the server paint
- * before the Google Fonts arrive (display=swap); without these, the fallback's
- * other widths wrap the header menu onto two lines on a phone and the swap
- * moves the whole page. Each face is a local font scaled to the web font's
- * widths (size-adjust) with its ascent and descent (the overrides are divided
- * by size-adjust, which scales them too), measured in Chromium against the
- * Google Fonts files of 2026-10. Once the web font loads, nothing changes.
+ * before the web fonts arrive (font-display: swap); without these, the
+ * fallback's other widths wrap the header menu onto two lines on a phone and
+ * the swap moves the whole page. Each face is a local font scaled to the web
+ * font's widths (size-adjust) with its ascent and descent (the overrides are
+ * divided by size-adjust, which scales them too), measured in Chromium against
+ * the files above (2026-10). Once the web font loads, nothing changes.
  */
 @font-face {
   font-family: 'Pathway Gothic One Fallback';
