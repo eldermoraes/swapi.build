@@ -48,6 +48,13 @@ jobs:
       - name: Deploy gate tests
         run: scripts/swapi-deploy-gate.test.sh
 
+      # swapi-update lives only as a code block in docs/DEPLOY.md (section 2.5).
+      # The test extracts it and runs it against a temporary directory: an
+      # upgrade keeps two versions, and a redeploy of the active version must
+      # not remove the rollback copy. Runs without the host or the network.
+      - name: Host update script tests
+        run: scripts/swapi-update.test.sh
+
       # The repo is still connected to the old Vercel project; without
       # git.deploymentEnabled false every push starts a Vercel deployment.
       - name: Vercel git deployments stay off

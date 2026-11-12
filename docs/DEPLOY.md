@@ -576,11 +576,28 @@ if ! curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:5432/api/people/1; th
 fi
 echo "swapi $tag is up"
 
-# Keep only the active version and the previous one.
-for dir in /opt/swapi/v*; do
-  case "$dir" in "/opt/swapi/$tag" | "$previous") ;; *) rm -rf "$dir" ;; esac
-done
+# Keep only the active version and the previous one. A redeploy of the version
+# that was already active removes nothing: the link pointed at this tag, so
+# nothing here names the real previous version, and it must stay on disk.
+if [ "$previous" != "/opt/swapi/$tag" ]; then
+  for dir in /opt/swapi/v*; do
+    case "$dir" in "/opt/swapi/$tag" | "$previous") ;; *) rm -rf "$dir" ;; esac
+  done
+fi
 ```
+
+The block above is the only source of the script, and
+`scripts/swapi-update.test.sh` runs it in CI against a temporary directory. The
+host has its own copy: after any change to the block, the maintainer installs
+it again as `/usr/local/sbin/swapi-update` (owner root, mode 755). Until then
+the host runs the old script.
+
+After an upgrade, `/opt/swapi/` holds the new version and the one that was
+active before it. A redeploy of the active version (a reinstall, the proof of
+the deploy path, or a retry of a tag that did not answer) removes nothing, so
+the version to roll back to is still there; the next upgrade prunes as usual.
+Before 2026-11-12 the script removed it in that case: a host that still has the
+old copy loses its rollback version on a redeploy.
 
 Rolling back a version is `sudo ln -sfn /opt/swapi/<previous tag> /opt/swapi/current`
 and `sudo systemctl restart swapi`.
@@ -1087,7 +1104,9 @@ without repository activity: re-enable it if so.
 ### 5. Rollback
 
 The only way back is the previous version on the host. `swapi-update` keeps the
-active version and the one before it under `/opt/swapi/`.
+active version and the one before it under `/opt/swapi/`, and a redeploy of the
+active version removes nothing (section 2.5; the host copy of the script must
+be the current one).
 
 ```bash
 ls /opt/swapi/                                   # v<previous> and v<current>
