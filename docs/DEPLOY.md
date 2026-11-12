@@ -387,7 +387,7 @@ applied there and verified with the probe on 2026-10-26 (18:25 BRT).
 | The OpenAPI version probe fails right after a deploy | The host still runs the previous version: `swapi-update` failed, or the probe ran against a tag other than the deployed one. Read the `deploy` job log; on the host, `readlink /opt/swapi/current`. |
 | A file from `public/` or an asset answers 404 from 2.9.1 on | Its path has no dot in the last segment and is not under `/assets/`, so `SeoRoutes` treats it as a page and, not knowing it, answers the not-found document. Every new file in `public/` needs an extension. |
 | A page of the site answers 404 from 2.9.1 on | The route is missing from `swapi-app/src/main/resources/seo/site.json`, the one source the server and the site both read (2.10.0+). Quinoa's SPA routing stays off: turning it back on brings back the soft 404s and the double count in `/stats`. |
-| The app does not start after a release that touched `seo/site.json` (2.10.0+) | The file is invalid (the log names the key and the reason, for example a placeholder that is not a field of its type) or it is missing from `quarkus.native.resources.includes` in `application.properties` (the log names `seo/site.json`). The app refuses to start rather than serve pages without metadata. `swapi-update` has already switched the link and restarted the service when it reports "is not answering": the site is down until you run the rollback command it printed. |
+| The app does not start after a release that touched `seo/site.json` (2.10.0+) | The file is invalid (the log names the key and the reason, for example a placeholder that is not a field of its type) or it is missing from `quarkus.native.resources.includes` in `application.properties` (the log names `seo/site.json`). The app refuses to start rather than serve pages without metadata. `swapi-update` has already switched the link and restarted the service when it reports "is not answering": the site is down until you run the rollback command it printed (none when no earlier version is on disk: then `swapi-update` with an older tag). |
 | A page shows its text, but the tabs, the copy buttons or "Try it" do not respond (2.11.0+) | The client code of that page did not bind: the `data-ssr-page` marker of the `<main>` did not match the route the client resolved. The browser console says which; compare the marker with the page's key in `seo/site.json`. |
 | A page shows "This page could not be loaded" (2.11.0+) | Its render failed on the server, which then served the shell without the marker. The log has an `ERROR` from `ServerRendering` or `OpenApiDocs` naming the page, and the server-rendered content probe reads `FAIL`: roll back (see [5. Rollback](#5-rollback)). |
 | A `.md` copy answers HTML, or two `Cache-Control` headers (2.14.0+) | The `spa` filter of `application.properties` (`quarkus.http.filter.spa`) stamped the HTML policy on `/resource/{type}/{id}.md`, or a route before `SeoRoutes` answered it. `SeoRoutes` sets the copy's headers when they are written, so only its own `Cache-Control` stays (`MarkdownCopiesTest.recordCopyHasOneCacheControlTheMarkdownOne`); check that the running version is 2.14.0+ and that no new filter matches `.md`. |
@@ -649,7 +649,14 @@ fi
 
 install -d -o root -g root -m 755 "/opt/swapi/$tag"
 install -o root -g root -m 755 "$tmp/application" "/opt/swapi/$tag/application"
-previous=$(readlink -f /opt/swapi/current || true)
+previous=
+if [ -L /opt/swapi/current ]; then previous=$(readlink -f /opt/swapi/current || true); fi
+# The version that served before the first attempt of this tag, kept in the
+# tag's directory: a retry or a redeploy finds the tag itself in `current`.
+if [ "$previous" != "/opt/swapi/$tag" ]; then
+  printf '%s\n' "$previous" > "/opt/swapi/$tag/previous"
+fi
+rollback=$(cat "/opt/swapi/$tag/previous" 2>/dev/null || true)
 ln -sfn "/opt/swapi/$tag" /opt/swapi/current
 systemctl restart swapi
 # The site is down while this waits: at most 10 checks, one second apart, 2
@@ -665,8 +672,13 @@ while [ "$answering" = no ] && [ "$checks" -lt 10 ]; do
 done
 if [ "$answering" = no ]; then
   echo "$error" >&2                                # what the last check said
-  echo "swapi $tag is not answering. Roll back with:"
-  echo "  ln -sfn ${previous:-<previous version dir>} /opt/swapi/current && systemctl restart swapi"
+  if [ -n "$rollback" ] && [ "$rollback" != "/opt/swapi/$tag" ] && [ -d "$rollback" ]; then
+    echo "swapi $tag is not answering. Roll back with:"
+    echo "  ln -sfn $rollback /opt/swapi/current && systemctl restart swapi"
+  else
+    echo "swapi $tag is not answering. No version that served before it is on this host to roll back to."
+    echo "  To go back to an older release: swapi-update <tag> <sha256 from its run summary>"
+  fi
   exit 1
 fi
 echo "swapi $tag is up"
@@ -686,14 +698,23 @@ The block above is the only source of the script, and
 host has its own copy: after any change to the block, the maintainer installs
 it again as `/usr/local/sbin/swapi-update` (owner root, mode 755). Until then
 the host runs the old script. Before 2026-11-12 that copy removed the rollback
-version on a redeploy, accepted any `v*.*.*` glob as a tag, and checked the
-health once, three seconds after the restart; a host that still has it keeps
-all three behaviours until the block is installed again.
+version on a redeploy, accepted any `v*.*.*` glob as a tag, checked the
+health once, three seconds after the restart, and on a redeploy or a retry
+printed a rollback to the tag itself; a host that still has it keeps all four
+behaviours until the block is installed again.
 
 After an upgrade, `/opt/swapi/` holds the new version and the one that was
 active before it. A redeploy of the active version (a reinstall, the proof of
 the deploy path, or a retry of a tag that did not answer) removes nothing, so
 the version to roll back to is still there; the next upgrade prunes as usual.
+
+The rollback command printed on "is not answering" names the version that
+served before the first attempt of the tag: the script records it in
+`/opt/swapi/<tag>/previous` when `current` points elsewhere, and a redeploy or
+a retry (where `current` already points at the tag) reads it there. When that
+version is not on disk (a first install, a tag installed by the old copy, or a
+version pruned since), it prints no `ln` command, says no version that served
+before it is on this host, and points to `swapi-update` with an older tag.
 
 Rolling back a version is `sudo ln -sfn /opt/swapi/<previous tag> /opt/swapi/current`
 and `sudo systemctl restart swapi`.
@@ -1286,8 +1307,10 @@ scripts/verify-deploy.sh origin swapi.build      # from a checkout of <previous 
 ```
 
 `swapi-update` prints the exact `ln` command when a new version does not
-answer. A rollback is a host change (maintainer, or a session he opens for it);
-the next release then goes out through the normal pipeline. Rolling back to a
+answer, naming the version that served before that tag's first attempt, also on
+a retry (section 2.5); when that version is not on disk it prints none. A
+rollback is a host change (maintainer, or a session he opens for it); the next
+release then goes out through the normal pipeline. Rolling back to a
 version older than the previous one: run `sudo swapi-update <tag> <sha256>` with
 the hash from that release's run summary.
 

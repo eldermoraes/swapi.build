@@ -254,6 +254,70 @@ prints "it says the version is not answering" "swapi v2.1.0 is not answering. Ro
 prints "it prints the rollback command with the previous version" \
   "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
 
+# The rollback hint names the version that served before the first attempt of
+# the tag, never the tag itself, and no `ln` at all when there is none.
+NO_PREVIOUS='No version that served before it is on this host to roll back to.'
+OLDER='  To go back to an older release: swapi-update <tag> <sha256 from its run summary>'
+
+# no_rollback <description> <tag>: the last run printed no `ln` command, and
+# said so.
+no_rollback() {
+  if grep -q 'ln -sfn' "$TMP/output"; then
+    fail "$1: it printed a rollback command"
+    sed 's/^/      /' "$TMP/output"
+  else
+    prints "$1" "swapi $2 is not answering. $NO_PREVIOUS"
+    prints "$1: it says how to reach an older release" "$OLDER"
+  fi
+}
+
+host v2.0.0 v1.9.0
+: > "$TMP/down"
+does_not_answer "a first attempt that does not answer" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
+does_not_answer "its retry that does not answer" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
+prints "a retry names the version that served before the first attempt" \
+  "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
+does_not_answer "a second retry that does not answer" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
+prints "a second retry still names it" \
+  "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
+
+# The rollback the hint asks for, then the same tag again: the hint again names
+# the version that served before that tag's first attempt.
+ln -sfn "$ROOT/v2.0.0" "$ROOT/current"
+does_not_answer "a retry after a rollback that does not answer" v2.1.0 "v1.9.0 v2.0.0 v2.1.0"
+prints "a retry after a rollback names the version rolled back to" \
+  "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
+
+# A redeploy of a version the script deployed: the record of its own deploy.
+host v2.0.0 v1.9.0
+deploys "an upgrade that answers" v2.1.0 "v2.0.0 v2.1.0"
+: > "$TMP/down"
+does_not_answer "a redeploy of it that does not answer" v2.1.0 "v2.0.0 v2.1.0"
+prints "a redeploy names the version before it" \
+  "  ln -sfn $ROOT/v2.0.0 $ROOT/current && systemctl restart swapi"
+
+# A recorded version pruned since: no `ln` to a directory that is gone.
+rm -f "$TMP/down"
+deploys "the next upgrade prunes the oldest" v2.2.0 "v2.1.0 v2.2.0"
+ln -sfn "$ROOT/v2.1.0" "$ROOT/current"
+: > "$TMP/down"
+does_not_answer "a redeploy whose recorded previous version was pruned" v2.1.0 "v2.1.0 v2.2.0"
+no_rollback "a redeploy whose recorded previous version was pruned" v2.1.0
+
+# A redeploy with no record (installed by an older copy of the script).
+host v2.0.0 v1.9.0
+: > "$TMP/down"
+does_not_answer "a redeploy without a record that does not answer" v2.0.0 "v1.9.0 v2.0.0"
+no_rollback "a redeploy without a record names nothing" v2.0.0
+
+# The first install: nothing served before it.
+host ""
+: > "$TMP/down"
+does_not_answer "a first install that does not answer" v1.0.0 "v1.0.0"
+no_rollback "a first install names nothing" v1.0.0
+does_not_answer "a retry of the first install that does not answer" v1.0.0 "v1.0.0"
+no_rollback "a retry of the first install names nothing" v1.0.0
+
 # The tag: v plus three numeric parts of 1 to 4 digits, as the deploy gate.
 accepts "a release tag" v2.5.3
 accepts "multi-digit version parts" v10.20.300
