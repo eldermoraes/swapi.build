@@ -107,7 +107,7 @@ class CacheHeadersTest {
     }
 
     // The CORS filter echoes the request's Origin and emits no Vary. Without
-    // Vary the edge serves one origin's variant (or the no-origin variant) to
+    // Vary a shared cache serves one origin's variant (or the no-origin variant) to
     // another client — intermittently broken CORS, and a third party's ACAO
     // kept by a shared cache for as long as the entry lives.
     @Test

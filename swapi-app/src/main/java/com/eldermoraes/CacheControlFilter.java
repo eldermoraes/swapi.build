@@ -19,7 +19,8 @@ import java.util.List;
  * on a release — but a release invalidates no cache: not the browser's, and
  * not a shared one in front of the self-hosted origin or on the client's side.
  * That is why both lifetimes are short (the value and its reasons live in
- * swapi.cache-control.public): a data fix reaches every client within minutes.
+ * swapi.cache-control.public): no cache treats an entry as fresh for more
+ * than five minutes after a data fix.
  *
  * Deny-list policy: every new /api endpoint is born cacheable;
  * a non-deterministic endpoint must be added to the exclusion. The header is
@@ -56,7 +57,7 @@ public class CacheControlFilter implements ContainerResponseFilter {
                 && !HttpMethod.HEAD.equals(request.getMethod())) {
             return false;
         }
-        // Only 200/404 are deterministic answers — a 5xx or a 405 must never be kept.
+        // Only 200 and 404 get the policy: anything else (a 405, a 5xx) leaves without it.
         if (response.getStatus() != 200 && response.getStatus() != 404) {
             return false;
         }
