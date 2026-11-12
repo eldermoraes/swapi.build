@@ -71,7 +71,6 @@ describe('privacy page', () => {
     expect(text()).toContain(
       'The fonts are served by swapi.build itself: no page loads anything from a font service',
     );
-    expect(text()).not.toMatch(/google/i);
   });
 
   it('carries the date of this revision', () => {

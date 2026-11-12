@@ -37,7 +37,7 @@ class SsrShellTest {
         assertEquals("document.documentElement.classList.add('js')", inline.group(1).trim().replaceAll(";$", ""));
         int script = inline.start();
         assertTrue(!inline.find(), "a second inline script in index.html");
-        // Before any <link> (the fonts here, the page CSS Vite adds to the build).
+        // Before any <link> (the icon here, the page CSS Vite adds to the build).
         int css = html.indexOf("<link");
         int module = html.indexOf("<script type=\"module\"");
         assertTrue(css < 0 || script < css, "the js-class script must come before the CSS");

@@ -36,7 +36,7 @@ const sources = import.meta.glob(['./**/*.ts', '!./**/*.test.ts'], {
 
 /** Every address a stylesheet makes the browser fetch: `@import` and `url()`. */
 function fetchedBy(css: string): string[] {
-  const imports = [...css.matchAll(/@import\s+(?:url\(\s*)?['"]?([^'")\s;]+)/gi)].map((m) => m[1]);
+  const imports = [...css.matchAll(/@import\s*(?:url\(\s*)?['"]?([^'")\s;]+)/gi)].map((m) => m[1]);
   const urls = [...css.matchAll(/url\(\s*['"]?([^'")]+)/gi)].map((m) => m[1]);
   return [...imports, ...urls];
 }
@@ -47,7 +47,7 @@ describe('no third-party stylesheet or font host', () => {
     // Without this, a shell with no <link> at all would pass vacuously.
     expect(links.length).toBeGreaterThan(0);
     const remote = links.filter((link) => {
-      const href = link.match(/\bhref=["']([^"']+)["']/i)?.[1] ?? '';
+      const href = link.match(/\bhref\s*=\s*["']?([^"'\s>]+)/i)?.[1] ?? '';
       return REMOTE.test(href);
     });
     expect(remote).toEqual([]);
@@ -73,6 +73,12 @@ describe('no third-party stylesheet or font host', () => {
   });
 
   it('no stylesheet imports or fetches anything from another host', () => {
+    // Without this, an extractor that finds nothing would pass vacuously: the
+    // stylesheets import each other and fetch the font files.
+    const all = Object.values(stylesheets).flatMap(fetchedBy);
+    expect(all).toEqual(
+      expect.arrayContaining(['./styles/tokens.css', '../fonts/inter-latin.woff2']),
+    );
     const remote = Object.entries(stylesheets).flatMap(([name, css]) =>
       fetchedBy(css)
         .filter((address) => REMOTE.test(address))

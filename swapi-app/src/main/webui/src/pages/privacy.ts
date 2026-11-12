@@ -82,8 +82,7 @@ export function renderPrivacy(container: HTMLElement): void {
           Cloudflare (DNS-only, no proxying: your requests to the site, the API and the MCP endpoint
           never pass through Cloudflare). Cloudflare also provides the page-visit measurement described
           above, which only receives what that script reports. The fonts are served by swapi.build
-          itself: no page loads anything from a font service, and that measurement script is the only
-          thing a page loads from another host. No data is sold or shared with anyone.
+          itself: no page loads anything from a font service. No data is sold or shared with anyone.
         </p>
       </section>
 

@@ -74,7 +74,7 @@ describe('self-hosted web fonts', () => {
     });
   }
 
-  it('ships no font file without a face', () => {
+  it('ships exactly the font files listed here', () => {
     expect([...fontFiles].sort()).toEqual(WEB_FONTS.map(({ file }) => file).sort());
   });
 });
