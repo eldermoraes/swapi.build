@@ -63,6 +63,7 @@
 
 .item-card .item-name {
   font-family: var(--sw-font-display);
+  font-weight: 400;
   font-size: 1.05rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -91,6 +92,7 @@
 
 .back-btn {
   font-family: var(--sw-font-display);
+  font-weight: 400;
   font-size: 0.8rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -103,6 +105,7 @@
 
 .detail-title {
   font-family: var(--sw-font-display);
+  font-weight: 400;
   font-size: 1.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -220,6 +223,7 @@
 /* Shared page title (display face) */
 .sw-page-title {
   font-family: var(--sw-font-display);
+  font-weight: 400;
   font-size: 1.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -233,6 +237,7 @@
 
 .docs h2 {
   font-family: var(--sw-font-display);
+  font-weight: 400;
   font-size: 1rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -312,6 +317,7 @@
 
 .about-section h2 {
   font-family: var(--sw-font-display);
+  font-weight: 400;
   font-size: 1rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -351,6 +357,7 @@
 
 .feature-card h3 {
   font-family: var(--sw-font-display);
+  font-weight: 400;
   font-size: 1rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -380,6 +387,7 @@
 
 .faq-compare h3 {
   font-family: var(--sw-font-display);
+  font-weight: 400;
   font-size: 0.85rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -412,6 +420,7 @@
 
 .mcp-page h2 {
   font-family: var(--sw-font-display);
+  font-weight: 400;
   font-size: 1rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;

@@ -92,6 +92,7 @@ a:hover {
 
 .sw-wordmark {
   font-family: var(--sw-font-display);
+  font-weight: 400;
   font-size: 2rem;
   letter-spacing: 0.28em;
   text-transform: uppercase;
@@ -121,6 +122,7 @@ a:hover {
 .sw-menu .nav-link {
   color: var(--sw-text);
   font-family: var(--sw-font-display);
+  font-weight: 400;
   font-size: 0.85rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
