@@ -47,6 +47,8 @@ class StatsViewLifetimeTest {
         Matcher maxAge = MAX_AGE.matcher(second.header("Cache-Control"));
         assertTrue(maxAge.matches(), second.header("Cache-Control"));
         assertTrue(Integer.parseInt(maxAge.group(1)) <= 60, second.header("Cache-Control"));
+        // #103: a cacheable answer varies by Origin, a view served again too.
+        assertTrue(String.valueOf(second.header("Vary")).contains("Origin"), "a view served again: " + second.header("Vary"));
 
         // Another window is another view: built now, it has both requests.
         given().get("/api/stats?period=24h").then()
