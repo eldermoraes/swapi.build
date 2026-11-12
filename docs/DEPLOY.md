@@ -419,8 +419,12 @@ job:
   source** for the checksum, so a binary swapped on the Release together with
   its `.sha256` is still caught by `swapi-update`.
 
-A pull request that changes the workflow runs the suite, the build and the
-GLIBC check without uploading or deploying anything.
+A pull request that changes the workflow, the native smoke, the pom or the
+server's code and resources runs the build, the GLIBC check and the native
+smoke without uploading or deploying anything. The `test` job is skipped
+there: `.github/workflows/ci.yml` already runs the suite on every pull request
+(`scripts/native-binary-triggers.test.sh` checks, in CI, which jobs run for
+each trigger).
 
 ### 2. Host preparation (one SSH window with write access)
 

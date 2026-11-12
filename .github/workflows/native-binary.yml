@@ -18,9 +18,10 @@ name: Native binary and deploy
 #   swapi-app/pom.xml (dependency changes, version bumps) or the server's code
 #   and resources (swapi-app/src/main/java, swapi-app/src/main/resources: a
 #   filter such as McpTransportFilter, application.properties, templates,
-#   data): runs the suite, the build, the GLIBC check and the native smoke
-#   without uploading or deploying anything, so a change to the pipeline, to
-#   the smoke or to what goes into the native image is proven before merge.
+#   data): runs the build, the GLIBC check and the native smoke without
+#   uploading or deploying anything, so a change to the pipeline, to the smoke
+#   or to what goes into the native image is proven before merge. The test
+#   job is skipped there: ci.yml already runs the suite on every pull request.
 #
 # Why the deploy is a job here (needs: build) and not a workflow_run of its
 # own: it gets the hash straight from the build job's output, in the same run,
@@ -75,20 +76,21 @@ env:
 
 jobs:
   test:
-    # Skipped on a redeploy (workflow_dispatch with sha256): the tag was
-    # already tested and built when it was released.
-    if: ${{ !inputs.sha256 }}
+    # Skipped on a pull request: ci.yml runs on every pull request and already
+    # runs this suite on the same commit, so a second run here proved nothing
+    # (issue #61). Skipped on a redeploy (workflow_dispatch with sha256): the
+    # tag was already tested and built when it was released.
+    if: ${{ github.event_name != 'pull_request' && !inputs.sha256 }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Validate the tag
-        if: github.event_name != 'pull_request'
         run: |
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a release tag: '$TAG'"; exit 1; }
 
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.sha || format('refs/tags/{0}', env.TAG) }}
+          ref: refs/tags/${{ env.TAG }}
 
       - uses: actions/setup-java@v4
         with:
@@ -108,6 +110,14 @@ jobs:
 
   build:
     needs: test
+    # After a green suite, or on a pull request, where test is skipped on
+    # purpose. The condition is explicit because a skipped `needs` skips this
+    # job too unless its `if` has a status function. A suite that failed, or
+    # that was skipped by a redeploy, never builds; scripts/
+    # native-binary-triggers.test.sh checks every trigger in CI.
+    if: >-
+      ${{ !cancelled() && (needs.test.result == 'success' ||
+      (needs.test.result == 'skipped' && github.event_name == 'pull_request')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
