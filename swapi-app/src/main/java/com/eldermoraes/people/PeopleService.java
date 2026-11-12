@@ -1,14 +1,10 @@
 package com.eldermoraes.people;
 
+import com.eldermoraes.DataFile;
 import com.eldermoraes.SWService;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.json.bind.Jsonb;
-import jakarta.json.bind.JsonbBuilder;
-import jakarta.json.bind.JsonbConfig;
 
-import java.io.InputStream;
 import java.lang.reflect.Type;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -27,30 +23,8 @@ public class PeopleService implements SWService {
 
     @Override
     public void loadJsonData() {
-
-        JsonbConfig config = new JsonbConfig().withFormatting(true);
-        URL url = getClass().getResource("/data/people.json");
-        if (url != null) {
-            try (Jsonb jsonb = JsonbBuilder.create(config);
-
-                 InputStream is = url.openStream()) {
-
-                if (is == null) {
-                    System.err.println("Could not get data from people.json");
-                    peopleList = new ArrayList<>();
-                    return;
-                }
-
-                Type listType = new ArrayList<People>(){}.getClass().getGenericSuperclass();
-                peopleList = jsonb.fromJson(is, listType);
-
-            } catch (Exception e) {
-                System.err.println("Error loading people: " + e.getMessage());
-                peopleList = new ArrayList<>();
-            }
-        } else{
-            System.err.println("Could not find people.json in resources");
-        }
+        Type listType = new ArrayList<People>(){}.getClass().getGenericSuperclass();
+        peopleList = DataFile.load("data/people.json", listType);
     }
 
     public List<People> getAllPeople() {
