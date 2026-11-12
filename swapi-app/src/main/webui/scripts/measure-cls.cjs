@@ -37,10 +37,22 @@ const PATHS = ['/', '/docs', '/docs/mcp', '/about', '/resource/films/1', '/resou
 // The addresses the server draws in this version (seo/site.json, "ssr": true).
 // The record addresses are drawn on the server from 2.12.0: against an older
 // jar (the "before" of slice E2) their zero-swap check fails, as expected.
-const SERVER_RENDERED = new Set(['/', '/docs', '/docs/mcp', '/about', '/resource/films/1', '/resource/people/1']);
+const SERVER_RENDERED = new Set([
+  '/',
+  '/docs',
+  '/docs/mcp',
+  '/about',
+  '/resource/films/1',
+  '/resource/people/1',
+]);
 const PROFILES = [
   { name: 'phone', viewport: { width: 360, height: 640 }, deviceScaleFactor: 2, isMobile: true },
-  { name: 'desktop', viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, isMobile: false },
+  {
+    name: 'desktop',
+    viewport: { width: 1280, height: 800 },
+    deviceScaleFactor: 1,
+    isMobile: false,
+  },
 ];
 // The home's live count line gives up after 3 s (LIVE_TIMEOUT_MS, pages/home.ts).
 const SETTLE_MS = 3000;
@@ -150,7 +162,8 @@ async function measure(browser, profile, path) {
             (shifted.length ? `  shifted: ${shifted.join(', ')}` : ''),
         );
         if (!SERVER_RENDERED.has(path)) continue;
-        if (swaps !== 0) failures.push(`${profile.name} ${path}: ${swaps} <main> swap(s) on the first load`);
+        if (swaps !== 0)
+          failures.push(`${profile.name} ${path}: ${swaps} <main> swap(s) on the first load`);
         if (cls > 0.1) failures.push(`${profile.name} ${path}: CLS ${cls.toFixed(4)} > 0.1`);
         if (profile.name === 'phone' && width > 360) {
           const widest = results.find((r) => r.scrollWidth === width).widest;
@@ -163,7 +176,9 @@ async function measure(browser, profile, path) {
   }
   console.log();
   if (failures.length === 0) {
-    console.log('PASS server-rendered addresses: zero <main> swaps, CLS <= 0.1, no sideways scroll at 360 px');
+    console.log(
+      'PASS server-rendered addresses: zero <main> swaps, CLS <= 0.1, no sideways scroll at 360 px',
+    );
   } else {
     for (const failure of failures) console.log(`FAIL ${failure}`);
     process.exitCode = 1;
