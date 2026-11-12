@@ -134,7 +134,9 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   30 min), swept every minute, so two to three minutes after its last use. A
   dropped id is served like one from before a restart
   (`McpSessionIdleTimeoutTest`).
-  `GET /mcp` answers 405 (no server→client stream) and `DELETE` answers 204.
+  `GET /mcp` answers 405 (no server→client stream) and `DELETE` answers 204,
+  always, and frees the session it names when the process holds it
+  (`McpDeleteSessionTest`).
   The legacy HTTP+SSE transport (`/mcp/sse`) is rejected on purpose. Never
   reintroduce session-affine state, and never depend on the legacy transport.
   The server sends no notifications (the data never changes), so

@@ -2,6 +2,7 @@ package com.eldermoraes.mcp;
 
 import io.quarkiverse.mcp.server.McpProtocolVersion;
 import io.quarkiverse.mcp.server.ResourceManager;
+import io.quarkiverse.mcp.server.runtime.ConnectionManager;
 import io.quarkus.runtime.configuration.MemorySize;
 import io.quarkus.vertx.http.runtime.BodyConfig;
 import io.quarkus.vertx.http.runtime.VertxHttpConfig;
@@ -101,6 +102,9 @@ public class McpTransportFilter {
     @Inject
     ResourceManager resources;
 
+    @Inject
+    ConnectionManager sessions;
+
     private final Handler<RoutingContext> bodyHandler = quarkusBodyHandler();
 
     // The filter ends the response (405, 204, 404), so it must run AFTER the
@@ -136,7 +140,22 @@ public class McpTransportFilter {
             // calls) and DELETE (teardown), plus the CORS preflight OPTIONS.
             rc.response().setStatusCode(405).putHeader("Allow", "POST, DELETE").end();
         } else if (HttpMethod.DELETE.equals(method)) {
-            // Session teardown: there is no real session to destroy, so always ok.
+            // Session teardown: always 204. A genuine initialize does leave a
+            // session in this process, and without this it stayed until the
+            // idle timeout (issue #46), so the one the request names is freed
+            // here. remove() does nothing for an id the process does not hold
+            // (unknown, malformed), and it only takes an entry out of a map:
+            // no I/O, fine on the event loop.
+            // The extension's own DELETE (2.0.3, terminateSession) is not
+            // used on purpose: it answers 200 for a known id, 404 for any
+            // other and 405 with a stateless MCP-Protocol-Version, and it logs
+            // the id the client sent. Nothing is logged here.
+            // ConnectionManager is an internal of the extension:
+            // McpDeleteSessionTest fails if an upgrade changes what this does.
+            String session = rc.request().getHeader(SESSION_HEADER);
+            if (session != null) {
+                sessions.remove(session);
+            }
             rc.response().setStatusCode(204).end();
         } else if (HttpMethod.POST.equals(method)) {
             // Reads the body (or fails with 413 over the limit, as the
