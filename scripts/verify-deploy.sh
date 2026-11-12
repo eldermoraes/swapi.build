@@ -23,7 +23,7 @@
 #                                           /llms-full.txt with the five copies and the record
 #                                           index, noindex, 20-100 KB; their poisoning pairs),
 #                                           the trailing-slash 301, and the Caddy headers
-#                                           (HSTS, no Server)
+#                                           (HSTS, no Server, zstd/gzip compression)
 #        verify-deploy.sh redirect <from-host> <to-host>
 #                                          (a name that only redirects, today www.swapi.build ->
 #                                           swapi.build): without following redirects, GET /,
@@ -1084,6 +1084,43 @@ hsts=$(echo "$headers" | awk -F': ' 'tolower($1)=="strict-transport-security"{pr
   || fail "HSTS" "max-age=63072000" "${hsts:-missing}"
 server=$(echo "$headers" | awk -F': ' 'tolower($1)=="server"{print $2}')
 [ -z "$server" ] && pass "no Server header" || fail "Server header" "absent" "$server"
+
+# Compression is Caddy's (encode zstd gzip, docs/DEPLOY.md section 2.7); the
+# application sends every body plain. zstd when the client accepts it, gzip
+# otherwise, nothing when it accepts neither, and Vary names Accept-Encoding
+# so a cache never hands a compressed body to a client that cannot read it.
+# The body is not decoded here (the runner's curl may not have zstd): the
+# encoding, the Vary and a smaller download are what is checked. Caddy leaves
+# an answer under 512 bytes alone, so the paths asked here must stay above it.
+# Against the jar on localhost (no Caddy) these fail, like the HSTS line.
+# compress_probe <path> <accept-encoding> <content-encoding> <plain bytes>
+compress_probe() {
+  local p="$1" accept="$2" want="$3" plain="$4" dump enc vary bytes
+  dump=$("${CURL[@]}" -o /dev/null -D - -H "Accept-Encoding: $accept" -w 'bytes: %{size_download}\n' "$BASE$p" | tr -d '\r')
+  enc=$(printf '%s\n' "$dump" | awk -F': ' 'tolower($1)=="content-encoding"{print $2}')
+  vary=$(printf '%s\n' "$dump" | awk -F': ' 'tolower($1)=="vary"{print $2}' | paste -sd, -)
+  bytes=$(printf '%s\n' "$dump" | awk -F': ' '$1=="bytes"{print $2}')
+  if [ "$enc" = "$want" ] && printf '%s' "$vary" | grep -qi 'accept-encoding' \
+     && [ "${bytes:-0}" -gt 0 ] && [ "${bytes:-0}" -lt "$plain" ]; then
+    pass "$p with Accept-Encoding: $accept -> $want, $bytes of $plain bytes, Vary names Accept-Encoding"
+  else
+    fail "$p compression ($accept)" "Content-Encoding $want, fewer than $plain bytes, Vary with Accept-Encoding" \
+      "Content-Encoding ${enc:-none}, ${bytes:-?} bytes, Vary ${vary:-missing}"
+  fi
+}
+plain=$("${CURL[@]}" -o /dev/null -w '%{size_download} %header{content-encoding}' "$BASE/docs")
+if [ "${plain#* }" = "" ] && [ "${plain%% *}" -gt 0 ]; then
+  pass "/docs without Accept-Encoding -> no Content-Encoding (${plain%% *} bytes)"
+  compress_probe /docs 'zstd, gzip' zstd "${plain%% *}"
+  compress_probe /docs 'gzip' gzip "${plain%% *}"
+else
+  fail "/docs without Accept-Encoding" "no Content-Encoding and a body" "Content-Encoding ${plain#* } (${plain%% *} bytes)"
+fi
+plain=$("${CURL[@]}" -o /dev/null -w '%{size_download}' "$BASE/api/people/1")
+compress_probe /api/people/1 'zstd, gzip' zstd "$plain"
+# A Markdown copy too: text/markdown is in the encode list since 2026-11-12.
+plain=$("${CURL[@]}" -o /dev/null -w '%{size_download}' "$BASE/docs.md")
+compress_probe /docs.md 'zstd, gzip' zstd "$plain"
 
 echo
 if [ "$FAILURES" -eq 0 ]; then

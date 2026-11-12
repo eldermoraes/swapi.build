@@ -271,6 +271,15 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   `https://<host>/mcp` and no `evil.example` in the same answer.
 - **Caddy headers**: `Strict-Transport-Security: max-age=63072000` and no
   `Server` header.
+- **Compression** (Caddy's `encode`, section 2.7): `/docs` asked with
+  `Accept-Encoding: zstd, gzip` answers `Content-Encoding: zstd`, with
+  `Accept-Encoding: gzip` answers `gzip`, both smaller than the plain answer
+  and with `Vary` naming `Accept-Encoding`; without `Accept-Encoding` there is
+  no `Content-Encoding`. `/api/people/1` (JSON) and `/docs.md` (a Markdown
+  copy) answer `zstd` too. A `FAIL`
+  here means the `Caddyfile` on the host lost its `encode` block or the list
+  of types changed; the site still works, with larger answers, so it is a
+  `Caddyfile` fix, not a rollback of the binary.
 
 ### The www redirect
 
@@ -837,7 +846,12 @@ CPUWeight=50
 
 Caddy needs outbound network (Let's Encrypt), so it gets no `IPAddressDeny`.
 
-**`/etc/caddy/Caddyfile`** (rehearsal form: only `oracle.swapi.build`):
+**`/etc/caddy/Caddyfile`** (as it is on the host: copied from it on 2026-11-12,
+Caddy v2.11.9, after `text/markdown` joined the `encode` list that day. During the rehearsal the only site address was
+`oracle.swapi.build`, and there was no `www` block). On a new host do not
+paste the site names as they are: start with a name whose DNS already points
+at the host, and add each production name only after its DNS does (the rule
+below, and section 4):
 
 ```
 {
@@ -850,13 +864,33 @@ Caddy needs outbound network (Let's Encrypt), so it gets no `IPAddressDeny`.
 	}
 }
 
-oracle.swapi.build {
+swapi.build {
+	encode zstd gzip {
+		match {
+			header Content-Type text/html*
+			header Content-Type text/css*
+			header Content-Type text/plain*
+			header Content-Type text/javascript*
+			header Content-Type application/javascript*
+			header Content-Type application/json*
+			header Content-Type application/xml*
+			header Content-Type text/xml*
+			header Content-Type image/svg+xml*
+			header Content-Type text/markdown*
+		}
+	}
 	header -Server
 	header Strict-Transport-Security "max-age=63072000"
 	request_body {
 		max_size 1MB
 	}
 	reverse_proxy 127.0.0.1:5432
+}
+
+www.swapi.build {
+	header -Server
+	header Strict-Transport-Security "max-age=63072000"
+	redir https://swapi.build{uri} 308
 }
 ```
 
@@ -865,6 +899,16 @@ oracle.swapi.build {
 - `protocols h1 h2`: no HTTP/3 advertised on UDP 443, which stays closed.
 - Only a header read timeout: no `write` or `idle` timeout, which would cut the
   streamed responses of `/mcp`.
+- `encode zstd gzip`: Caddy compresses, the application does not
+  (`quarkus.http.enable-compression` is not set). zstd when the client accepts it,
+  gzip otherwise (at equal weight in `Accept-Encoding`), nothing for a client
+  that accepts neither (Brotli is not offered). Only the content types in
+  `match` are compressed, and only answers of at least 512 bytes (Caddy's
+  default `minimum_length`): those carry `Vary: Accept-Encoding`, a smaller
+  one (`/robots.txt`, `/api/`) gets neither the encoding nor that `Vary`.
+  `text/event-stream` is not in the list, so a streamed answer of `/mcp` is
+  never buffered by the encoder: keep it out. `text/markdown` is in it since
+  2026-11-12 (`/docs.md` went from about 10 KB to under 3 KB on the wire).
 - HSTS: two years, the value the site has always sent, no `preload`, no
   `includeSubDomains`.
 - `reverse_proxy` overwrites `X-Forwarded-*` coming from clients, which is what
