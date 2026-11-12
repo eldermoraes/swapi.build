@@ -203,8 +203,12 @@ public class McpTransportFilter {
     // Only the subscribe the extension itself would handle in the session era:
     // a supported (or absent) MCP-Protocol-Version and the Accept the
     // transport requires. With a bad version or Accept the extension answers
-    // 400 before it creates any session, and in the stateless era -32601;
-    // neither keeps anything nor opens a stream, so those go on to it.
+    // 400, and in the stateless era -32601; none records a subscriber or opens
+    // a stream, so those go on to it. The 400 for the Accept comes before any
+    // session exists. The 400 for the version does not (extension 2.0.3,
+    // issue #45): without a session id, or with one the process does not know,
+    // the session is created first and stays in the heap until
+    // quarkus.mcp.server.connection-idle-timeout (McpSessionIdleTimeoutTest).
     // Without Mcp-Session-Id the extension does NOT answer 400: auto-init
     // creates a session for the request and would record the subscriber like
     // any other, so that case is answered here too.
