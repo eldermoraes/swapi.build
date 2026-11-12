@@ -25,7 +25,8 @@ public class StatsResource {
 
     /**
      * The counters move with every request, so the deny-list CacheControlFilter
-     * (edge TTL of a year) must not apply: setting the header here opts out of it.
+     * (five minutes, browser and shared cache) must not apply: setting the header
+     * here opts out of it.
      */
     static final String CACHE_CONTROL = "public, max-age=60";
 
