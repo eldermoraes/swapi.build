@@ -46,6 +46,14 @@ public class KnownEntities {
     /** At most 9 digits, no leading zero: never overflows an int. */
     private static final Pattern CANONICAL_ID = Pattern.compile("[1-9][0-9]{0,8}");
 
+    /**
+     * Whether the text is the one spelling of an id that names a record: the
+     * rule of the pages, and of /api/{type}/{id} since issue #55.
+     */
+    public static boolean isCanonicalId(String id) {
+        return id != null && CANONICAL_ID.matcher(id).matches();
+    }
+
     private final PeopleService people;
     private final FilmService films;
     private final PlanetService planets;
@@ -160,7 +168,7 @@ public class KnownEntities {
      * read RequestBaseUrl: whoever serializes it sets the base first (RecordViews).
      */
     public Optional<SWObject> record(String type, String id) {
-        if (type == null || id == null || !CANONICAL_ID.matcher(id).matches()) {
+        if (type == null || !isCanonicalId(id)) {
             return Optional.empty();
         }
         Map<String, Map<String, SWObject>> lookup = records;
