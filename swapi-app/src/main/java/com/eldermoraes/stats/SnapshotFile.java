@@ -57,9 +57,9 @@ import java.util.function.Consumer;
  * Everything else stays fatal: a missing or unknown header, a known line with a
  * missing field, a negative or invalid number, a bad date, a time that is not an
  * hour start, time numbers that do not add up, or a file larger than the read
- * limit ({@link #MAX_BYTES}) makes the whole file count as corrupt. It is then ignored
- * with one warning and the next snapshot replaces it; the app never fails to
- * start because of it.
+ * limit ({@link #MAX_BYTES}) makes the whole file count as corrupt. It is then
+ * ignored with one warning and the next snapshot replaces it; the app never
+ * fails to start because of it.
  *
  * Format evolution: new data enters as a <em>new line type</em> under format 2,
  * never as an extra field on {@code h}/{@code d}/{@code th}/{@code td} nor as a
@@ -81,8 +81,9 @@ public final class SnapshotFile {
      * theoretical maximum. With all 59 templates
      * ({@link RouteNormalizer#TEMPLATE_COUNT}) busy in every retained hour and
      * day there are 59 x (336 + 60) = 23,364 count lines of about 42 bytes (1 MB)
-     * and as many time lines of about 74 bytes plus 8 to 14 bytes per non-empty
-     * histogram bucket:
+     * and as many time lines: 75 to 100 bytes for the route and the five numbers,
+     * plus 8 to 14 bytes per non-empty histogram bucket, both growing with the
+     * counts. Measured by encoding such files:
      * <ul>
      *   <li>40 non-empty buckets in every cell (ten doublings of the time, far
      *       more spread than a route shows in one hour): about 410 bytes a time

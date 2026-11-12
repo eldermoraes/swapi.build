@@ -210,7 +210,9 @@ class StatsPersistenceTest {
         assertTrue(warning.contains(file.toString()), warning);
         assertTrue(warning.contains(Files.size(file) + " bytes"), warning);
         assertTrue(warning.contains("120 bytes"), warning);
-        assertFalse(warning.contains("/api/films"), "sizes only, never what was counted: " + warning);
+        assertEquals("usage counters snapshot " + file + " was written with 159 bytes, more than the 120 bytes "
+                + "a start accepts: a restart now would ignore it and start from zero", warning,
+                "the path and two sizes, never what was counted");
 
         before.record("/mcp");
         first.save();                                        // still too large: the same run

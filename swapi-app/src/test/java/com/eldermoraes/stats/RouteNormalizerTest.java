@@ -104,16 +104,20 @@ class RouteNormalizerTest {
         assertEquals(Optional.of("/api/people/{id}"), RouteNormalizer.normalize("/api/people/someone@example.com"));
     }
 
-    /** Where the number of templates is written out; a change to the set has to reach all of them. */
-    private static final String NOTES = "update RouteNormalizer.TEMPLATE_COUNT and the sizing notes that cite it: "
+    /** Failure message: where the number of templates is written out, for whoever changes the set. */
+    private static final String WHERE_THE_COUNT_IS_CITED = "update RouteNormalizer.TEMPLATE_COUNT and the sizing notes that cite it: "
             + "the class comment of RouteStats, the comment on SnapshotFile.MAX_BYTES and the \"Usage counters\" "
             + "and \"Server times\" paragraphs of docs/DEPLOY.md";
 
     // #60: the sizing notes said 45 templates when the normalizer produced 59.
+    // Every path of up to four segments made of the segments the templates use
+    // (and a few they do not) must land in the listed set. This catches a
+    // listing that is not what normalize() returns, and a new branch that puts
+    // known segments together in a new way. It cannot catch a branch for a
+    // segment nothing lists (a new address matched outside FIXED and RESOURCES,
+    // a new suffix): whoever adds one adds it to templates() too.
     @Test
     void theClosedSetIsExactlyWhatPathsNormalizeTo() {
-        // Every segment a template is made of, with something in the place of an
-        // id, and segments no template has.
         Set<String> segments = new TreeSet<>(List.of("1", "1.md", "x", "x.md", ".md", "random", "API", ""));
         for (String template : RouteNormalizer.templates()) {
             for (String segment : template.split("/")) {
@@ -127,6 +131,9 @@ class RouteNormalizerTest {
                 paths.add("/" + a + "/" + b);
                 for (String c : segments) {
                     paths.add("/" + a + "/" + b + "/" + c);
+                    for (String d : segments) {
+                        paths.add("/" + a + "/" + b + "/" + c + "/" + d);
+                    }
                 }
             }
         }
@@ -137,7 +144,7 @@ class RouteNormalizerTest {
         }
 
         assertEquals(new TreeSet<>(RouteNormalizer.templates()), produced,
-                "the templates listed and the templates produced differ; " + NOTES);
+                "the templates listed and the templates produced differ; " + WHERE_THE_COUNT_IS_CITED);
     }
 
     @Test
@@ -159,7 +166,7 @@ class RouteNormalizerTest {
         assertEquals(18, pages, "list, {id} and {id}.md of each record type");
         assertEquals(1, other);
         assertEquals(22, templates.size() - api - pages - other, "fixed addresses");
-        assertEquals(59, templates.size(), NOTES);
-        assertEquals(templates.size(), RouteNormalizer.TEMPLATE_COUNT, NOTES);
+        assertEquals(59, templates.size(), WHERE_THE_COUNT_IS_CITED);
+        assertEquals(templates.size(), RouteNormalizer.TEMPLATE_COUNT, WHERE_THE_COUNT_IS_CITED);
     }
 }

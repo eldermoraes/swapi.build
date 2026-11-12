@@ -21,24 +21,35 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class StatsSizingNotesTest {
 
     private static final int BUCKETS = RouteStats.RETAINED_HOURS + RouteStats.RETAINED_DAYS;
-    private static final int WORST_CASE = RouteNormalizer.TEMPLATE_COUNT * BUCKETS;
+    private static final int WORST_CASE_CELLS = RouteNormalizer.TEMPLATE_COUNT * BUCKETS;
 
     @Test
     void worstCaseIsTheOneTheNotesWorkFrom() {
-        assertEquals(23_364, WORST_CASE, "59 x (336 + 60): the templates or the retention changed. Redo the "
+        assertEquals(23_364, WORST_CASE_CELLS, "59 x (336 + 60): the templates or the retention changed. Redo the "
                 + "arithmetic in the class comment of RouteStats, in the comment on SnapshotFile.MAX_BYTES and "
                 + "in docs/DEPLOY.md (\"Usage counters\", \"Server times\"), then update this number");
     }
 
     @Test
-    void runbookStatesTheSameNumbers() throws IOException {
+    void runbookStatesTheSameNumbersInBothParagraphs() throws IOException {
         String runbook = Files.readString(ReleaseMetadata.repoRoot().resolve("docs").resolve("DEPLOY.md"))
                 .replaceAll("\\s+", " ");
+        String counters = between(runbook, "**Usage counters (", "**Server times (");
+        String times = between(runbook, "**Server times (", "**View lifetime.");
         String templates = "all " + RouteNormalizer.TEMPLATE_COUNT + " route templates";
-        String product = RouteNormalizer.TEMPLATE_COUNT + " x " + BUCKETS + " = "
-                + String.format(Locale.ROOT, "%,d", WORST_CASE);
+        String cells = String.format(Locale.ROOT, "%,d", WORST_CASE_CELLS);
+        String product = RouteNormalizer.TEMPLATE_COUNT + " x " + BUCKETS + " = " + cells;
 
-        assertTrue(runbook.contains(templates), "docs/DEPLOY.md should say \"" + templates + "\"");
-        assertTrue(runbook.contains(product), "docs/DEPLOY.md should say \"" + product + "\"");
+        assertTrue(counters.contains(templates), "\"Usage counters\" should say \"" + templates + "\"");
+        assertTrue(counters.contains(product), "\"Usage counters\" should say \"" + product + "\"");
+        assertTrue(times.contains(templates), "\"Server times\" should say \"" + templates + "\"");
+        assertTrue(times.contains(cells + " cells"), "\"Server times\" should say \"" + cells + " cells\"");
+    }
+
+    private static String between(String text, String from, String to) {
+        int start = text.indexOf(from);
+        int end = text.indexOf(to, Math.max(start, 0));
+        assertTrue(start >= 0 && end > start, "docs/DEPLOY.md: no \"" + from + "\" paragraph before \"" + to + "\"");
+        return text.substring(start, end);
     }
 }

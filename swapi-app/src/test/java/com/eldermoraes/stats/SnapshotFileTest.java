@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -299,21 +300,21 @@ class SnapshotFileTest {
             buckets[i] = 1_000;
         }
         TimingData busy = new TimingData(40_000, 400_000_000L, 1.2345678901234567E13, 200, 200_000, buckets);
-        Map<String, Long> counts = new java.util.TreeMap<>();
-        Map<String, TimingData> times = new java.util.TreeMap<>();
+        Map<String, Long> counts = new TreeMap<>();
+        Map<String, TimingData> times = new TreeMap<>();
         for (String template : RouteNormalizer.templates()) {
             counts.put(template, 40_000L);
             times.put(template, busy);
         }
         Instant firstHour = Instant.parse("2026-10-19T00:00:00Z");
-        Map<Instant, Map<String, Long>> hours = new java.util.TreeMap<>();
-        Map<Instant, Map<String, TimingData>> hourTimes = new java.util.TreeMap<>();
+        Map<Instant, Map<String, Long>> hours = new TreeMap<>();
+        Map<Instant, Map<String, TimingData>> hourTimes = new TreeMap<>();
         for (int i = 0; i < RouteStats.RETAINED_HOURS; i++) {
             hours.put(firstHour.plusSeconds(3600L * i), counts);
             hourTimes.put(firstHour.plusSeconds(3600L * i), times);
         }
-        Map<LocalDate, Map<String, Long>> days = new java.util.TreeMap<>();
-        Map<LocalDate, Map<String, TimingData>> dayTimes = new java.util.TreeMap<>();
+        Map<LocalDate, Map<String, Long>> days = new TreeMap<>();
+        Map<LocalDate, Map<String, TimingData>> dayTimes = new TreeMap<>();
         for (int i = 0; i < RouteStats.RETAINED_DAYS; i++) {
             days.put(LocalDate.parse("2026-10-19").plusDays(i), counts);
             dayTimes.put(LocalDate.parse("2026-10-19").plusDays(i), times);

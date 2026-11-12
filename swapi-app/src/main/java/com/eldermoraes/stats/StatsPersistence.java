@@ -25,8 +25,9 @@ import java.util.function.Consumer;
  * counters are restored at startup, saved every 10 minutes when they changed,
  * and saved on shutdown, so a deploy loses at most nothing and a crash at most
  * 10 minutes. A snapshot larger than the next start would accept is written
- * all the same and reported in the log. Without it, or if it is not writable, the app keeps the counters
- * in memory only and says so once in the log; nothing else changes.
+ * all the same and reported in the log. Without it, or if it is not writable,
+ * the app keeps the counters in memory only and says so once in the log;
+ * nothing else changes.
  */
 @Singleton
 public class StatsPersistence {
