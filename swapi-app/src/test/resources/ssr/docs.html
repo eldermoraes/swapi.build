@@ -591,7 +591,7 @@
             <span class="method-badge">GET</span>
             <span class="endpoint-path">/api/stats</span>
           </div>
-          <div class="endpoint-desc">Request counts per route for the last 24 hours, 7 days or 30 days — Totals per route template (for example /api/people/{id} or /mcp) and per group (rest, mcp, pages, seo, other), a trend per hour or per UTC day, and the same totals for the window right before, for comparison. Counted with no IP address, no User-Agent and no other data about the client. Without parameters: the last 7 days, per day.</div>
+          <div class="endpoint-desc">Request counts per route for the last 24 hours, 7 days or 30 days — Totals per route template (for example /api/people/{id} or /mcp) and per group (rest, mcp, pages, seo, other), a trend per hour or per UTC day, and the same totals for the window right before, for comparison. The last hour or day of the window is still filling while the window before is complete: lastBucketElapsed says how much of it has passed, so the two can be compared at the same elapsed time. Counted with no IP address, no User-Agent and no other data about the client. Without parameters: the last 7 days, per day.</div>
           <form class="try-form">
             
             <button type="button" class="sw-pill sw-pill--solid sw-pill--sm try-button">Try it</button>
@@ -659,6 +659,10 @@
               <td class="schema-field">performance</td>
               <td class="schema-type"></td>
               <td></td>
+            </tr><tr>
+              <td class="schema-field">lastBucketElapsed</td>
+              <td class="schema-type">number</td>
+              <td>Share of the last bucket (the hour or UTC day named by to) that had passed when the numbers were read: 0 when it had just started, always under 1. total covers (number of buckets - 1 + lastBucketElapsed) buckets of time, previous.total the full number of buckets; multiply a count of previous by (number of buckets - 1 + lastBucketElapsed) / (number of buckets) before comparing.</td>
             </tr></tbody>
           </table>
           </div>

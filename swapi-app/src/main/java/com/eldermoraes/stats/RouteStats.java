@@ -3,6 +3,7 @@ package com.eldermoraes.stats;
 import com.eldermoraes.stats.StatsPeriod.Granularity;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.inject.Singleton;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -55,6 +56,7 @@ public class RouteStats {
     static final int TIMING_CELL_BYTES = 512;
 
     private static final long HOUR_SECONDS = 3600;
+    private static final long DAY_SECONDS = 24 * HOUR_SECONDS;
 
     private final Map<Long, Map<String, LongAdder>> hours = new ConcurrentHashMap<>();
     private final Map<LocalDate, Map<String, LongAdder>> days = new ConcurrentHashMap<>();
@@ -158,7 +160,9 @@ public class RouteStats {
      * Hourly windows end with the current (partial) hour, daily windows with the
      * current (partial) UTC day; the previous window is the same number of
      * buckets right before. {@code from} and {@code to} name the first and the
-     * last bucket, both included.
+     * last bucket, both included. The two windows therefore do not cover the
+     * same time: {@link StatsView#lastBucketElapsed()} says how far the last
+     * bucket has filled, which is what a fair comparison needs (#54).
      *
      * @throws IllegalArgumentException if the period does not accept the granularity
      */
@@ -173,7 +177,9 @@ public class RouteStats {
         List<Map<String, TimingCell>> currentTimes = new ArrayList<>();
         String previousFrom;
         String previousTo;
+        long bucketSeconds;
         if (granularity == Granularity.HOUR) {
+            bucketSeconds = HOUR_SECONDS;
             int n = period.hours();
             long last = epochHour(now);
             long first = last - n + 1;
@@ -186,6 +192,7 @@ public class RouteStats {
             previousFrom = hourLabel(first - n);
             previousTo = hourLabel(first - 1);
         } else {
+            bucketSeconds = DAY_SECONDS;
             int n = period.days();
             LocalDate last = LocalDate.ofInstant(now, ZoneOffset.UTC);
             LocalDate first = last.minusDays(n - 1L);
@@ -224,7 +231,16 @@ public class RouteStats {
                 groups(previousRoutes, true));
         return new StatsView(period.id(), granularity.id(), labels.getFirst(), labels.getLast(), period.days(),
                 countingSince().toString(), sum(routes), routes, groups(routes, true), routeGroups, series,
-                previous, daily, performance);
+                previous, daily, performance, elapsedShare(now, bucketSeconds));
+    }
+
+    /**
+     * The share of the UTC hour or day of {@code now} that has passed, in
+     * ten-thousandths rounded down: 0 at its first second, never 1.
+     */
+    private static double elapsedShare(Instant now, long bucketSeconds) {
+        long passed = Math.floorMod(now.getEpochSecond(), bucketSeconds);
+        return (passed * 10_000 / bucketSeconds) / 10_000.0;
     }
 
     /**
@@ -464,13 +480,24 @@ public class RouteStats {
      * @param previous      the window of the same length right before this one
      * @param daily         per-day route counts, daily windows only (absent for hourly ones)
      * @param performance   server times in the window (2.8.0+)
+     * @param lastBucketElapsed the share of the last bucket ({@code to}) that had passed when the
+     *                      numbers were read, from 0 to under 1. {@code total} covers
+     *                      {@code series.size() - 1 + lastBucketElapsed} buckets of time and
+     *                      {@code previous.total} covers {@code series.size()} (#54)
      */
     @RegisterForReflection
     public record StatsView(String period, String granularity, String from, String to, int days,
                             String countingSince, long total, Map<String, Long> routes,
                             Map<String, Long> groups, Map<String, String> routeGroups,
                             List<Bucket> series, Previous previous, List<Day> daily,
-                            Performance performance) {
+                            Performance performance,
+                            @Schema(description = LAST_BUCKET_ELAPSED) double lastBucketElapsed) {
+
+        static final String LAST_BUCKET_ELAPSED = "Share of the last bucket (the hour or UTC day named by "
+                + "to) that had passed when the numbers were read: 0 when it had just started, always "
+                + "under 1. total covers (number of buckets - 1 + lastBucketElapsed) buckets of time, "
+                + "previous.total the full number of buckets; multiply a count of previous by "
+                + "(number of buckets - 1 + lastBucketElapsed) / (number of buckets) before comparing.";
     }
 
     /** One point of the trend: requests in the bucket, per group (only groups with requests). */

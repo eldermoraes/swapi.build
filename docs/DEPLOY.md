@@ -87,7 +87,8 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   URLs. Proves the per-request base-URL discovery through `X-Forwarded-*`.
 - **Usage counters**: `GET /api/stats` returns 200 with `countingSince` and the
   `/api/people/{id}` route the REST probe just hit; `?period=24h` answers 24
-  hourly buckets and `?period=30d` 30 daily ones (2.7.0+), each with a
+  hourly buckets and `?period=30d` 30 daily ones (2.7.0+), each with
+  `lastBucketElapsed` from 0 to under 1 (how far the last bucket has filled) and a
   `performance` block holding all five groups and one latency point per bucket
   (2.8.0+), and `/stats` serves the page with its own title.
 - **OpenAPI**: `/openapi.json` with `Accept: text/html` returns
@@ -760,7 +761,10 @@ route template, per UTC hour and per UTC day (`com.eldermoraes.stats`): no IP, n
 User-Agent, nothing about the client. Hours are kept 14 days and days 60 days,
 which is what the windows of `GET /api/stats?period=24h|7d|30d` and the `/stats`
 page need, each compared with the window before it; that is a few hundred KB at
-most.
+most. The last bucket of a window is still filling while the window before is
+complete, so the response carries `lastBucketElapsed` (the share of that bucket
+that had passed) and the page scales the window before to the same elapsed time
+before it shows a "vs" figure.
 
 **Server times (2.8.0+).** The same filter times each counted request, from the
 first route filter to the end of the response (server time; the network is not

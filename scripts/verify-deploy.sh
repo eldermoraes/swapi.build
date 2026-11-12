@@ -186,10 +186,13 @@ assert v["period"] == period and v["granularity"] == granularity
 assert len(v["series"]) == buckets
 assert set(v["groups"]) == {"rest", "mcp", "pages", "seo", "other"}
 assert "total" in v["previous"]
+# How far the last bucket has filled, for the comparison (#54).
+e = v["lastBucketElapsed"]
+assert isinstance(e, (int, float)) and not isinstance(e, bool) and 0 <= e < 1
 ' "$p" "$g" "$n" 2>/dev/null; then
-    pass "/api/stats?period=$p -> $n $g buckets, groups and previous window"
+    pass "/api/stats?period=$p -> $n $g buckets, groups, previous window and lastBucketElapsed"
   else
-    fail "/api/stats?period=$p" "$n $g buckets with groups and previous" "$(echo "$window" | head -c 160)"
+    fail "/api/stats?period=$p" "$n $g buckets with groups, previous and lastBucketElapsed" "$(echo "$window" | head -c 160)"
   fi
 done
 
