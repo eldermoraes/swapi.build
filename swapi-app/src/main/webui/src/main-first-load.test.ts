@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { APP_LOAD_TIMEOUT, loadAppModules } from './test-support/app-modules';
 import mcpMain from '../../../test/resources/ssr/mcp.html?raw';
 import recordMain from '../../../test/resources/ssr/record-films-1.html?raw';
 
@@ -32,6 +33,8 @@ const SERVER_HEAD = `
 function seoHead(): string[] {
   return Array.from(document.head.querySelectorAll('title, meta, link'), (el) => el.outerHTML);
 }
+
+beforeAll(loadAppModules, APP_LOAD_TIMEOUT);
 
 // 2.10.0, the end of the overwrite: on the first load the head is the server's,
 // and the client writes nothing to it. Changes on purpose in 2.12.0 (slice E2):

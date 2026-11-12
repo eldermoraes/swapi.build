@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { APP_LOAD_TIMEOUT, loadAppModules } from './test-support/app-modules';
 import aboutMain from '../../../test/resources/ssr/about.html?raw';
 import type { BrowserTool, ModelContext } from './webmcp';
 
@@ -66,6 +67,8 @@ async function search(query: string): Promise<void> {
   input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   await settle();
 }
+
+beforeAll(loadAppModules, APP_LOAD_TIMEOUT);
 
 describe('a search on a resource list', () => {
   const scrollTo = vi.fn();

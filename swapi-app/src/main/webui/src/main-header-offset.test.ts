@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { APP_LOAD_TIMEOUT, loadAppModules } from './test-support/app-modules';
 import aboutMain from '../../../test/resources/ssr/about.html?raw';
 import baseCss from './styles/base.css?raw';
 
@@ -16,6 +17,8 @@ function settle(): Promise<void> {
 function headerHeight(): string {
   return document.documentElement.style.getPropertyValue('--sw-header-height');
 }
+
+beforeAll(loadAppModules, APP_LOAD_TIMEOUT);
 
 describe('a fragment target is visible below the header', () => {
   let height = 122.4;

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { APP_LOAD_TIMEOUT, loadAppModules } from './test-support/app-modules';
 import aboutMain from '../../../test/resources/ssr/about.html?raw';
 import homeMain from '../../../test/resources/ssr/home.html?raw';
 
@@ -35,6 +36,8 @@ function current(): (string | null)[] {
     return item.getAttribute('href');
   });
 }
+
+beforeAll(loadAppModules, APP_LOAD_TIMEOUT);
 
 describe('the active item of the header menu', () => {
   beforeAll(async () => {

@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { APP_LOAD_TIMEOUT, loadAppModules } from './test-support/app-modules';
 import aboutMain from '../../../test/resources/ssr/about.html?raw';
 import homeMain from '../../../test/resources/ssr/home.html?raw';
 import recordMain from '../../../test/resources/ssr/record-films-1.html?raw';
@@ -95,6 +96,8 @@ function heading(): string | undefined {
 function alertCount(): number {
   return document.querySelectorAll('#main-content [role="alert"]').length;
 }
+
+beforeAll(loadAppModules, APP_LOAD_TIMEOUT);
 
 describe('the address and the page shown agree', () => {
   const tools = new Map<string, BrowserTool>();

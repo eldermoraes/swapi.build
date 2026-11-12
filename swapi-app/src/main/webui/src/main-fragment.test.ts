@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { APP_LOAD_TIMEOUT, loadAppModules } from './test-support/app-modules';
 import aboutMain from '../../../test/resources/ssr/about.html?raw';
 import faqMain from '../../../test/resources/ssr/faq.html?raw';
 
@@ -28,6 +29,8 @@ function serve(input: RequestInfo | URL): Promise<Response> {
     }),
   );
 }
+
+beforeAll(loadAppModules, APP_LOAD_TIMEOUT);
 
 describe('/faq#compare on the client', () => {
   const scrolledTo: string[] = [];
