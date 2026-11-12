@@ -239,8 +239,10 @@ A new page or section is on-standard when:
     panels hide only under `.js`).
 11. A page drawn on the server gets its Markdown copy for free (2.14.0, the
     `<main>` converted at its address plus `.md`); mark decoration that is not
-    content with `data-md="skip"` (the feature icons of `/about`), and read the
-    copy once before shipping.
+    content with `data-md="skip"` (the feature icons of `/about`), mark a
+    paragraph shown with `white-space: pre-line` with `data-md="lines"` so the
+    copy keeps its lines and paragraphs (the opening crawl), and read the copy
+    once before shipping.
 
 ## 8. Voice & copy
 

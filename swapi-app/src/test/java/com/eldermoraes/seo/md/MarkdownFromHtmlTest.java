@@ -202,6 +202,36 @@ class MarkdownFromHtmlTest {
         assertEquals("Title\n", md("<div><div data-md=\"skip\">⚡</div>Title</div>"));
     }
 
+    // #63: data-md="lines" on a paragraph says its line breaks are content
+    // (the page shows them with white-space: pre-line).
+    @Test
+    void dataMdLinesKeepsTheLinesAndTheParagraphs() {
+        assertEquals("one\\\ntwo\n\nthree\\\nfour\n",
+                md("<p data-md=\"lines\">one\r\ntwo\r\n\r\nthree\nfour</p>"));
+    }
+
+    @Test
+    void withoutDataMdLinesAParagraphStillCollapsesItsLineBreaks() {
+        assertEquals("one two three four\n", md("<p>one\r\ntwo\r\n\r\nthree\nfour</p>"));
+    }
+
+    @Test
+    void dataMdLinesDropsTheSpacesAroundABreakAndTheEmptyLinesAtTheEdges() {
+        assertEquals("one two\\\nthree\n\nfour\n",
+                md("<p data-md=\"lines\">\n\n  one \t two  \n   three\n \n\n\n four\n\n</p>"));
+    }
+
+    @Test
+    void dataMdLinesEscapesAMarkerAtTheStartOfEachLine() {
+        assertEquals("a\\\n\\# b\\\n\\- c\\\n1\\. d\\\n\\*e\\*\n",
+                md("<p data-md=\"lines\">a\n# b\n- c\n1. d\n*e*</p>"));
+    }
+
+    @Test
+    void dataMdLinesReadsABrAsALineAndKeepsInlineMarks() {
+        assertEquals("one\\\n**two**\\\nthree\n", md("<p data-md=\"lines\">one<br><strong>two</strong>\nthree</p>"));
+    }
+
     @Test
     void entitiesAreDecoded() {
         assertEquals("← People & more\n", md("<p>&larr; People &amp; more</p>"));
