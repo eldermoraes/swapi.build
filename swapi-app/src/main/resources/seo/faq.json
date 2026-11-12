@@ -101,7 +101,7 @@
       "id": "is-it-up",
       "question": "How do I know it is up?",
       "answer": [
-        "A public monitor in GitHub Actions is scheduled every 15 minutes: 649 of 650 scheduled checks of GET /api/people/1 passed between 19 October and 28 October 2026. The schedule is best-effort, so some 15-minute windows have no check, and the monitor only checks that one request, the certificate and DNS.",
+        "A public monitor in GitHub Actions is scheduled every 15 minutes: 2017 of 2019 scheduled checks of GET /api/people/1 passed between 19 October and 12 November 2026. The schedule is best-effort, so some 15-minute windows have no check, and the monitor only checks that one request, the certificate and DNS.",
         "The usage stats page shows how many requests the site answered in the last 24 hours, 7 days and 30 days."
       ],
       "links": [

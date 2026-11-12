@@ -252,7 +252,7 @@ toolchain, a CLI); it closes the moved-tag path only.
   table (lines that start with `| `). `/about` says `stays up for live
   demos` and never `never go offline`. Any `FAIL` here after a deploy is an
   immediate rollback to the previous version.
-- **Validators (#58)**: `/docs`, `/resource/films/1`, `/docs.md`,
+- **Validators (2.16.0+)**: `/docs`, `/resource/films/1`, `/docs.md`,
   `/resource/films/1.md` and `/llms-full.txt` each carry a strong `ETag` (a
   digest of the bytes of the body: it changes with the content, the host and
   the analytics beacon, never with a version string). A `GET` with it in
@@ -270,7 +270,7 @@ toolchain, a CLI); it closes the moved-tag path only.
   application sees it, so the line should end in `304`. A `200` there means
   the Caddy on the host does not undo its suffix: nothing breaks, but a
   browser (which always asks for compression) then downloads the page on
-  every revalidation, as before #58. Without compression on the proxy the line
+  every revalidation, as before 2.16.0. Without compression on the proxy the line
   says there is nothing to check. A `FAIL` in the validator lines is a rollback
   to the previous release.
 - **Cold start**: the time of one request, informational only.

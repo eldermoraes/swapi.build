@@ -16,6 +16,140 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.16.0] - 2026-11-12
+
+The fixes of the November 2026 audit. Every address, field and tool of
+2.15.0 is still there, with the same answers, except where an entry below
+says otherwise.
+
+### Added
+
+- Conditional requests on the site: every page, every Markdown copy and
+  `/llms-full.txt` carry a strong `ETag` (a digest of the bytes sent: it
+  changes with the content, the request host and the analytics beacon, never
+  with the version alone). A `GET` or `HEAD` whose `If-None-Match` names it
+  answers `304` with no body, the same `ETag` and the address's
+  `Cache-Control`. A `404`, a `503` or a redirect never carries an `ETag`, and
+  `/api` has no validators.
+- `/api/stats` gains `lastBucketElapsed`, how much of the last hour or day of
+  the window has passed (0 to under 1). No existing field changes meaning.
+
+### Changed
+
+- The shared-cache lifetime of `/api/*` (except `/api/stats` and the
+  `random` routes, which keep their own) and `/openapi.json` goes from a year
+  to five minutes: `Cache-Control: public, max-age=300, s-maxage=300,
+  stale-while-revalidate=86400`. A shared cache may still serve a stale copy
+  for up to a day while it revalidates.
+- MCP: a session created by `initialize` and then left idle is dropped after
+  2 minutes, not 30 to 45 (swept every minute, so two to three minutes after
+  its last use). A request that names a dropped session is served as before,
+  with a throwaway session, like one from before a restart.
+- MCP: every JSON-RPC batch (a JSON array) POSTed to `/mcp` gets one answer,
+  HTTP `400` with `-32600` and `id` `null`, whatever it carries. Before, a
+  batch without a `subscriptions/listen` got the extension's `200` with
+  `-32700` (or a bare `400` without the transport's `Accept`). Send one request
+  per POST.
+- `/api/stats` serves the view of each window again for up to 60 s, so its
+  numbers can be up to a minute behind, and `Cache-Control: max-age` is what
+  is left of those 60 s.
+- `/stats`: "vs previous" compares the same amount of time. The previous
+  window is scaled by `lastBucketElapsed`, the labels say "scaled", and
+  "average per day" (or hour) divides by the time that has passed.
+- Site: the fonts are served by swapi.build itself (the same three families,
+  `latin` subset, woff2 under `/assets/`). No page loads anything from Google
+  Fonts any more; the privacy page says so and is dated November 12, 2026.
+  Text typed in another script falls back to a system font.
+- Site: headings in the display face are drawn at the one weight it has (400)
+  instead of a bold the browser faked, so page titles and card titles look
+  lighter.
+- The Terms of Use no longer say the service "scales to zero when idle", and
+  are dated November 12, 2026.
+- `/faq`: the answers no longer restate facts about other APIs; they point at
+  the comparison, whose cells and dates do not change. The monitor count of
+  "How do I know it is up?" is 2017 of 2019 scheduled checks passed between
+  19 October and 12 November 2026.
+- The site no longer repeats per request the work that only changes in a
+  release (the shell, the home and `/about`, `/og-image.png`, the sitemap and
+  record lookups); the responses are the same bytes.
+- Infrastructure: `swapi-update` on the host keeps the previous version on a
+  redeploy of the active one, retries its health check (up to 10 checks, 1 s
+  apart), accepts only a `vX.Y.Z` tag, and its rollback hint names the version
+  that served before the tag, even on a retry. The host copy is installed by
+  hand from `docs/DEPLOY.md` section 2.5.
+- Infrastructure: the runbook carries the host's `Caddyfile` and its
+  compression, and the deploy probes now check validators, compression,
+  `lastBucketElapsed` and the five-minute `/api` lifetime.
+- CI: a pull request runs the backend suite once (in `ci.yml`, not again in
+  `native-binary.yml`); every GitHub Action is pinned by commit; `ci.yml` has a
+  read-only token; the frontend lint, type and formatting check
+  (`npm run check`, with the new dev dependency `globals`) is a gate; an
+  `Examples` workflow compiles `examples/java/`; and a script or example
+  nothing references fails CI.
+- Release runbook: the FAQ monitor count comes from
+  `scripts/uptime-run-count.sh`, which reads every scheduled run past GitHub's
+  1000-result cap; runs that have not finished (`queued`, `in_progress`) are
+  left out of the published total.
+- `docs/2026-07-31-mcp-server-evaluation.md` is marked as a historical
+  record. The README, runbook and design notes are brought up to date.
+
+### Fixed
+
+- REST: only the canonical spelling of an id finds a record. `/api/people/01`,
+  `/api/people/+1`, `/api/people/%31` and `/api/people/1;x=y` answered `200`
+  with Luke Skywalker; they now answer the contract's `404`, whose message
+  repeats the id as written (`No people found with id 01`). The ids in each
+  record's `url` are unchanged and keep answering `200`.
+- REST: only the canonical spelling of a path finds a resource under `/api`.
+  A doubled slash (`/api//people/1`), a dot segment (`/api/./people/1`), a
+  percent-encoded letter (`/api/%70eople/1`), a matrix parameter
+  (`/api/people;x=1/1`) or more than one trailing slash answers `404` (`No
+  resource found at <path as written>`). One trailing slash
+  (`/api/people/1/`, as swapi.dev writes its URLs) still answers `200`. If
+  your client joins a base URL ending in `/` with a path starting with `/`,
+  remove one of the two.
+- A data file (`data/*.json`) that is missing, unparsable or holds no records
+  stops the application at startup with an error naming the file. Before, the
+  type was served empty (`200 []`, and a `500` on its search when the file was
+  missing).
+- REST: a `404` for a path below a record (`/api/people/1/films`) no longer
+  says the id was not found: it reads `No resource found at
+  /api/people/1/films`.
+- `/api/stats` answers `Vary: Origin`, like the rest of `/api`.
+- MCP: the `name` of the `character_profile` prompt is also refused
+  (`-32602`) when it holds a format character outside the Basic Multilingual
+  Plane (the invisible Unicode tag characters); before, they passed.
+- Site: a forwarded host in brackets that is not an IPv6 address (`[1]`) is
+  ignored, like any other invalid host, instead of failing the page.
+- MCP: `DELETE /mcp` frees the session named by `Mcp-Session-Id`; it still
+  answers `204` whether or not the process holds that session.
+- Markdown copies: the copy of a film keeps the paragraphs and lines of the
+  opening crawl, as the page shows them; it was one line.
+- Site: Back and Forward work after the explorer opens a page on its own (the
+  Random button, a WebMCP tool); before, Back changed the address and left the
+  record on screen. A link navigation that fails, or is interrupted by an
+  action on the page still shown, puts the address back.
+- Site navigation and accessibility: Back and Forward restore the scroll
+  position; a `#fragment` target lands below the sticky header; a search keeps
+  the focus in the search box and announces the number of results; a request
+  to `/api` from the site (and "Try it" on `/docs`) that hangs ends after 10 s
+  with "The request took too long — try again"; the active menu item carries
+  `aria-current="page"`.
+- Site: an error without a status text no longer reads `404: `, and the
+  terminal prompt shows a focus ring.
+- Usage counters: the runbook's sizing notes count the 59 route templates the
+  server produces, and the server logs a warning when it writes a snapshot
+  larger than a start accepts (16 MiB). A path or id alias that now answers
+  `404` is still counted, under the template of the route it spells
+  (`/api//people/1` under `/api/people/{id}`), like any other `404`.
+
+### Removed
+
+- Unused dependencies and files: `quarkus-rest-client`,
+  `quarkus-container-image-jib`, `quarkus-kubernetes`, the container-image
+  configuration and `swapi-app/.dockerignore`. The frontend's unused
+  `types.ts`.
+
 ## [2.15.0] - 2026-10-28
 
 ### Added
@@ -994,7 +1128,7 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.15.0...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.16.0...HEAD
 [2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
@@ -1044,6 +1178,7 @@ snapshot version is not a release. -->
 
 [2.12.1]: https://github.com/eldermoraes/swapi.build/compare/v2.12.0...v2.12.1
 
+[2.16.0]: https://github.com/eldermoraes/swapi.build/compare/v2.15.0...v2.16.0
 [2.15.0]: https://github.com/eldermoraes/swapi.build/compare/v2.14.0...v2.15.0
 [2.14.0]: https://github.com/eldermoraes/swapi.build/compare/v2.13.0...v2.14.0
 [2.13.0]: https://github.com/eldermoraes/swapi.build/compare/v2.12.1...v2.13.0
