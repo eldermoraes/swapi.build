@@ -1,0 +1,9 @@
+# Prettier checks every file of this package it knows how to format, except the
+# ones below (and node_modules and the lockfile, which it skips by itself).
+
+# Build output and the Quinoa cache.
+dist/
+.quinoa/
+
+# Prose and tables edited by hand; reflowing it is not the formatter's job.
+DESIGN.md
