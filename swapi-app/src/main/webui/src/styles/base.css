@@ -11,6 +11,10 @@
 html {
   font-size: 16px;
   scroll-behavior: smooth;
+  /* A #fragment target lands below the sticky header, not under it. main.ts
+     keeps --sw-header-height at the header's real height (the menu wraps on a
+     phone); the fallback is the one-line header, until the script runs. */
+  scroll-padding-top: calc(var(--sw-header-height, 8rem) + 0.75rem);
 }
 
 body {

@@ -82,6 +82,19 @@ function writeHead(
 const container = document.getElementById('main-content')!;
 const pageLifecycle = new AbortController();
 
+// The height of the sticky header, for the scroll padding of the root
+// (base.css): a #fragment target lands below the header, not under it.
+const header = document.querySelector('.sw-header');
+function syncHeaderHeight(): void {
+  if (!header) return;
+  const height = Math.ceil(header.getBoundingClientRect().height);
+  document.documentElement.style.setProperty('--sw-header-height', `${height}px`);
+}
+syncHeaderHeight();
+const headerResize =
+  header && typeof ResizeObserver === 'function' ? new ResizeObserver(syncHeaderHeight) : null;
+if (header) headerResize?.observe(header);
+
 // The document (path and query) the page shows (2.15.0). A link or a Back and
 // Forward that only changes the #fragment does not fetch it again: the page
 // scrolls to the fragment, or the browser restores the scroll on its own.
@@ -485,6 +498,7 @@ navigate({ via: 'start' });
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     pageLifecycle.abort();
+    headerResize?.disconnect();
     navigationGeneration++;
     explorer.dispose();
     webmcp.dispose();
