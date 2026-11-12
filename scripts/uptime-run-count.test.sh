@@ -8,7 +8,8 @@
 # Runs offline: a fake `gh` on PATH serves a fixture history the way the Actions
 # API does (newest first, `created=<=...` filter, the real total in
 # `total_count`) but cuts every list at FAKE_CAP runs, and evaluates the
-# script's own --jq expression with jq.
+# script's own --jq expression with jq. Needs python3 and jq, both on the CI
+# runner.
 set -euo pipefail
 
 SCRIPT="$(cd "$(dirname "$0")" && pwd)/uptime-run-count.sh"
@@ -42,7 +43,14 @@ while i < len(args):
     else:
         i += 1
 
-if os.environ.get("FAKE_FAIL") == ("list" if paginate else "count"):
+# The request for the total is "total"; the list requests are "list1", "list2"...
+request = "total"
+if paginate:
+    calls = os.path.join(os.environ["FAKE_STATE"], "list-calls")
+    with open(calls, "a") as f:
+        f.write("x")
+    request = "list%d" % os.path.getsize(calls)
+if os.environ.get("FAKE_FAIL") == request:
     sys.exit("fake gh: HTTP 502")
 if "/actions/workflows/uptime.yml/runs" not in " ".join(args) or fields.get("event") != "schedule":
     sys.exit("fake gh: unexpected request: " + " ".join(args))
@@ -54,6 +62,10 @@ runs = []
 with open(os.environ["FAKE_RUNS"]) as f:
     for line in f:
         run_id, created_at, status, conclusion = line.split()
+        # FAKE_RUNNING_AT_FIRST_LIST: a run still in progress when the first
+        # window is read, finished (as the fixture says) from the second on.
+        if request == "list1" and run_id == os.environ.get("FAKE_RUNNING_AT_FIRST_LIST"):
+            status, conclusion = "in_progress", "-"
         if created_at <= created[2:]:
             runs.append({"id": int(run_id), "created_at": created_at, "status": status,
                          "conclusion": None if conclusion == "-" else conclusion})
@@ -88,17 +100,18 @@ cat > "$TMP/history" <<'EOF'
 112 2026-10-20T01:05:47Z in_progress -
 EOF
 
-# count <fixture> [VAR=value ...]: runs the script against the fake gh; stdout
-# goes to $TMP/out, stderr to $TMP/err.
-count() {
+# run_count <fixture> [VAR=value ...]: runs the script against the fake gh;
+# stdout goes to $TMP/out, stderr to $TMP/err.
+run_count() {
   local fixture="$1"; shift
-  env PATH="$TMP/bin:$PATH" FAKE_RUNS="$fixture" FAKE_CAP=5 "$@" "$SCRIPT" > "$TMP/out" 2> "$TMP/err"
+  rm -rf "$TMP/state"; mkdir "$TMP/state"
+  env FAKE_STATE="$TMP/state" PATH="$TMP/bin:$PATH" FAKE_RUNS="$fixture" FAKE_CAP=5 "$@" "$SCRIPT" > "$TMP/out" 2> "$TMP/err"
 }
 
-# refused <description> <word expected on stderr>: the last count failed, and
+# refused <description> <text expected on stderr>: the last count failed, and
 # printed no number.
 refused() {
-  if [ ! -s "$TMP/out" ] && grep -q "$2" "$TMP/err"; then
+  if [ ! -s "$TMP/out" ] && grep -q "uptime-run-count.sh: .*$2" "$TMP/err"; then
     pass "$1"
   else
     fail "$1: stdout '$(cat "$TMP/out")', stderr '$(cat "$TMP/err")'"
@@ -113,37 +126,49 @@ first: 2026-10-19T22:39:05Z
 last: 2026-10-20T01:05:47Z
 not successful: 1 cancelled, 1 failure, 1 in_progress
 EOF
-if count "$TMP/history" && diff "$TMP/expected" "$TMP/out" > "$TMP/diff"; then
+if run_count "$TMP/history" && diff "$TMP/expected" "$TMP/out" > "$TMP/diff"; then
   pass "12 runs behind a cap of 5: all counted, down to the first run"
 else
   fail "12 runs behind a cap of 5: $(cat "$TMP/diff" "$TMP/err" 2>/dev/null)"
 fi
 
-# 2. Every run succeeded: no "not successful" line.
-grep -v -e failure -e cancelled -e in_progress "$TMP/history" > "$TMP/all-green"
-if count "$TMP/all-green" && [ "$(cat "$TMP/out")" = "scheduled runs: 9
-successful: 9
-first: 2026-10-19T22:39:05Z
-last: 2026-10-20T00:52:19Z" ]; then
-  pass "all successful: four lines"
+# 2. Run 108 sits on the edge of the first window, so the second window returns
+# it again; it finished in between. Counted once, with its conclusion.
+if run_count "$TMP/history" FAKE_RUNNING_AT_FIRST_LIST=108 && diff "$TMP/expected" "$TMP/out" > "$TMP/diff"; then
+  pass "a run that finishes between two windows: counted once, as finished"
 else
-  fail "all successful: stdout '$(cat "$TMP/out")', stderr '$(cat "$TMP/err")'"
+  fail "a run that finishes between two windows: $(cat "$TMP/diff" "$TMP/err" 2>/dev/null)"
 fi
 
-# 3. The earliest run found is not the first scheduled run: no count.
+# 3. Every run succeeded: no "not successful" line.
+grep -v -e failure -e cancelled -e in_progress "$TMP/history" > "$TMP/all-green"
+cat > "$TMP/expected-green" <<'EOF'
+scheduled runs: 9
+successful: 9
+first: 2026-10-19T22:39:05Z
+last: 2026-10-20T00:52:19Z
+EOF
+if run_count "$TMP/all-green" && diff "$TMP/expected-green" "$TMP/out" > "$TMP/diff"; then
+  pass "all successful: four lines"
+else
+  fail "all successful: $(cat "$TMP/diff" "$TMP/err" 2>/dev/null)"
+fi
+
+# 4. The earliest run found is not the first scheduled run: no count.
 tail -n +2 "$TMP/history" > "$TMP/cut"
-if count "$TMP/cut"; then fail "history without the first run: accepted"
-else refused "history without the first run: refused" "2026-10-19T22:39:05Z"; fi
+if run_count "$TMP/cut"; then fail "history without the first run: accepted"
+else refused "history without the first run: refused" "not the first scheduled run 2026-10-19T22:39:05Z"; fi
 
-# 4. The runs collected do not add up to the total the API reports: no count.
-if count "$TMP/history" FAKE_TOTAL_DELTA=1; then fail "total of 13 for 12 runs: accepted"
-else refused "total of 13 for 12 runs: refused" "13"; fi
+# 5. The runs collected do not add up to the total the API reports: no count.
+if run_count "$TMP/history" FAKE_TOTAL_DELTA=1; then fail "total of 13 for 12 runs: accepted"
+else refused "total of 13 for 12 runs: refused" "found 12 runs but GitHub reports 13"; fi
 
-# 5. gh fails, on the total or in the middle of the walk: no count.
-for step in count list; do
-  if count "$TMP/history" FAKE_FAIL=$step; then fail "gh fails on the $step request: accepted"
-  else refused "gh fails on the $step request: refused" "gh"; fi
-done
+# 6. gh fails, on the total or on the second window of the walk: no count, and
+# the script says which request failed.
+if run_count "$TMP/history" FAKE_FAIL=total; then fail "gh fails on the total: accepted"
+else refused "gh fails on the total: refused" "could not read the total"; fi
+if run_count "$TMP/history" FAKE_FAIL=list2; then fail "gh fails on the second window: accepted"
+else refused "gh fails on the second window: refused" "could not list the scheduled runs created up to 2026-10-20T00:07:30Z"; fi
 
 if [ "$FAILURES" -ne 0 ]; then
   echo "$FAILURES check(s) failed"

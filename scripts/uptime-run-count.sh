@@ -12,7 +12,8 @@
 # So the history is read in windows of `created` date, newest first: each window
 # is "created up to the earliest run seen so far", and a window can hold up to
 # the cap. The bound is inclusive and the runs are kept once per id, so two runs
-# of the same second at a window's edge are neither lost nor counted twice.
+# of the same second at a window's edge are neither lost nor counted twice, and
+# a run that finishes between two windows is counted once.
 #
 # Exits non-zero, printing no count, unless the earliest run is the first
 # scheduled run and the runs add up to the `total_count` the API reports.
@@ -20,7 +21,7 @@
 set -euo pipefail
 
 FIRST_RUN=2026-10-19T22:39:05Z
-RUNS='repos/{owner}/{repo}/actions/workflows/uptime.yml/runs'
+RUNS_API='repos/{owner}/{repo}/actions/workflows/uptime.yml/runs'
 
 die() { echo "uptime-run-count.sh: $1" >&2; exit 1; }
 
@@ -31,28 +32,34 @@ trap 'rm -rf "$TMP"' EXIT
 # the total nor the windows.
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-reported="$(gh api -X GET "$RUNS" -f event=schedule -f "created=<=$NOW" -f per_page=1 \
+reported="$(gh api -X GET "$RUNS_API" -f event=schedule -f "created=<=$NOW" -f per_page=1 \
   --jq '.total_count')" || die "gh could not read the total of scheduled runs"
+
+# The created_at column of the runs collected, oldest first.
+created_dates() { cut -f2 "$TMP/runs" | sort; }
 
 : > "$TMP/runs"
 bound="$NOW"
 collected=0
 while :; do
-  gh api -X GET "$RUNS" -f event=schedule -f "created=<=$bound" -f per_page=100 --paginate \
-    --jq '.workflow_runs[] | [.id, .created_at, .conclusion // .status] | @tsv' >> "$TMP/runs" \
+  gh api -X GET "$RUNS_API" -f event=schedule -f "created=<=$bound" -f per_page=100 --paginate \
+    --jq '.workflow_runs[] | [.id, .created_at, .conclusion // .status] | @tsv' > "$TMP/window" \
     || die "gh could not list the scheduled runs created up to $bound"
-  sort -u -o "$TMP/runs" "$TMP/runs"
+  # One line per run id, the newest answer first: a run that finished between
+  # two windows is counted once, with its conclusion.
+  cat "$TMP/window" "$TMP/runs" | awk -F'\t' '!seen[$1]++' > "$TMP/merged"
+  mv "$TMP/merged" "$TMP/runs"
   count="$(wc -l < "$TMP/runs" | tr -d ' ')"
   [ "$count" -gt "$collected" ] || break
   collected="$count"
-  bound="$(cut -f2 "$TMP/runs" | sort | sed -n 1p)"
+  bound="$(created_dates | sed -n 1p)"
 done
 
-first="$(cut -f2 "$TMP/runs" | sort | sed -n 1p)"
-last="$(cut -f2 "$TMP/runs" | sort | sed -n '$p')"
+first="$(created_dates | sed -n 1p)"
+last="$(created_dates | sed -n '$p')"
 
 [ "$first" = "$FIRST_RUN" ] \
-  || die "the earliest run found is '$first', not the first scheduled run $FIRST_RUN: the list was cut, do not publish a count"
+  || die "the earliest run found is '$first', not the first scheduled run $FIRST_RUN: the history is incomplete, do not publish a count"
 [ "$collected" = "$reported" ] \
   || die "found $collected runs but GitHub reports $reported up to $NOW: do not publish a count"
 

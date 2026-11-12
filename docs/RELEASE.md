@@ -54,9 +54,11 @@ that touches the FAQ also recalculates the monitor count of the answer "How do I
 know it is up?" from the scheduled runs of the `Uptime` workflow:
 `scripts/uptime-run-count.sh` (from a checkout, with `gh` logged in; about a
 minute). The total and the successes go into the answer, the first and last day
-into its "between ... and ..." (in UTC); a run listed as "not successful" with
-`queued` or `in_progress` has not finished, so run the script again a few
-minutes later. Never count with `gh run list --limit N`: GitHub cuts a list of
+into its "between ... and ..." (in UTC). A run listed as "not successful" with
+`queued` or `in_progress` has not finished: it is neither a check that passed
+nor one that failed, so leave it out of the total you publish (the newest run
+finishes within minutes, but one has stayed `queued` since
+`2026-11-11T20:36:53Z`). Never count with `gh run list --limit N`: GitHub cuts a list of
 runs at 1000 results whatever the limit, and since early November 2026 that
 command returns only the newest 1000 (1978 scheduled runs on 12 November 2026).
 The script reads the history in windows of `created` date instead, and prints a
