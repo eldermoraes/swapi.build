@@ -65,6 +65,13 @@ jobs:
       - name: Main text extraction tests
         run: scripts/main-text.test.sh
 
+      # The FAQ's monitor count (docs/RELEASE.md, step 4): GitHub cuts a list of
+      # runs at 1000 results, so the count reads the history in windows. A fake
+      # gh with a cap of 5 proves a longer history is counted whole, and that a
+      # cut list or a total that does not add up prints no count. Offline.
+      - name: Uptime run count tests
+        run: scripts/uptime-run-count.test.sh
+
       # Maven never runs Vitest: Quinoa's `vite build` bundles the frontend, it
       # does not test it. Without this step the frontend suite — including the
       # "no raw colour" guard in tokens.test.ts — passes locally and gates
