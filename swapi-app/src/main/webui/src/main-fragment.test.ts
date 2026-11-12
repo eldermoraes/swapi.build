@@ -45,7 +45,8 @@ describe('/faq#compare on the client', () => {
     });
     vi.spyOn(window, 'scrollTo').mockImplementation(scrollTo);
     vi.spyOn(globalThis, 'fetch').mockImplementation(fetchSpy);
-    document.head.innerHTML = '<title>About: a SWAPI alternative built with Quarkus | swapi.build</title>';
+    document.head.innerHTML =
+      '<title>About: a SWAPI alternative built with Quarkus | swapi.build</title>';
     document.body.innerHTML = `<nav class="sw-menu"><a href="/faq" class="nav-link">FAQ</a></nav>${aboutMain}`;
     history.replaceState(null, '', '/about');
     const serverMain = await import('./server-main');
