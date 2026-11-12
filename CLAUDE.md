@@ -77,8 +77,8 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   memory only otherwise; the snapshot reader accepts only templates
   `RouteNormalizer` produces. The privacy page describes both. `/api/stats`
   serves the view of each window again for up to 60 s (`StatsViewMemo`,
-  `swapi.stats.view-lifetime`; zero in the tests but `StatsViewLifetimeTest`),
-  with `max-age` reduced by the view's age.
+  `swapi.stats.view-lifetime`; zero in the tests except
+  `StatsViewLifetimeTest`), with `max-age` reduced by the view's age.
 - **Self-hosted origin.** `native-binary.yml` attaches the linux/amd64 native
   binary to each published Release (UBI9 builder, glibc ≤ 2.35 checked); the
   host runbook, the deploy user and the rollback live in `docs/DEPLOY.md`,
@@ -126,7 +126,7 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   `noindex` and the canonical of its `SeoMetadata`). A copy is never chosen by the
   `Accept` header. Decoration that is not content is marked `data-md="skip"`.
   A paragraph shown with `white-space: pre-line` is marked `data-md="lines"`
-  (2.16.0) so its copy keeps the lines and paragraphs.
+  (2.16.0, `MarkdownFromHtml`) so its copy keeps the lines and paragraphs.
 - **The FAQ text lives in `seo/faq.json`** (2.15.0, `FaqFile`), never in the
   template: no HTML in the file, and counts of the data are markers
   (`{count:people}`). Every fact about another API is a comparison cell with a
