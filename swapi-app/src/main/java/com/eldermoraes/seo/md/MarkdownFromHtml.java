@@ -28,6 +28,11 @@ import java.util.regex.Pattern;
  * the visually hidden label, the terminal head, the result header of a record,
  * anything aria-hidden="true" and anything marked data-md="skip".
  *
+ * A paragraph marked data-md="lines" is read as the page shows it with
+ * white-space: pre-line (the opening crawl of a film): its line breaks are
+ * content, an empty line starts a new paragraph, and the other lines end in a
+ * hard line break. Without the mark, white space collapses as in a browser.
+ *
  * A box whose only children are links (the call-to-action row and the index of
  * the home) becomes a list, one link per line.
  *
@@ -48,6 +53,9 @@ public final class MarkdownFromHtml {
             "h1", "h2", "h3", "h4", "h5", "h6", "p", "ul", "ol", "table", "pre");
 
     private static final Pattern WHITESPACE = Pattern.compile("[ \\t\\n\\r\\f]+");
+    private static final Pattern LINE_BREAK = Pattern.compile("\\r\\n?|\\n");
+    private static final Pattern SPACES = Pattern.compile("[ \\t\\f]+");
+    private static final Pattern EMPTY_LINES = Pattern.compile("\\n{2,}");
     private static final Pattern LINE_START_NUMBER = Pattern.compile("^(\\d+)\\.(\\s|$)");
     private static final Pattern BACKTICKS = Pattern.compile("`+");
 
@@ -56,6 +64,8 @@ public final class MarkdownFromHtml {
 
     private final String root;
     private final Function<String, Optional<String>> copyOf;
+    /** True while reading a paragraph marked data-md="lines": a line break is content. */
+    private boolean keepingLines;
 
     private MarkdownFromHtml(String root, Function<String, Optional<String>> copyOf) {
         this.root = root;
@@ -117,7 +127,7 @@ public final class MarkdownFromHtml {
                 }
                 text.append(inline(element));
             } else if (node instanceof TextNode t) {
-                text.append(escape(collapse(t.getWholeText())));
+                text.append(text(t));
             }
         }
         flush(out, text);
@@ -134,7 +144,13 @@ public final class MarkdownFromHtml {
                     out.add("#".repeat(Math.min(tag.charAt(1) - '0', 6)) + " " + text);
                 }
             }
-            case "p" -> addIfPresent(out, paragraph(inline(element)));
+            case "p" -> {
+                if ("lines".equals(element.attr("data-md"))) {
+                    out.addAll(paragraphsOfLines(element));
+                } else {
+                    addIfPresent(out, paragraph(inline(element)));
+                }
+            }
             case "ul", "ol" -> addIfPresent(out, list(element, "ol".equals(tag)));
             case "table" -> addIfPresent(out, table(element));
             case "pre" -> addIfPresent(out, pre(element));
@@ -203,6 +219,25 @@ public final class MarkdownFromHtml {
             lines[i] = escapeLineStart(lines[i]);
         }
         return String.join("\n", lines);
+    }
+
+    /**
+     * The paragraphs of a paragraph marked data-md="lines": one per run of lines
+     * between empty lines, each line break inside it a hard line break.
+     */
+    private List<String> paragraphsOfLines(Element element) {
+        String text;
+        keepingLines = true;
+        try {
+            text = tidy(inline(element));
+        } finally {
+            keepingLines = false;
+        }
+        List<String> out = new ArrayList<>();
+        for (String lines : EMPTY_LINES.split(text)) {
+            addIfPresent(out, paragraph(lines).replace("\n", HARD_BREAK));
+        }
+        return out;
     }
 
     private static String escapeLineStart(String line) {
@@ -340,7 +375,7 @@ public final class MarkdownFromHtml {
         return switch (element.normalName()) {
             case "strong", "b" -> wrap(children(element), "**");
             case "em", "i" -> wrap(children(element), "*");
-            case "br" -> HARD_BREAK;
+            case "br" -> keepingLines ? "\n" : HARD_BREAK;
             case "code" -> code(element);
             case "a" -> link(element);
             default -> children(element);
@@ -353,7 +388,7 @@ public final class MarkdownFromHtml {
             if (node instanceof Element child) {
                 out.append(inline(child));
             } else if (node instanceof TextNode t) {
-                out.append(escape(collapse(t.getWholeText())));
+                out.append(text(t));
             }
         }
         return out.toString();
@@ -439,9 +474,20 @@ public final class MarkdownFromHtml {
         return false;
     }
 
+    /** The text of a node, escaped: collapsed, or with its line breaks inside a paragraph marked data-md="lines". */
+    private String text(TextNode node) {
+        String text = node.getWholeText();
+        return escape(keepingLines ? collapseKeepingLines(text) : collapse(text));
+    }
+
     /** As the browser collapses: any run of white space is one space. */
     private static String collapse(String text) {
         return WHITESPACE.matcher(text).replaceAll(" ");
+    }
+
+    /** As white-space: pre-line: a line break stays (always as \n), and any run of spaces is one space. */
+    private static String collapseKeepingLines(String text) {
+        return SPACES.matcher(LINE_BREAK.matcher(text).replaceAll("\n")).replaceAll(" ");
     }
 
     private static int longestBacktickRun(String text) {

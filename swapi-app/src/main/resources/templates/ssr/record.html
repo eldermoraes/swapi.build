@@ -14,7 +14,7 @@
           </table>
         </div>{#if view.openingCrawl}
         <h3 class="record-subtitle">Opening crawl</h3>
-        <p class="record-crawl">{view.openingCrawl}</p>{/if}
+        <p class="record-crawl" data-md="lines">{view.openingCrawl}</p>{/if}
       </section>{#if view.relations}
       <section class="record-section record-relations">
         {#sectionLabel text="Related records" /}{#for related in view.relations}

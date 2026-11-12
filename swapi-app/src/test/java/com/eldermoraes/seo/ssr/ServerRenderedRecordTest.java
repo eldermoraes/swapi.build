@@ -60,7 +60,7 @@ class ServerRenderedRecordTest {
     @Test
     void theOpeningCrawlIsTextWithItsLineBreaks() {
         String main = main(document("/resource/films/1"));
-        Matcher m = Pattern.compile("(?s)<p class=\"record-crawl\">(.*?)</p>").matcher(main);
+        Matcher m = Pattern.compile("(?s)<p class=\"record-crawl\" data-md=\"lines\">(.*?)</p>").matcher(main);
         assertTrue(m.find(), main);
         assertTrue(m.group(1).startsWith("It is a period of civil war."), m.group(1));
         assertTrue(m.group(1).contains("\r\n"), "the line breaks of the data stay, for white-space: pre-line");
