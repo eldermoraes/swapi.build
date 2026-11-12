@@ -65,6 +65,6 @@ describe('no tracking', () => {
     const inline = [
       ...indexHtml.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi),
     ].map((m) => m[1].trim());
-    expect(inline).toEqual(["document.documentElement.classList.add('js')"]);
+    expect(inline).toEqual(["document.documentElement.classList.add('js');"]);
   });
 });
