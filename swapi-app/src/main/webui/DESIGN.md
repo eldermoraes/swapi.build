@@ -126,8 +126,9 @@ falls below AA.
 Two places draw components. Pages drawn by the client import from
 `src/ui/components.ts`; each helper returns an HTML **string** (pages render by
 assigning `innerHTML`), and every interpolated value is passed through
-`escapeHtml`. The four pages drawn by the server (home, `/docs`, `/docs/mcp`,
-`/about`, 2.11.0+) use the Qute tags in `src/main/resources/templates/tags/`,
+`escapeHtml`. The pages drawn by the server (home, `/docs`, `/docs/mcp` and
+`/about` since 2.11.0, the record addresses since 2.12.0, `/faq` since 2.15.0)
+use the Qute tags in `src/main/resources/templates/tags/`,
 which Qute escapes (templates never use `raw` or `safe`); the client only binds
 behaviour to what the server drew.
 

@@ -29,8 +29,9 @@ Publishing a GitHub Release (`docs/RELEASE.md`, step 7) runs
    job's output. Before it is attached, **Native smoke** (2.11.0+) starts the
    binary on port 8099 and runs `scripts/native-smoke.sh`: it waits up to 20 s
    for `/api/people/1` (Luke Skywalker), then checks `/openapi.json` (paths not
-   empty, the version of the pom) and the four server-rendered pages (marker,
-   phrase, at least 200 characters of `<main>`). A failure prints the app log
+   empty, the version of the pom), the five server-rendered pages and two record
+   addresses (marker, phrase, at least 200 characters of `<main>`), the Markdown
+   copies, `/llms-full.txt` and the MCP endpoint. A failure prints the app log
    and stops the job, so nothing is attached and the deploy never begins:
    `swapi-update` switches the link before it knows the new version answers,
    and a binary that does not start would take the whole site down.
@@ -141,7 +142,8 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   `site.json`, so it proves the file reached the native binary (without it the
   app does not start at all). Control: `/resource/people/1` stays
   `noindex,follow` with the canonical `/resource/people`. `sitemap.xml` has
-  exactly 20 `<loc>` (the 14 pages and lists plus the six films), no record of
+  exactly 21 `<loc>` (the 15 pages and lists plus the six films; 20 before
+  2.15.0, which added `/faq`), no record of
   another type and no `<lastmod>` (a date that never changes is noise; a date
   that always changes is a lie).
 - **Robots header (2.10.0+)**: `/api/people/1` and `/api/films/9` (a 404)
@@ -181,7 +183,7 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   marker, and `/resource/films/1` has a `BreadcrumbList`. The links and the
   samples are read from the markup of `<main>` (`main_html` in
   `scripts/lib/main-text.sh`), the text from `main_text`. Any `FAIL` here after
-  a deploy is an immediate rollback to 2.11.0.
+  a deploy is an immediate rollback to the previous version.
 - **Markdown copies and `/llms-full.txt` (2.14.0+)**: every page whose `<main>`
   the server draws has a Markdown copy at its address plus `.md`, converted
   from that `<main>`. `/index.html.md` (the home), `/docs.md`, `/docs/mcp.md`,
@@ -419,8 +421,9 @@ job:
   source** for the checksum, so a binary swapped on the Release together with
   its `.sha256` is still caught by `swapi-update`.
 
-A pull request that changes the workflow runs the suite, the build and the
-GLIBC check without uploading or deploying anything.
+A pull request that changes the workflow, `scripts/native-smoke.sh`, the pom or
+the server's code and resources runs the suite, the build, the GLIBC check and
+the native smoke without uploading or deploying anything.
 
 ### 2. Host preparation (one SSH window with write access)
 
