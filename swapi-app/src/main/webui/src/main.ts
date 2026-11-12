@@ -113,6 +113,9 @@ const explorer = new ResourceExplorer(
     abortDocumentLoad();
     const generation = ++navigationGeneration;
     if (window.location.pathname !== path) history.pushState(null, '', path);
+    // The explorer's page is the document shown, also when it opened it on its
+    // own (Random, a WebMCP tool): Back to the address before is a navigation.
+    shownDocument = window.location.pathname + window.location.search;
     updateActiveNav(getRoute(path).page);
     // Written after the record arrived, from the record: a record address never
     // shows its fallback title ("Films #1") on the way to its real one.
@@ -126,6 +129,10 @@ const explorer = new ResourceExplorer(
   },
   () => {
     abortDocumentLoad();
+    // The reader acted on the page still shown: the navigation that waited for
+    // its page will not show it.
+    const interrupted = waitingNavigation();
+    if (interrupted) keepShownPage(interrupted);
     navigationGeneration++;
   },
 );
@@ -151,9 +158,58 @@ function bindPage(page: Page): void {
 /**
  * How a navigation started. A link click carries the full URL it left (path,
  * query and fragment), so a failed fetch can put the address back; Back and
- * Forward ('history') never have their history rewritten.
+ * Forward ('history') never have their history rewritten. `fromShown` is false
+ * when that URL was not the page on screen: the click came while a Back or
+ * Forward still waited for its page.
  */
-type NavigationSource = { via: 'start' } | { via: 'history' } | { via: 'link'; from: string };
+type NavigationSource =
+  | { via: 'start' }
+  | { via: 'history' }
+  | { via: 'link'; from: string; fromShown: boolean };
+
+// The navigation that waits for its page (the document of a server-rendered
+// page or of a record) while the page before is still on screen.
+let waiting: { source: NavigationSource; generation: number } | null = null;
+
+function waitingNavigation(): NavigationSource | null {
+  return waiting?.generation === navigationGeneration ? waiting.source : null;
+}
+
+/** Runs the wait of a navigation for its page, as the waiting one while it lasts. */
+async function whileWaiting<T>(
+  source: NavigationSource,
+  generation: number,
+  wait: () => Promise<T>,
+): Promise<T> {
+  const entry = { source, generation };
+  waiting = entry;
+  try {
+    return await wait();
+  } finally {
+    if (waiting === entry) waiting = null;
+  }
+}
+
+/**
+ * A navigation did not show its page (it failed, or the reader acted on the
+ * page still shown): the content and the head stay those of the page that was
+ * there. After a link the address goes back to the full URL it left, which is
+ * again the document shown (unless a Back or Forward had moved the address
+ * first); after Back or Forward the history is left alone (rewriting it would
+ * lose an entry). When the address is not the page shown, no document is taken
+ * for the one shown, so the next navigation fetches whatever it names.
+ */
+function keepShownPage(source: NavigationSource): void {
+  updateActiveNav(getRoute(headPath).page);
+  if (source.via === 'link') {
+    history.replaceState(null, '', source.from);
+    if (source.fromShown) {
+      shownDocument = window.location.pathname + window.location.search;
+      return;
+    }
+  }
+  shownDocument = null;
+}
 
 /**
  * A page whose <main> the server draws (2.11.0, slice E1). The first load adopts
@@ -182,11 +238,13 @@ async function showServerPage(
   const controller = new AbortController();
   documentLoad = controller;
   container.setAttribute('aria-busy', 'true');
-  const result = await loadServerMain(container, path, route, {
-    signal: controller.signal,
-    isCurrent: () => generation === navigationGeneration,
-    search: window.location.search,
-  });
+  const result = await whileWaiting(source, generation, () =>
+    loadServerMain(container, path, route, {
+      signal: controller.signal,
+      isCurrent: () => generation === navigationGeneration,
+      search: window.location.search,
+    }),
+  );
   if (documentLoad === controller) documentLoad = null;
   if (generation !== navigationGeneration) return;
   container.removeAttribute('aria-busy');
@@ -206,16 +264,8 @@ async function showServerPage(
       title = writeHead(path);
       break;
     case 'error':
-      // The content and the head stay those of the page that was there. After a
-      // link the address goes back to the full URL it left; after Back or
-      // Forward the history is left alone (rewriting it would lose an entry).
       showLoadFailure(container, path);
-      if (source.via === 'link') history.replaceState(null, '', source.from);
-      updateActiveNav(getRoute(headPath).page);
-      // The page shown is still the one before; after Back or Forward the
-      // address is not it, so the next navigation fetches whatever it names.
-      shownDocument =
-        source.via === 'link' ? window.location.pathname + window.location.search : null;
+      keepShownPage(source);
       return;
     default:
       // 'reload' (a full load is on its way) or 'aborted' (a newer navigation).
@@ -251,10 +301,12 @@ async function showRecord(
     return;
   }
 
-  const result = await explorer.execute(
-    'sw_get',
-    { resource: route.type!.toUpperCase(), id: Number(route.id) },
-    { human: true },
+  const result = await whileWaiting(source, generation, () =>
+    explorer.execute(
+      'sw_get',
+      { resource: route.type!.toUpperCase(), id: Number(route.id) },
+      { human: true },
+    ),
   );
   if (generation !== navigationGeneration || result.ok) return;
   if (result.error.code === 'NOT_FOUND') {
@@ -267,11 +319,9 @@ async function showRecord(
     return;
   }
   if (result.error.code === 'SUPERSEDED' || result.error.code === 'CANCELLED') return;
-  // The document did not come (5xx, network): the content and the head stay
-  // those of the page that was there, with the explorer's alert. After a link
-  // the address goes back to the URL it left; Back and Forward are left alone.
-  if (source.via === 'link') history.replaceState(null, '', source.from);
-  updateActiveNav(getRoute(headPath).page);
+  // The document did not come (5xx, network): the explorer's alert is on the
+  // page that was there.
+  keepShownPage(source);
 }
 
 async function navigate(source: NavigationSource) {
@@ -394,12 +444,20 @@ document.addEventListener(
     // address the first click pushed, and a failure would put that address
     // back over the content that stayed: the URL and the page would disagree.
     if (linkInFlight === href) return;
-    const from = window.location.pathname + window.location.search + window.location.hash;
+    // A click while another link's navigation waits for its page: the page
+    // shown is still the one that link left, so a failure goes back there.
+    // While a Back or Forward waits, the address is already not the page shown.
+    const pending = waitingNavigation();
+    const from =
+      pending?.via === 'link'
+        ? pending.from
+        : window.location.pathname + window.location.search + window.location.hash;
+    const fromShown = pending?.via === 'link' ? pending.fromShown : pending === null;
     if (href !== window.location.pathname + window.location.search) {
       history.pushState(null, '', href);
     }
     linkInFlight = href;
-    void navigate({ via: 'link', from }).finally(() => {
+    void navigate({ via: 'link', from, fromShown }).finally(() => {
       if (linkInFlight === href) linkInFlight = null;
     });
   },
