@@ -50,10 +50,10 @@ if the published `info.version` stops matching the pom.
 comparison (`seo/faq.json`) was checked more than 180 days ago, even in a release
 that does not touch the FAQ: check each cell again (content type and body, not
 just the status), update the values and dates, and only then release. The top
-`checkedOn` is the oldest cell date (the file does not load otherwise), so it
-moves only when every cell has been checked again. Edit only the cells: no
-answer names another API (the loader refuses it), so there is no prose to
-update. A release
+`checkedOn` is the oldest cell date (the file does not load otherwise): set it
+to that date, which moves only when every cell has been checked again. The
+cells and that date are all there is to edit: no answer names another API (the
+loader refuses it), so there is no prose to update. A release
 that touches the FAQ also recalculates the monitor count of the answer "How do I
 know it is up?" from the scheduled runs of the `Uptime` workflow:
 `gh run list --workflow Uptime --event schedule --limit 5000 --json conclusion,createdAt --jq '[length, (map(select(.conclusion=="success"))|length), (map(.createdAt)|min), (map(.createdAt)|max)]'`.

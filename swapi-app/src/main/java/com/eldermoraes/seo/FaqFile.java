@@ -49,7 +49,7 @@ public final class FaqFile {
     private static final Pattern MARKER = Pattern.compile("\\{([^{}]*)}");
     private static final Pattern COUNT = Pattern.compile("count:([a-z]+)");
     private static final Pattern LITERAL_COUNT = Pattern.compile(
-            "\\b\\d+ (" + String.join("|", KnownEntities.TYPES) + ")\\b");
+            "(?i)\\b\\d+[\\s\\u00A0]+(" + String.join("|", KnownEntities.TYPES) + ")\\b");
 
     public record Link(String text, String path) {
     }
@@ -76,7 +76,7 @@ public final class FaqFile {
         this.comparison = comparison;
     }
 
-    /** The day the comparison was last checked, shown above the table. */
+    /** The day shown above the table: the oldest cell date, so every cell was checked by then or later. */
     public LocalDate checkedOn() {
         return checkedOn;
     }
@@ -188,7 +188,7 @@ public final class FaqFile {
             if (!ID.matcher(id).matches() || !ids.add(id) || id.equals("compare")) {
                 throw invalid(source, at + ".id", "\"" + id + "\" must be lowercase words joined by -, unique and not \"compare\"");
             }
-            String question = prose(text(q, "question", source, at), source, at + ".question");
+            String question = withoutLiteralCount(text(q, "question", source, at), source, at + ".question");
             List<String> answer = new ArrayList<>();
             JsonArray answerArray = array(q, "answer", source, at);
             if (answerArray.isEmpty()) {
@@ -196,7 +196,7 @@ public final class FaqFile {
             }
             for (int p = 0; p < answerArray.size(); p++) {
                 String paragraphAt = at + ".answer[" + p + "]";
-                answer.add(prose(text(answerArray.get(p), source, paragraphAt), source, paragraphAt));
+                answer.add(withoutLiteralCount(text(answerArray.get(p), source, paragraphAt), source, paragraphAt));
             }
             List<Link> links = new ArrayList<>();
             JsonValue linkValue = q.get("links");
@@ -310,11 +310,12 @@ public final class FaqFile {
      * a literal ("82 people"), whoever's records they are. This project's come
      * from the data when the page is drawn; another API's belong in a cell.
      */
-    private static String prose(String text, String source, String key) {
+    private static String withoutLiteralCount(String text, String source, String key) {
         Matcher m = LITERAL_COUNT.matcher(text);
         if (m.find()) {
             throw invalid(source, key, "\"" + m.group() + "\" is a count of records written as a literal: use {count:"
-                    + m.group(1) + "}");
+                    + m.group(1).toLowerCase(Locale.ROOT) + "} for this project's data; another API's count is a"
+                    + " cell of the comparison");
         }
         return text;
     }

@@ -1,7 +1,7 @@
 {
   "checkedOn": "2026-01-01",
   "questions": [
-    { "id": "one", "question": "One?", "answer": ["It has 82 people."] }
+    { "id": "one", "question": "One?", "answer": ["It has 82 People."] }
   ],
   "comparison": {
     "columns": ["swapi.build", "swapi.dev", "Pipeworx (swapi MCP)"],
