@@ -26,11 +26,13 @@ public class StatsResource {
     /**
      * The counters move with every request, so the deny-list CacheControlFilter
      * (edge TTL of a year) must not apply: setting the header here opts out of it.
+     * This is the header of a view that was just built; one served again from
+     * {@link StatsViewMemo} carries what is left of its 60 seconds.
      */
-    static final String CACHE_CONTROL = "public, max-age=60";
+    static final String CACHE_CONTROL = cacheControl(StatsViewMemo.ADVERTISED.toSeconds());
 
     @Inject
-    RouteStats stats;
+    StatsViewMemo views;
 
     @GET
     @Produces(MediaType.APPLICATION_JSON)
@@ -60,9 +62,14 @@ public class StatsResource {
         if (!p.accepts(g)) {
             throw badRequest("period " + p.id() + " does not accept granularity " + g.id());
         }
-        return RestResponse.ResponseBuilder.ok(stats.view(p, g))
-                .header(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL)
+        StatsViewMemo.Served served = views.view(p, g);
+        return RestResponse.ResponseBuilder.ok(served.view())
+                .header(HttpHeaders.CACHE_CONTROL, cacheControl(served.maxAgeSeconds()))
                 .build();
+    }
+
+    private static String cacheControl(long maxAgeSeconds) {
+        return "public, max-age=" + maxAgeSeconds;
     }
 
     /** A fixed message: the rejected value is never echoed back. */
