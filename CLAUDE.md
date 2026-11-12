@@ -99,7 +99,7 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   Quinoa's SPA routing stays off. A conditional request is the exception: a
   page, a Markdown copy and `/llms-full.txt` carry a strong `ETag` (a digest of
   the bytes sent, `TaggedBody`), and a GET or HEAD whose `If-None-Match` names
-  it answers 304 with no body (#58). A 404, a 503 or a redirect never carries
+  it answers 304 with no body (2.16.0+). A 404, a 503 or a redirect never carries
   an `ETag`, and `/api` has no validators.
 - **Page metadata has one source**: `swapi-app/src/main/resources/seo/site.json`,
   read by `SeoMetadataRegistry` and by `seo.ts`/`routes.ts`; the client never

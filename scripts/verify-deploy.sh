@@ -22,7 +22,7 @@
 #                                           page's indexing; the HTML Link alternate;
 #                                           /llms-full.txt with the five copies and the record
 #                                           index, noindex, 20-100 KB; their poisoning pairs),
-#                                           the validators (#58: a strong ETag on a page, a copy
+#                                           the validators (2.16.0+: a strong ETag on a page, a copy
 #                                           and /llms-full.txt, and 304 for If-None-Match),
 #                                           the trailing-slash 301, and the Caddy headers
 #                                           (HSTS, no Server, zstd/gzip compression)
@@ -190,7 +190,7 @@ assert v["period"] == period and v["granularity"] == granularity
 assert len(v["series"]) == buckets
 assert set(v["groups"]) == {"rest", "mcp", "pages", "seo", "other"}
 assert "total" in v["previous"]
-# How far the last bucket has filled, for the comparison (#54).
+# How far the last bucket has filled, for the comparison (2.16.0+).
 e = v["lastBucketElapsed"]
 assert isinstance(e, (int, float)) and not isinstance(e, bool) and 0 <= e < 1
 ' "$p" "$g" "$n" 2>/dev/null; then
@@ -696,7 +696,7 @@ else
   fail "llms.txt links" "$BASE/llms-full.txt and $BASE/docs/mcp.md" "missing"
 fi
 
-# --- Validators (#58) --------------------------------------------------------
+# --- Validators (2.16.0+) ----------------------------------------------------
 # A page, a Markdown copy and /llms-full.txt carry a strong ETag (a digest of
 # the bytes of the body), and a GET or HEAD with it in If-None-Match answers
 # 304 with no body, the same ETag, the Cache-Control of the address and
