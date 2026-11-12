@@ -212,6 +212,25 @@ The manual path is [Updating the version on the host](#updating-the-version-on-t
   table (lines that start with `| `). `/about` says `stays up for live
   demos` and never `never go offline`. Any `FAIL` here after a deploy is an
   immediate rollback to 2.14.0.
+- **Validators (#58)**: `/docs`, `/resource/films/1`, `/docs.md`,
+  `/resource/films/1.md` and `/llms-full.txt` each carry a strong `ETag` (a
+  digest of the bytes of the body: it changes with the content, the host and
+  the analytics beacon, never with a version string). A `GET` with it in
+  `If-None-Match` answers `304` with no body, the same `ETag`, the
+  `Cache-Control` of the address (`public, max-age=0, must-revalidate,
+  s-maxage=300` for the HTML, `public, max-age=300, s-maxage=86400` for a copy
+  and `/llms-full.txt`) and `Vary: Origin`; a `HEAD` with it answers `304`;
+  another tag gets `200` with the same `ETag`. `/resource/people/9999` with
+  `If-None-Match: *` answers `404` with no `ETag`. These are asked without
+  `Accept-Encoding`, so Caddy does not compress and the tag is the
+  application's. One more line is informational only: `/docs` asked with
+  `Accept-Encoding: zstd, gzip`, then again with the `ETag` it got. When Caddy
+  compresses, its `encode` appends `-<encoding>` to a strong tag (`"abc"`
+  becomes `"abc-zstd"`) and takes that suffix off `If-None-Match` before the
+  application sees it, so the line should end in `304`. A `200` there means
+  the Caddy on the host does not undo its suffix: nothing breaks, but a
+  browser (which always asks for compression) then downloads the page on
+  every revalidation, as before #58.
 - **Cold start**: the time of one request, informational only.
 - **MCP stateless**: a `tools/call` of `sw_get` with the 2026-07-28 headers and
   `_meta` returns `isError: false` and URLs on the host. `server/discover` and
