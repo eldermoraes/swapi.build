@@ -39,10 +39,7 @@ public class ApiNotFoundMapper implements ExceptionMapper<NotFoundException> {
 
     @Override
     public Response toResponse(NotFoundException exception) {
-        return Response.status(Response.Status.NOT_FOUND)
-                .type(MediaType.TEXT_PLAIN)
-                .entity(message())
-                .build();
+        return notFound(message());
     }
 
     private String message() {
@@ -50,12 +47,28 @@ public class ApiNotFoundMapper implements ExceptionMapper<NotFoundException> {
                 .map(s -> s.getPath())
                 .filter(s -> !s.isEmpty())
                 .toList();
-        if (segments.size() >= 2) {
-            String form = MESSAGE_FORMS.get(segments.get(0));
-            if (form != null) {
-                return "No " + form + " found with id " + segments.get(1);
-            }
+        if (segments.size() >= 2 && MESSAGE_FORMS.containsKey(segments.get(0))) {
+            return recordMessage(segments.get(0), segments.get(1));
         }
         return "No resource found at /api/" + String.join("/", segments);
+    }
+
+    /**
+     * The contract 404 for an id of one of the six types that names no record,
+     * with the id as given. Also what CanonicalIdFilter answers (issue #55).
+     */
+    static Response recordNotFound(String type, String id) {
+        return notFound(recordMessage(type, id));
+    }
+
+    private static String recordMessage(String type, String id) {
+        return "No " + MESSAGE_FORMS.get(type) + " found with id " + id;
+    }
+
+    private static Response notFound(String message) {
+        return Response.status(Response.Status.NOT_FOUND)
+                .type(MediaType.TEXT_PLAIN)
+                .entity(message)
+                .build();
     }
 }

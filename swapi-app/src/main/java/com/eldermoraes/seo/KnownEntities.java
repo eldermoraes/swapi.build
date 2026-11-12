@@ -45,6 +45,14 @@ public class KnownEntities {
     /** At most 9 digits, no leading zero: never overflows an int. */
     private static final Pattern CANONICAL_ID = Pattern.compile("[1-9][0-9]{0,8}");
 
+    /**
+     * Whether the text is the one spelling of an id that names a record: the
+     * rule of the pages, and of /api/{type}/{id} since issue #55.
+     */
+    public static boolean isCanonicalId(String id) {
+        return id != null && CANONICAL_ID.matcher(id).matches();
+    }
+
     private final PeopleService people;
     private final FilmService films;
     private final PlanetService planets;
@@ -133,7 +141,7 @@ public class KnownEntities {
     }
 
     public boolean exists(String resource, String id) {
-        if (resource == null || id == null || !CANONICAL_ID.matcher(id).matches()) {
+        if (resource == null || !isCanonicalId(id)) {
             return false;
         }
         int n = Integer.parseInt(id);
