@@ -15,8 +15,12 @@
 # (docs/DEPLOY.md, "Moving the pin of an action").
 #
 # Read line by line, not as YAML: the version lives in a comment, which a YAML
-# reader drops. Anything the rule does not know fails (a quoted value, a
-# `docker://` reference, a `uses:` written another way) instead of passing.
+# reader drops. Anything the rule does not know fails (a quoted value or key,
+# a `docker://` reference, a `uses:` inside a flow mapping) instead of passing.
+# It guards against a reference added by mistake or by habit, not against one
+# hidden on purpose (a key written with YAML escapes or as a complex key is
+# not seen): whoever can do that can also edit this file. Local actions
+# (`./...`) pass and their own files are not read; there is none today.
 #
 # It first proves the rule on throwaway workflows, so that it cannot pass by
 # being blind, then applies it to the real ones.
@@ -32,12 +36,12 @@ import tempfile
 
 RUNBOOK = 'docs/DEPLOY.md, "Moving the pin of an action"'
 
-MENTIONS_USES = re.compile(r'(?:^|[\s{,-])uses\s*:')
+MENTIONS_USES = re.compile(r'''(?:^|[\s{,"'-])uses["']?\s*:''')
 USES_LINE = re.compile(r'^\s*(?:-\s+)?uses:\s+(?P<value>\S.*?)\s*$')
 LOCAL = re.compile(r'^\./\S*(?:\s+#.*)?$')
 PINNED = re.compile(
     r'^(?P<repo>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)(?:/[A-Za-z0-9_./-]+)?'
-    r'@(?P<sha>[0-9a-f]{40})\s+#\s*(?P<version>v\d+\.\d+\.\d+)(?:\s.*)?$'
+    r'@(?P<sha>[0-9a-f]{40})\s+#\s+(?P<version>v\d+\.\d+\.\d+)(?:\s.*)?$'
 )
 
 
@@ -115,6 +119,12 @@ CASES = [
      {'a.yml': '    uses: owner/repo/.github/workflows/w.yml@v1\n'}, 1, 'not pinned'),
     ('a `uses:` inside a flow mapping fails',
      {'a.yml': '      - { uses: actions/checkout@v4 }\n'}, 1, 'cannot read'),
+    ('a quoted `uses` key fails',
+     {'a.yml': '      - "uses": actions/checkout@v4\n      - \'uses\': actions/checkout@v4\n'}, 2, 'cannot read'),
+    ('a quoted `uses` key inside a flow mapping fails',
+     {'a.yml': '      - {"uses": actions/checkout@v4}\n'}, 1, 'cannot read'),
+    ('a version comment without a space after the # fails',
+     {'a.yml': f'      - uses: owner/repo@{SHA_A} #v1.0.0\n'}, 1, 'not pinned'),
     ('a .yaml file is read too',
      {'a.yaml': '      - uses: actions/checkout@v4\n'}, 1, 'a.yaml:1'),
     ('every unpinned line is reported',
