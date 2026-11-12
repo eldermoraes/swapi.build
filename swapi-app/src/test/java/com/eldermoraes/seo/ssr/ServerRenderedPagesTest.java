@@ -22,6 +22,7 @@ import java.util.regex.Pattern;
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -49,6 +50,23 @@ class ServerRenderedPagesTest {
         }
         assertTrue(main.contains("<p class=\"sw-live\"></p>"), "the live line is there and empty");
         assertFalse(main.contains("preview.example"), "nothing of the host on the home");
+    }
+
+    // #57: the home and the about page have no host in them, so they are drawn
+    // once and reused, like /docs and /faq; /mcp shows the host and is not.
+    @Inject
+    SsrPages pages;
+
+    @Test
+    void thePagesWithoutAHostAreDrawnOnce() {
+        assertSame(pages.home(), pages.home());
+        assertSame(pages.about(), pages.about());
+        assertSame(pages.faq(), pages.faq());
+        assertSame(pages.docs().orElseThrow(), pages.docs().orElseThrow());
+        assertEquals(main("/").replaceFirst("^<main[^>]*>", "").replaceFirst("</main>$", ""), pages.home());
+        assertTrue(pages.mcp("https://a.example").contains("https://a.example/mcp"));
+        assertTrue(pages.mcp("https://b.example").contains("https://b.example/mcp"));
+        assertFalse(pages.mcp("https://b.example").contains("a.example"));
     }
 
     @Test

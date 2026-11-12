@@ -3,15 +3,9 @@ package com.eldermoraes.seo.ssr;
 import com.eldermoraes.RequestBaseUrl;
 import com.eldermoraes.SWObject;
 import com.eldermoraes.film.Film;
-import com.eldermoraes.film.FilmService;
-import com.eldermoraes.people.PeopleService;
-import com.eldermoraes.planet.PlanetService;
 import com.eldermoraes.seo.KnownEntities;
 import com.eldermoraes.seo.SeoMetadataRegistry;
 import com.eldermoraes.seo.SeoSiteFile;
-import com.eldermoraes.specie.SpecieService;
-import com.eldermoraes.starship.StarshipService;
-import com.eldermoraes.vehicle.VehicleService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.json.Json;
@@ -52,24 +46,19 @@ public class RecordViews {
     @Inject KnownEntities known;
     @Inject SeoMetadataRegistry metadata;
     @Inject Jsonb jsonb;
-    @Inject PeopleService people;
-    @Inject FilmService films;
-    @Inject PlanetService planets;
-    @Inject SpecieService species;
-    @Inject StarshipService starships;
-    @Inject VehicleService vehicles;
 
     /**
-     * The view of a record that exists (KnownEntities.exists), empty otherwise.
+     * The view of a record that exists (KnownEntities.record), empty otherwise.
      *
      * @param apiBase  the API base of this request (PublicSiteUrlResolver.apiBase), for every URL of the record
      * @param siteRoot the site root of this request, for the MCP endpoint
      */
     public Optional<RecordView> build(String type, String id, String apiBase, String siteRoot) {
-        if (!known.exists(type, id)) {
+        Optional<SWObject> record = known.record(type, id);
+        if (record.isEmpty()) {
             return Optional.empty();
         }
-        SWObject entity = entity(type, Integer.parseInt(id));
+        SWObject entity = record.get();
         String typeLabel = metadata.site().resource(type).map(SeoSiteFile.ResourceType::label).orElse(type);
         String name = known.name(type, id).orElse("");
 
@@ -129,17 +118,5 @@ public class RecordViews {
             }
         }
         return new RecordView.Link(url, "", false);
-    }
-
-    private SWObject entity(String type, int id) {
-        return switch (type) {
-            case "people" -> people.getPeopleById(id);
-            case "films" -> films.getFilmById(id);
-            case "planets" -> planets.getPlanetById(id);
-            case "species" -> species.getSpecieById(id);
-            case "starships" -> starships.getStarshipById(id);
-            case "vehicles" -> vehicles.getVehicleById(id);
-            default -> throw new IllegalArgumentException("unknown record type: " + type);
-        };
     }
 }

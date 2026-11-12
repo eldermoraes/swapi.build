@@ -10,13 +10,7 @@ import io.vertx.ext.web.RoutingContext;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @ApplicationScoped
 public class SeoRoutes {
@@ -26,16 +20,10 @@ public class SeoRoutes {
     private static final String MARKDOWN = "text/markdown; charset=utf-8";
     private static final String OG_IMAGE = "/og-image.png";
     private static final String OG_IMAGE_ALT = "swapi.build — Star Wars API and MCP server in a Holonet terminal style";
-    private static final Pattern EXISTING_SEO_TAG = Pattern.compile(
-            "(?is)\\s*<title>.*?</title>|" +
-            "\\s*<meta\\s+name=\\\"(?:description|robots|twitter:[^\\\"]+)\\\"[^>]*>|" +
-            "\\s*<meta\\s+property=\\\"og:[^\\\"]+\\\"[^>]*>|" +
-            "\\s*<link\\s+rel=\\\"canonical\\\"[^>]*>|" +
-            "\\s*<script\\s+type=\\\"application/ld\\+json\\\"[^>]*>.*?</script>");
 
     @Inject SeoMetadataRegistry metadata;
     @Inject PublicSiteUrlResolver urls;
-    @Inject WebAnalytics analytics;
+    @Inject SiteShell shell;
     @Inject ServerRendering rendering;
     @Inject KnownEntities known;
     @Inject MarkdownCopies copies;
@@ -160,19 +148,18 @@ public class SeoRoutes {
      * or assets filters stamped: the path may start to exist in a release.
      */
     private void notFound(RoutingContext rc, String path) {
-        Optional<String> shell = readIndexHtml();
-        if (shell.isEmpty()) {
+        Optional<String> html = shell.document(notFoundBlock(metadata.notFound(path)));
+        if (html.isEmpty()) {
             noCacheOn404(rc);
             rc.next();
             return;
         }
-        SeoMetadata route = metadata.notFound(path);
         rc.response()
                 .setStatusCode(404)
                 .putHeader(HttpHeaders.CONTENT_TYPE, "text/html; charset=utf-8")
                 .putHeader(HttpHeaders.CACHE_CONTROL, "no-cache")
                 .putHeader(HttpHeaders.VARY, "Origin")
-                .end(inject(shell.get(), notFoundBlock(route)));
+                .end(html.get());
     }
 
     /** Every 404 the app answers leaves with no-cache, never with the assets' immutable year. */
@@ -260,9 +247,12 @@ public class SeoRoutes {
     private void sitemap(RoutingContext rc) {
         StringBuilder xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
                 .append("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n");
+        // The host of the request, read once: every address of the file is on it.
+        String root = urls.siteRoot(rc);
         for (SeoMetadata route : metadata.sitemapRoutes()) {
             xml.append("  <url>\n")
-                    .append("    <loc>").append(xml(urls.absoluteUrl(rc, route.canonicalPath()))).append("</loc>\n")
+                    .append("    <loc>").append(xml(PublicSiteUrlResolver.absoluteUrl(root, route.canonicalPath())))
+                    .append("</loc>\n")
                     .append("    <changefreq>").append(route.changeFrequency()).append("</changefreq>\n")
                     .append("    <priority>").append(route.priority()).append("</priority>\n")
                     .append("  </url>\n");
@@ -272,13 +262,12 @@ public class SeoRoutes {
     }
 
     private void document(RoutingContext rc, String path) {
-        Optional<String> shell = readIndexHtml();
-        if (shell.isEmpty()) {
+        Optional<String> document = shell.document(seoBlock(rc, metadata.forPath(path)));
+        if (document.isEmpty()) {
             rc.next();
             return;
         }
-        SeoMetadata route = metadata.forPath(path);
-        String html = inject(shell.get(), seoBlock(rc, route));
+        String html = document.get();
         // The <main> of a page marked ssr (2.11.0). After the head cleanup, so its
         // regex never reaches the content, and a literal replace: the content has
         // $ and \ (code samples) that a regex replacement would read. A failed
@@ -300,9 +289,7 @@ public class SeoRoutes {
     }
 
     private void ogImage(RoutingContext rc) {
-        Optional<byte[]> image = readBytes("META-INF/resources/og-image.png")
-                .or(() -> readBytes("og-image.png"))
-                .or(() -> readFile("src/main/webui/public/og-image.png"));
+        Optional<Buffer> image = shell.previewImage();
         if (image.isEmpty()) {
             rc.next();
             return;
@@ -310,7 +297,7 @@ public class SeoRoutes {
         rc.response()
                 .putHeader(HttpHeaders.CONTENT_TYPE, "image/png")
                 .putHeader(HttpHeaders.CACHE_CONTROL, "public, max-age=31536000, immutable")
-                .end(Buffer.buffer(image.get()));
+                .end(image.get());
     }
 
     // Vary: Origin because CORS echoes the request Origin and these files carry s-maxage.
@@ -322,18 +309,9 @@ public class SeoRoutes {
                 .end(body);
     }
 
-    // The head block and the beacon. The <main> of an ssr page goes in after this
-    // (document()), so the head cleanup never reaches the content.
-    private String inject(String html, String block) {
-        String cleaned = EXISTING_SEO_TAG.matcher(html).replaceAll("");
-        String withSeo = cleaned.replaceFirst("(?i)</head>", Matcher.quoteReplacement(block + "\n  </head>"));
-        // The analytics beacon goes before </body>, where Cloudflare recommends it.
-        return analytics.beacon()
-                .map(beacon -> withSeo.replaceFirst("(?i)</body>",
-                        Matcher.quoteReplacement("  " + beacon + "\n  </body>")))
-                .orElse(withSeo);
-    }
-
+    // The head block of a document; SiteShell puts it in the shell, with the
+    // beacon. The <main> of an ssr page goes in after that (document()), so the
+    // head cleanup never reaches the content.
     private String seoBlock(RoutingContext rc, SeoMetadata route) {
         String canonical = urls.absoluteUrl(rc, route.canonicalPath());
         String image = urls.absoluteUrl(rc, OG_IMAGE);
@@ -427,41 +405,6 @@ public class SeoRoutes {
     private static String lastSegment(String path) {
         int slash = path.lastIndexOf('/');
         return slash >= 0 ? path.substring(slash + 1) : path;
-    }
-
-    private Optional<String> readIndexHtml() {
-        return readString("META-INF/resources/index.html")
-                .or(() -> readString("index.html"))
-                .or(() -> readFileString("src/main/webui/index.html"));
-    }
-
-    private Optional<String> readString(String resource) {
-        return readBytes(resource).map(bytes -> new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
-    }
-
-    private Optional<byte[]> readBytes(String resource) {
-        ClassLoader cl = Thread.currentThread().getContextClassLoader();
-        try (InputStream in = cl.getResourceAsStream(resource)) {
-            return in == null ? Optional.empty() : Optional.of(in.readAllBytes());
-        } catch (IOException e) {
-            return Optional.empty();
-        }
-    }
-
-    private Optional<String> readFileString(String file) {
-        return readFile(file).map(bytes -> new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
-    }
-
-    private Optional<byte[]> readFile(String file) {
-        Path path = Path.of(file);
-        if (!Files.isRegularFile(path)) {
-            return Optional.empty();
-        }
-        try {
-            return Optional.of(Files.readAllBytes(path));
-        } catch (IOException e) {
-            return Optional.empty();
-        }
     }
 
     private static String html(String value) {

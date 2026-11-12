@@ -28,8 +28,17 @@ public class SsrPages {
     // /docs has no host in it (its paths are relative): drawn once and reused.
     private volatile String docs;
 
+    // Nor have the home and /about (#57): only seo/site.json and the template.
+    private volatile String home;
+    private volatile String about;
+
     public String home() {
-        return SsrTemplates.home(HomeView.of(metadata.site())).render();
+        String html = home;
+        if (html == null) {
+            html = SsrTemplates.home(HomeView.of(metadata.site())).render();
+            home = html;
+        }
+        return html;
     }
 
     /** Empty when the OpenAPI document could not be read at startup (OpenApiDocs). */
@@ -72,7 +81,12 @@ public class SsrPages {
     }
 
     public String about() {
-        return SsrTemplates.about().render();
+        String html = about;
+        if (html == null) {
+            html = SsrTemplates.about().render();
+            about = html;
+        }
+        return html;
     }
 
     @Inject
