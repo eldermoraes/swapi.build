@@ -691,7 +691,6 @@
   gap: 0.85rem;
 }
 
-
 .webmcp-tools td {
   padding: 1rem 0.75rem;
   vertical-align: top;
@@ -742,7 +741,7 @@
   }
 
   .webmcp-tools td[data-label]::before {
-    content: attr(data-label) ": ";
+    content: attr(data-label) ': ';
     color: var(--sw-text-dim);
     font-size: 0.8rem;
   }
