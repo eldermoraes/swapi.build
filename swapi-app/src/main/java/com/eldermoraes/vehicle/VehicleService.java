@@ -1,14 +1,10 @@
 package com.eldermoraes.vehicle;
 
+import com.eldermoraes.DataFile;
 import com.eldermoraes.SWService;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.json.bind.Jsonb;
-import jakarta.json.bind.JsonbBuilder;
-import jakarta.json.bind.JsonbConfig;
 
-import java.io.InputStream;
 import java.lang.reflect.Type;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -26,29 +22,8 @@ public class VehicleService implements SWService {
 
     @Override
     public void loadJsonData() {
-        JsonbConfig config = new JsonbConfig().withFormatting(true);
-        URL url = getClass().getResource("/data/vehicles.json");
-        if (url != null) {
-            try (Jsonb jsonb = JsonbBuilder.create(config);
-
-                 InputStream is = url.openStream()) {
-
-                if (is == null) {
-                    System.err.println("Could not get data from vehicles.json");
-                    vehicleList = new ArrayList<>();
-                    return;
-                }
-
-                Type listType = new ArrayList<Vehicle>(){}.getClass().getGenericSuperclass();
-                vehicleList = jsonb.fromJson(is, listType);
-
-            } catch (Exception e) {
-                System.err.println("Error loading vehicles: " + e.getMessage());
-                vehicleList = new ArrayList<>();
-            }
-        } else{
-            System.err.println("Could not find vehicles.json in resources");
-        }
+        Type listType = new ArrayList<Vehicle>(){}.getClass().getGenericSuperclass();
+        vehicleList = DataFile.load("data/vehicles.json", listType);
     }
 
     public List<Vehicle> getAllVehicles() {
