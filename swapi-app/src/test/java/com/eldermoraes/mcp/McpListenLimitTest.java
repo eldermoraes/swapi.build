@@ -62,7 +62,7 @@ class McpListenLimitTest {
     Router router;
 
     @Inject
-    StreamableHttpMcpMessageHandler extension;
+    StreamableHttpMcpMessageHandler extensionHandler;
 
     private static String statelessMeta() {
         return """
@@ -257,14 +257,19 @@ class McpListenLimitTest {
 
     // Why the filter's batch guard exists, checked (issue #70). The filter
     // answers every JSON array, so no batch reaches the extension; this test
-    // hands the extension's own handler a batch behind a route of its own, the
-    // way the extension's route does. In 2.0.3 the handler casts the decoded
-    // body to JsonObject inside its try, so any array is answered as a parse
-    // error (200, -32700) before a session or a stream exists: today the
-    // guard is a second lock. If this fails, an upgraded extension started to
-    // accept batches: a subscriptions/listen inside one would open a stream
-    // with no limit, the guard became the only thing in the way, and it must
-    // stay (decide then whether batches should be served at all).
+    // hands a batch to the extension's POST handler behind a route of its
+    // own, setting the server name as the extension's route does before it
+    // calls the same handler (HttpMcpServerRecorder; that wrapper is not
+    // reachable from here, so a batch split there would not be seen). In
+    // 2.0.3 the handler casts the decoded body to JsonObject inside its try,
+    // so any array is answered as a parse error (200, -32700) before a
+    // session or a stream exists: today the guard is a second lock. If the
+    // batch part fails, an upgraded extension started to accept batches: a
+    // subscriptions/listen inside one would open a stream with no limit, the
+    // guard became the only thing in the way, and it must stay (decide then
+    // whether batches should be served at all). If the control fails, it is
+    // this harness that broke (a renamed context key, a changed handler), not
+    // the extension's answer to batches.
     @Test
     void theExtensionItselfStillRefusesABatch() throws Exception {
         String path = "/test-only/mcp-extension-batch";
@@ -272,9 +277,24 @@ class McpListenLimitTest {
                 .handler(BodyHandler.create())
                 .handler(rc -> {
                     rc.put("mcp.http.server-name", McpServer.DEFAULT); // HttpMcpServerRecorder.CONTEXT_KEY
-                    extension.handle(rc);
+                    extensionHandler.handle(rc);
                 });
         try {
+            // Control: the same route serves a single request, so the body
+            // does reach the handler and -32700 below is about the array.
+            HttpResponse<String> control = sendWithDeadline(HttpRequest.newBuilder(mcp.resolve(path))
+                    .timeout(Duration.ofSeconds(10))
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json, text/event-stream")
+                    .header("MCP-Protocol-Version", STATELESS)
+                    .header("Mcp-Method", "tools/list")
+                    .POST(HttpRequest.BodyPublishers.ofString("""
+                            {"jsonrpc":"2.0","id":1,"method":"tools/list","params":{%s}}
+                            """.formatted(statelessMeta()))).build(), 5000);
+            assertEquals(200, control.statusCode(), control.body());
+            assertTrue(control.body().contains("sw_get"),
+                    "the test route no longer reaches the extension's handler: " + control.body());
+
             for (String batch : java.util.List.of("""
                     [{"jsonrpc":"2.0","id":1,"method":"tools/list"},
                      {"jsonrpc":"2.0","id":2,"method":"resources/list"}]

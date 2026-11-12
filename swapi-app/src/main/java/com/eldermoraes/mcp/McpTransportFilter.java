@@ -57,7 +57,8 @@ import java.util.Optional;
  * 400 with -32600, without looking inside it (issue #70). The extension
  * (2.0.3) refuses an array on its own, but only as a side effect: it casts the
  * decoded body to a JSON object inside a try and answers the failed cast as a
- * parse error (200, -32700), before any session or stream. That is not a
+ * parse error (200, -32700), before any session or stream (or, without the
+ * Accept the transport requires, a bare 400 before that). That is not a
  * contract. A version that accepted batches would serve a subscriptions/listen
  * inside one with an open stream, so no array goes on to the extension, and
  * McpListenLimitTest.theExtensionItselfStillRefusesABatch fails the day this
