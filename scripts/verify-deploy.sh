@@ -468,7 +468,8 @@ cc=$("${CURL[@]}" -o /dev/null -w '%header{cache-control}' "$BASE/api/people/1")
   || fail "/api/people/1 Cache-Control" "public, max-age=300, s-maxage=300, stale-while-revalidate=86400" "${cc:-missing}"
 
 # --- Server-rendered content (2.11.0+) --------------------------------------------
-# The <main> of the four fixed pages is drawn by the server (Qute), for whoever
+# The <main> of the fixed pages (five since 2.15.0, with /faq) is drawn by the
+# server (Qute), for whoever
 # does not run JavaScript. Each page: 200 text/html, its data-ssr-page marker on
 # the opening tag, its phrase in the text and at least 200 characters of text
 # (main_text cuts at the first </main>: the footer never counts). /docs/mcp
@@ -557,7 +558,8 @@ fi
 # marker resource-detail (with type and id), the name, the attributes, the
 # related records as links, the samples on the request host and the JSON.
 # Indexing does not change (slice D): people stay noindex,follow with the list
-# canonical, now with content. Any FAIL after a deploy = rollback to 2.11.0.
+# canonical, now with content. Any FAIL after a deploy = rollback to the
+# previous version.
 # record_probe <path> <type> <id> <need>...: each <need> is searched in the
 # markup of the <main> (main_html: the href of a link lives in a tag).
 record_probe() {
@@ -605,7 +607,7 @@ jsonld /resource/films/1 | grep -qF '"@type":"BreadcrumbList"' && pass "/resourc
 # Each copy: 200 text/markdown, the phrase of its page, no <main nor <html (the
 # shell never leaks), Link rel="canonical" on the HTML address, and the indexing
 # of its page (films indexable: no X-Robots-Tag). Any FAIL after a deploy =
-# rollback to 2.13.0 (docs/DEPLOY.md, "5. Rollback").
+# rollback to the previous version (docs/DEPLOY.md, "5. Rollback").
 # md_probe <copy> <canonical> <phrase>
 md_probe() {
   local p="$1" canonical="$2" phrase="$3" got meta body link xrt

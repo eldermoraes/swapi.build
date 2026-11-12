@@ -10,7 +10,7 @@
 #
 # Waits up to 20 s for GET /api/people/1, then checks /api/people/1 (Luke
 # Skywalker), /openapi.json (paths not empty, the version of the pom) and the
-# four server-rendered pages and, since 2.12.0, /resource/films/1 and
+# server-rendered pages (five since 2.15.0, with /faq) and, since 2.12.0, /resource/films/1 and
 # /resource/people/1 (marker, phrase, >= 200 characters of <main>, the same
 # main_text the deploy probes use). Since 2.12.1, MCP too (mcp_probe): tools/list
 # with the four tools, sw_get PEOPLE 1, subscriptions/listen answered within 5 s
