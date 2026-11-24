@@ -33,11 +33,23 @@ public class SwapiSkillsExtension {
 
     @Inject SwapiSkills skills;
 
-    /** One page with the one skill. A cursor can only come from a nextCursor, which is never sent. */
+    /**
+     * One page with the one skill. A cursor can only come from a nextCursor,
+     * which is never sent; a null cursor is the first page (a client may write
+     * its optional fields as null).
+     *
+     * params is read without a cast, as McpTransportFilter reads it. Extension
+     * 2.1.0 does not pass on a message whose params is not an object (it fails
+     * on it before any method, SwapiSkillsTest), but should that change, the
+     * answer here is -32602, not a ClassCastException.
+     */
     @McpExtensionMethod("skills/list")
     public JsonObject list(RawMessage message) {
-        JsonObject params = message.asJsonObject().getJsonObject("params");
-        if (params != null && params.containsKey("cursor")) {
+        Object params = message.asJsonObject().getValue("params");
+        if (params != null && !(params instanceof JsonObject)) {
+            throw new McpException("Invalid params: skills/list takes an object", JsonRpcErrorCodes.INVALID_PARAMS);
+        }
+        if (params instanceof JsonObject p && p.getValue("cursor") != null) {
             throw new McpException("Invalid cursor: skills/list has a single page", JsonRpcErrorCodes.INVALID_PARAMS);
         }
         return cacheable(new JsonObject().put("skills", new JsonArray().add(entry(skills.skill()))));

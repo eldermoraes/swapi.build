@@ -59,7 +59,7 @@ class SwapiSkillsContentTest {
 
     @Test
     void theShippedSkillLoads() {
-        SwapiSkills.Skill skill = SwapiSkills.parse(SwapiSkills.NAME, shipped());
+        SwapiSkills.Skill skill = loadsAsYaml(SwapiSkills.NAME, shipped());
         assertEquals("skill://star-wars-research/SKILL.md", skill.uri());
         assertEquals(List.of("name", "description"), List.copyOf(skill.frontmatter().keySet()));
         assertEquals(List.of("SKILL.md", "references/relations.md"),
@@ -222,6 +222,20 @@ class SwapiSkillsContentTest {
         return files;
     }
 
+    /**
+     * Loads the skill and checks the rule the guard enforces: a YAML parser
+     * (SnakeYAML, as the client's) reads the frontmatter of SKILL.md as
+     * exactly the strings of the entry.
+     */
+    private static SwapiSkills.Skill loadsAsYaml(String directory, Map<String, byte[]> files) {
+        SwapiSkills.Skill skill = SwapiSkills.parse(directory, files);
+        Map<String, Object> yaml = SwapiSkillsTest.yamlFrontmatter(new String(files.get("SKILL.md"),
+                StandardCharsets.UTF_8));
+        assertEquals(Map.copyOf(skill.frontmatter()), Map.copyOf(yaml),
+                "a YAML parser reads the frontmatter of " + directory + " differently");
+        return skill;
+    }
+
     private static void refused(String why, String directory, Map<String, byte[]> files) {
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> SwapiSkills.parse(directory, files), why);
@@ -230,7 +244,7 @@ class SwapiSkillsContentTest {
 
     @Test
     void aMinimalSkillLoads() {
-        SwapiSkills.Skill skill = SwapiSkills.parse("my-skill", skill("name: my-skill\ndescription: Does a thing.\n"));
+        SwapiSkills.Skill skill = loadsAsYaml("my-skill", skill("name: my-skill\ndescription: Does a thing.\n"));
         assertEquals("skill://my-skill/SKILL.md", skill.uri());
         assertEquals(Map.of("name", "my-skill", "description", "Does a thing."), skill.frontmatter());
         SwapiSkills.SkillFile file = skill.files().getFirst();
@@ -266,13 +280,13 @@ class SwapiSkillsContentTest {
                 "a".repeat(65))) {
             refused("name '" + name + "'", name, skill("name: " + name + "\ndescription: Does a thing.\n"));
         }
-        SwapiSkills.parse("a".repeat(64), skill("name: " + "a".repeat(64) + "\ndescription: Does a thing.\n"));
+        loadsAsYaml("a".repeat(64), skill("name: " + "a".repeat(64) + "\ndescription: Does a thing.\n"));
     }
 
     @Test
     void refusesADescriptionOver1024Characters() {
         refused("1025", "my-skill", skill("name: my-skill\ndescription: " + "a".repeat(1025) + "\n"));
-        SwapiSkills.parse("my-skill", skill("name: my-skill\ndescription: " + "a".repeat(1024) + "\n"));
+        loadsAsYaml("my-skill", skill("name: my-skill\ndescription: " + "a".repeat(1024) + "\n"));
     }
 
     // The client parses the frontmatter as YAML and compares it with the
@@ -284,10 +298,55 @@ class SwapiSkillsContentTest {
         for (String description : List.of("\"Quoted.\"", "'Quoted.'", "Has a # comment", "Has: a colon",
                 "Ends with a colon:", "[a, list]", "{a: map}", "> folded", "| literal", "&anchor x", "*alias",
                 "!tag x", "@reserved", "`reserved", "%directive", "true", "null", "~", "42", "3.5",
-                "Trailing space ", "- dash")) {
+                "Trailing space ", "- dash",
+                // integers in another base (YAML 1.1 and 1.2), sexagesimal, separators
+                "0x1f", "0X1F", "0o17", "0b101", "017", "+12", "1_000", "190:20:30", "1e5", ".5", ".inf", "-.inf",
+                ".NaN",
+                // timestamps, with a t, a T, or spaces
+                "2001-12-14", "2001-12-14t21:59:43.10-05:00", "2001-12-14T21:59:43Z",
+                "2001-12-14 21:59:43.10 -5", "2002-1-1 1:00:00",
+                // YAML 1.1 words and keys
+                "Yes", "OFF", "y", "N", "Null", "<<", "=")) {
             refused("description '" + description + "'", "my-skill",
                     skill("name: my-skill\ndescription: " + description + "\n"));
         }
+    }
+
+    // Values that look close to the refused ones but that a YAML parser reads
+    // as these exact strings.
+    @Test
+    void acceptsPlainStringsAndYamlReadsThemTheSame() {
+        for (String description : List.of("Does a thing.", "3 ways to do a thing", "Episodes I-VI, in order",
+                "Version 2.0 of a thing", "0x1f is not a description", "Costs 0x1f", "Has a#hash",
+                "Has a colon:inside", "Ends with a question?", "Uses [brackets] and {braces}", "Yes, it works",
+                "Café, naïve, Ünïcödé", "Non\u00a0breaking",
+                "Emoji \uD83D\uDE80 inside", "100% of the records")) {
+            loadsAsYaml("my-skill", skill("name: my-skill\ndescription: " + description + "\n"));
+        }
+        loadsAsYaml("my-skill-2", skill("name: my-skill-2\ndescription: Does a thing.\n"));
+    }
+
+    // A YAML parser breaks a line at NEL and at the Unicode line and
+    // paragraph separators, and refuses most control characters: none of
+    // them may appear anywhere in the frontmatter, in a value, in a key line
+    // or on a line of its own.
+    @Test
+    void refusesLineBreaksAndControlCharactersInTheFrontmatter() {
+        for (String c : List.of("\u0085", "\u2028", "\u2029", "\u0000", "\u0007", "\u001b", "\u007f", "\u0090",
+                "\u000b", "\u000c", "\t", "\ufeff", "\ufffe", "\uffff")) {
+            String hex = String.format("U+%04X", (int) c.charAt(0));
+            refused(hex + " in the description", "my-skill",
+                    skill("name: my-skill\ndescription: Does a" + c + "thing.\n"));
+            refused(hex + " ending the description", "my-skill",
+                    skill("name: my-skill\ndescription: Does a thing." + c + "\n"));
+            refused(hex + " after the key", "my-skill",
+                    skill("name: my-skill\ndescription:" + c + "Does a thing.\n"));
+        }
+        // In the body, after the frontmatter, the same characters are only text.
+        Map<String, byte[]> body = new LinkedHashMap<>();
+        body.put("SKILL.md", "---\nname: my-skill\ndescription: Does a thing.\n---\n\nA\u2028line.\n"
+                .getBytes(StandardCharsets.UTF_8));
+        loadsAsYaml("my-skill", body);
     }
 
     @Test

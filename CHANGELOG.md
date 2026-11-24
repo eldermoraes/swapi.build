@@ -25,7 +25,7 @@ The MCP server publishes an Agent Skill. The answers of the four tools, the
 
 - The Skills over MCP extension (`io.modelcontextprotocol/skills`), advertised
   in `server/discover` and `initialize` with an empty settings object (no
-  `directoryRead`): `skills/list` (one page; a `cursor` is `-32602`) and
+  `directoryRead`): `skills/list` (one page; a non-null `cursor` is `-32602`) and
   `skills/get` (the entry for the URI of a `SKILL.md`; any other URI is
   `-32602`), both with `ttlMs` 300000 and `cacheScope` `public`.
 - The skill `star-wars-research`: how to answer a question that takes several

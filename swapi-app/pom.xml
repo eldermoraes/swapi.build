@@ -95,6 +95,15 @@
             <artifactId>rest-assured</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <!-- SwapiSkillsTest parses the skill's frontmatter with it, as a client's YAML parser.
+                 Version from the Quarkus BOM. Declared without a scope on purpose: it is already a
+                 runtime dependency (quarkus-smallrye-openapi -> smallrye-open-api-core ->
+                 jackson-dataformat-yaml), and a direct test scope would win over that path and drop
+                 it from the application. Declared here, the resolved classpath does not change. -->
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

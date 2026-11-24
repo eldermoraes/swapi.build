@@ -45,8 +45,9 @@ import java.util.regex.Pattern;
  * The frontmatter is read by a small reader of its own, one "key: value" per
  * line, no new dependency. A client reads it with a YAML parser and compares
  * it with the entry field by field, so a value YAML would read differently
- * (quoted, with a comment, a second ": ", a boolean or a number) is refused
- * rather than published as a skill nobody can verify. Any refusal fails the
+ * (quoted, with a comment, a second ": ", a boolean, a number or a
+ * timestamp, or with a character YAML takes as a line break or does not
+ * print) is refused rather than published as a skill nobody can verify. Any refusal fails the
  * boot: name and description present, no other key (no allowed-tools), the
  * name equal to the directory and within the Agent Skills naming rules, a
  * description of at most 1024 characters, every file under 100 KB (the limit
@@ -73,9 +74,10 @@ public class SwapiSkills {
     private static final Set<String> KEYS = Set.of("name", "description");
     private static final Pattern NAME_RULE = Pattern.compile("[a-z0-9]+(?:-[a-z0-9]+)*");
     private static final Pattern KEY_LINE = Pattern.compile("([a-z][a-z0-9-]*):(?: (.*))?");
-    // Plain YAML scalars that do not resolve to a string (YAML 1.1 and 1.2 core).
-    private static final Pattern NOT_A_STRING = Pattern.compile(
-            "(?i)~|null|true|false|yes|no|on|off|y|n|[-+]?(?:\\.?[0-9][0-9_.,:eE+-]*|\\.inf|\\.nan)");
+    // The words a YAML 1.1 or 1.2 resolver reads as a boolean or null, in any case.
+    private static final Pattern NOT_A_STRING_WORD = Pattern.compile("(?i)~|null|true|false|yes|no|on|off|y|n");
+    // A date opens every YAML timestamp, also the ones with spaces.
+    private static final Pattern DATE_FIRST = Pattern.compile("[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}(?:[^0-9].*)?");
     private static final String INDICATORS = "-?:,[]{}#&*!|>'\"%@`";
 
     /** One file of a skill: its path in the directory, its URI, its bytes and what derives from them. */
@@ -91,7 +93,12 @@ public class SwapiSkills {
 
     @Inject ResourceManager resources;
 
-    private Skill skill;
+    // Written once on the main thread by the StartupEvent observer, read by
+    // request threads. Quarkus opens the HTTP socket only after the
+    // StartupEvent observers return (VertxHttpProcessor.openSocket consumes
+    // the ApplicationStartBuildItem of the startup event), so no request finds
+    // it null; volatile publishes it to those threads without relying on that.
+    private volatile Skill skill;
 
     void register(@Observes StartupEvent event) {
         Skill loaded = parse(NAME, readClasspath(NAME, FILES));
@@ -203,8 +210,10 @@ public class SwapiSkills {
         if (end < 0) {
             throw invalid(directory, SKILL_FILE + " frontmatter is not closed by ---");
         }
+        String block = text.substring(4, end + 1);
+        plainCharacters(directory, block);
         Map<String, String> values = new LinkedHashMap<>();
-        for (String line : text.substring(4, end + 1).split("\n")) {
+        for (String line : block.split("\n")) {
             var m = KEY_LINE.matcher(line);
             if (!m.matches()) {
                 throw invalid(directory, "frontmatter line '" + line + "' is not 'key: value'");
@@ -242,20 +251,55 @@ public class SwapiSkills {
         return Collections.unmodifiableMap(ordered);
     }
 
-    /** A value a YAML parser reads as exactly this string. */
+    /**
+     * A value a YAML parser reads as exactly this string. Not a list of the
+     * forms YAML resolves (numbers alone come in bases, separators, signs and
+     * sexagesimal), but the shapes they share: every implicit non-string form
+     * of YAML 1.1 and 1.2 is either one of a few words (booleans, null), or a
+     * single token that does not start with a letter (numbers in any base,
+     * .inf, .nan, ~, <<, =, a date or a timestamp with a t or T), or a
+     * timestamp with spaces, which starts with a date. A value of one token
+     * that does not start with a letter is refused even when YAML would read
+     * it as a string ("3d"): erring on the side of refusal fails the boot,
+     * never a client's check.
+     */
     private static void plainScalar(String directory, String key, String value) {
+        boolean oneToken = value.indexOf(' ') < 0;
         boolean ok = !Character.isWhitespace(value.charAt(0))
                 && !Character.isWhitespace(value.charAt(value.length() - 1))
                 && INDICATORS.indexOf(value.charAt(0)) < 0
                 && !value.contains(": ")
                 && !value.contains(" #")
                 && !value.endsWith(":")
-                && value.indexOf('\t') < 0
-                && !NOT_A_STRING.matcher(value).matches();
+                && !NOT_A_STRING_WORD.matcher(value).matches()
+                && !(oneToken && !Character.isLetter(value.codePointAt(0)))
+                && !DATE_FIRST.matcher(value).matches();
         if (!ok) {
             throw invalid(directory, "frontmatter " + key + " must be a plain YAML string (no quotes, no leading "
-                    + "indicator, no ': ', no ' #', not a boolean, null or number): '" + value + "'");
+                    + "indicator, no ': ', no ' #', not a boolean, null, number or timestamp, and one word only "
+                    + "if it starts with a letter): '" + value + "'");
         }
+    }
+
+    /**
+     * Every character of the frontmatter must be one YAML reads as itself
+     * inside a line. NEL (U+0085) and U+2028 / U+2029 are line breaks to a
+     * YAML parser and not to the split on LF here; tabs and the other control
+     * characters (C0, DEL, C1) are separators or not printable to YAML; U+FEFF
+     * is a byte order mark to it, and U+FFFE / U+FFFF are not printable.
+     */
+    private static void plainCharacters(String directory, String frontmatter) {
+        frontmatter.codePoints().forEach(c -> {
+            int type = Character.getType(c);
+            boolean breaksOrHides = (c != '\n' && type == Character.CONTROL)
+                    || type == Character.LINE_SEPARATOR || type == Character.PARAGRAPH_SEPARATOR
+                    || type == Character.SURROGATE
+                    || c == 0xFEFF || c == 0xFFFE || c == 0xFFFF;
+            if (breaksOrHides) {
+                throw invalid(directory, SKILL_FILE + " frontmatter has the character "
+                        + String.format("U+%04X", c) + "; only printable characters on LF-ended lines");
+            }
+        });
     }
 
     private static String sha256(byte[] bytes) {

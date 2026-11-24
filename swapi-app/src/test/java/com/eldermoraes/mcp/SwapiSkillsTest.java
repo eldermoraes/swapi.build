@@ -229,13 +229,80 @@ class SwapiSkillsTest {
     }
 
     // One page only: a cursor can only come from a nextCursor this server
-    // never sends.
+    // never sends. A null cursor is the first page: a client that writes its
+    // optional fields as null asks for it that way.
     @Test
     void listWithACursorIsInvalidParams() throws Exception {
-        assertEquals(-32602, statelessError("skills/list", "\"cursor\":\"abc\"").getInteger("code"));
-        assertEquals(-32602, statelessError("skills/list", "\"cursor\":null").getInteger("code"));
-        // Pair: the same request without the cursor is served.
+        for (String cursor : List.of("\"abc\"", "\"\"", "0", "{}")) {
+            assertEquals(-32602, statelessError("skills/list", "\"cursor\":" + cursor).getInteger("code"), cursor);
+        }
+        // Pair: the same request without the cursor, or with a null one, is served.
         assertEquals(1, statelessResult("skills/list", "").getJsonArray("skills").size());
+        JsonObject nullCursor = statelessResult("skills/list", "\"cursor\":null");
+        assertCacheable(nullCursor);
+        assertEntry(theEntry(nullCursor));
+        String session = openSession();
+        JsonObject inSession = sessionCall(session, "skills/list", "\"cursor\":null");
+        assertEntry(theEntry(inSession.getJsonObject("result")));
+        assertEquals(-32602, sessionCall(session, "skills/list", "\"cursor\":\"abc\"")
+                .getJsonObject("error").getInteger("code"));
+    }
+
+    // params that is not an object (an array, a string, a number) never
+    // reaches skills/list: extension 2.1.0 reads the _meta of every request
+    // first (McpMessageHandler.findMeta -> Messages.getParams casts params to
+    // an object) and the failed cast becomes an HTTP 500 from Quarkus's error
+    // handler, not a JSON-RPC answer, in both eras and for its own methods
+    // too (tools/list here). Pinned as it is: if an upgrade starts to pass
+    // such a message on, listParamsThatAreNotAnObjectAreInvalidParams is what
+    // skills/list answers.
+    @Test
+    void paramsThatAreNotAnObjectNeverReachTheMethod() throws Exception {
+        String session = openSession();
+        for (String method : List.of("skills/list", "tools/list")) {
+            for (String params : List.of("[]", "\"x\"", "1", "true")) {
+                String message = """
+                        {"jsonrpc":"2.0","id":4,"method":"%s","params":%s}
+                        """.formatted(method, params);
+                HttpResponse<String> stateless = send(post(message)
+                        .header("MCP-Protocol-Version", STATELESS)
+                        .header("Mcp-Method", method).build());
+                HttpResponse<String> inSession = send(post(message)
+                        .header("Mcp-Session-Id", session)
+                        .header("MCP-Protocol-Version", SESSION_ERA).build());
+                for (HttpResponse<String> r : List.of(stateless, inSession)) {
+                    String what = method + " " + params + ": " + r.statusCode() + " "
+                            + r.body().substring(0, Math.min(200, r.body().length()));
+                    assertEquals(500, r.statusCode(), what);
+                    assertFalse(new JsonObject(r.body()).containsKey("jsonrpc"), what);
+                }
+            }
+        }
+    }
+
+    // The method's own read of params, called directly: whatever params is,
+    // the answer is -32602 or the page, never an exception of another kind.
+    @Test
+    void listParamsThatAreNotAnObjectAreInvalidParams() {
+        SwapiSkillsExtension extension = new SwapiSkillsExtension();
+        for (Object params : List.of(new JsonArray(), "x", 1, true)) {
+            io.quarkiverse.mcp.server.McpException e = org.junit.jupiter.api.Assertions.assertThrows(
+                    io.quarkiverse.mcp.server.McpException.class,
+                    () -> extension.list(raw(new JsonObject().put("jsonrpc", "2.0").put("id", 4)
+                            .put("method", "skills/list").put("params", params))),
+                    "params " + params);
+            assertEquals(-32602, e.getJsonRpcErrorCode(), "params " + params);
+        }
+    }
+
+    private static io.quarkiverse.mcp.server.RawMessage raw(JsonObject message) {
+        return new io.quarkiverse.mcp.server.RawMessage() {
+            @Override public JsonObject asJsonObject() { return message; }
+            @Override public String asString() { return message.encode(); }
+            @Override public String asPrettyString() { return message.encodePrettily(); }
+            @Override public io.quarkiverse.mcp.server.RequestId id() { return null; }
+            @Override public String method() { return message.getString("method"); }
+        };
     }
 
     // ---- what a client verifies before it loads the skill ----
