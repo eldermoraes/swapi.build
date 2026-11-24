@@ -367,6 +367,10 @@ class McpListenLimitTest {
         JsonObject body = new JsonObject(r.body());
         assertEquals(-32002, body.getJsonObject("error").getInteger("code"), r.body());
         assertTrue(body.getJsonObject("error").getString("message").contains("swapi://people/9999"), r.body());
+        // 2.16.1: the URI is in data.uri too, as extension 2.1.0 sends it on
+        // its own "resource not found" (resources/read).
+        assertEquals("swapi://people/9999", body.getJsonObject("error").getJsonObject("data").getString("uri"),
+                r.body());
         assertEquals(6, body.getInteger("id"));
         HttpResponse<String> unsubscribe = sendWithDeadline(sessionPost(session, """
                 {"jsonrpc":"2.0","id":7,"method":"resources/unsubscribe","params":{"uri":"swapi://people/9999"}}
@@ -488,7 +492,7 @@ class McpListenLimitTest {
         assertListenRefused(r, SESSION_REFUSED, "null");
     }
 
-    // D1 (2.16.1): a stateless listen is 404 on every path the filter answers.
+    // 2.16.1: a stateless listen is 404 on every path the filter answers.
     // Without a JSON body only the MCP-Protocol-Version header can say the
     // request is stateless; with one, the header or the version in _meta
     // (the extension's rule, StreamableHttpMcpMessageHandler.isStatelessRequest).
@@ -516,7 +520,7 @@ class McpListenLimitTest {
         assertListenRefused(mixed, STATELESS_REFUSED, "48");
     }
 
-    // D1 (2.16.1): the listen the filter refuses and a method the extension
+    // 2.16.1: the listen the filter refuses and a method the extension
     // does not implement answer the same HTTP status in the stateless era, so
     // a client cannot tell the filter from the extension by the status.
     @Test

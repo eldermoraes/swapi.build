@@ -43,7 +43,7 @@ import java.util.Optional;
  *   with no time limit and no count, so anyone could hold hundreds open.
  *   Answered at once with -32601, the code the extension uses for a method
  *   that is not available, under the HTTP status the extension gives that
- *   code (2.16.1, D1): 404 when the request is stateless, as the 2026-07-28
+ *   code (2.16.1): 404 when the request is stateless, as the 2026-07-28
  *   spec says for a method the server does not implement (the extension does
  *   so since 2.1.0, quarkus-mcp-server #1081), 200 in the session era.
  * - resources/subscribe and resources/unsubscribe with a session (up to
@@ -229,14 +229,15 @@ public class McpTransportFilter {
         rc.next();
     }
 
-    // D1 (2.16.1): the HTTP status the extension gives -32601 in each era.
+    // 2.16.1: the HTTP status the extension gives -32601 in each era.
     private static int listenStatus(boolean stateless) {
         return stateless ? 404 : 200;
     }
 
     // A resource this server registered (none in 2.12.1) -> empty result, the
     // same the extension sends, without recording a subscriber; anything else
-    // -> -32002, as the extension answers a client of the session era.
+    // -> -32002, as the extension answers a client of the session era, with
+    // the URI in data.uri as extension 2.1.0 sends it (2.16.1).
     private JsonObject subscribeAnswer(Object id, JsonObject request) {
         JsonObject params = request.getValue("params") instanceof JsonObject p ? p : null;
         String uri = params != null && params.getValue("uri") instanceof String s ? s : null;
@@ -244,7 +245,9 @@ public class McpTransportFilter {
             return error(id, INVALID_PARAMS, "Resource URI not defined");
         }
         if (resources.getResource(uri) == null) {
-            return error(id, RESOURCE_NOT_FOUND, "Resource not found: " + uri);
+            JsonObject notFound = error(id, RESOURCE_NOT_FOUND, "Resource not found: " + uri);
+            notFound.getJsonObject("error").put("data", new JsonObject().put("uri", uri));
+            return notFound;
         }
         return new JsonObject().put("jsonrpc", "2.0").put("id", id).put("result", new JsonObject());
     }

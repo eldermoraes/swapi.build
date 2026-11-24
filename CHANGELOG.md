@@ -43,7 +43,8 @@ requests.
     session exists; 2.0.3 answered a bare `400` and, without a known
     session id, left a session in memory until the idle timeout.
   - The "resource not found" error of `resources/read` carries the URI in
-    `data.uri`.
+    `data.uri`, and so does the one a session-era `resources/subscribe` or
+    `unsubscribe` gets for an unknown URI.
 - The deploy and native-smoke probes check the HTTP `404` of the stateless
   `subscriptions/listen` and `resources/subscribe`, next to the `-32601`
   body.
