@@ -133,15 +133,11 @@ class McpListenLimitTest {
                 .header("MCP-Protocol-Version", SESSION_ERA);
     }
 
-    // 2.16.1: a stateless listen is refused with HTTP 404, the status the
-    // 2026-07-28 spec gives a stateless method the server does not implement
-    // (the extension answers every other one so since 2.1.0, #1081); in the
-    // session era it stays 200. Same body either way.
-    private static final int STATELESS_REFUSED = 404;
-    private static final int SESSION_REFUSED = 200;
-
-    private static void assertListenRefused(HttpResponse<String> r, int expectedStatus, String expectedId) {
-        assertEquals(expectedStatus, r.statusCode(), r.body());
+    // A listen the filter refuses is HTTP 200 with -32601 in both eras (2.17.0;
+    // 2.16.1 alone answered 404 when stateless, see
+    // statelessListenIsRefusedWith200UnlikeAnUnknownStatelessMethod).
+    private static void assertListenRefused(HttpResponse<String> r, String expectedId) {
+        assertEquals(200, r.statusCode(), r.body());
         assertTrue(r.headers().firstValue("Content-Type").orElse("").startsWith("application/json"),
                 "a JSON answer, not an event stream: " + r.headers().map());
         JsonObject body = new JsonObject(r.body());
@@ -156,7 +152,7 @@ class McpListenLimitTest {
         HttpResponse<String> r = sendWithDeadline(
                 statelessPost("subscriptions/listen", statelessListen("\"listen-7\"")).build(), DEADLINE_MS);
         long elapsedMs = (System.nanoTime() - start) / 1_000_000;
-        assertListenRefused(r, STATELESS_REFUSED, "listen-7");
+        assertListenRefused(r, "listen-7");
         assertTrue(elapsedMs < DEADLINE_MS, "took " + elapsedMs + " ms");
     }
 
@@ -167,7 +163,7 @@ class McpListenLimitTest {
                 {"jsonrpc":"2.0","id":42,"method":"subscriptions/listen",
                  "params":{"notifications":{"toolsListChanged":true}}}
                 """).build(), DEADLINE_MS);
-        assertListenRefused(r, SESSION_REFUSED, "42");
+        assertListenRefused(r, "42");
         assertEquals(session, r.headers().firstValue("Mcp-Session-Id").orElse(null));
     }
 
@@ -181,12 +177,12 @@ class McpListenLimitTest {
                 {"jsonrpc":"2.0","id":43,"method":"subscriptions\\/listen",
                  "params":{"notifications":{"toolsListChanged":true}}}
                 """).build(), DEADLINE_MS);
-        assertListenRefused(r, SESSION_REFUSED, "43");
+        assertListenRefused(r, "43");
         HttpResponse<String> unicode = sendWithDeadline(sessionPost(session, """
                 {"jsonrpc":"2.0","id":44,"method":"subscriptions\\u002flisten",
                  "params":{"notifications":{"toolsListChanged":true}}}
                 """).build(), DEADLINE_MS);
-        assertListenRefused(unicode, SESSION_REFUSED, "44");
+        assertListenRefused(unicode, "44");
     }
 
     @Test
@@ -521,34 +517,34 @@ class McpListenLimitTest {
         HttpResponse<String> r = sendWithDeadline(post("""
                 {"jsonrpc":"2.0","id":45,"params":{"notifications":{}}}
                 """).header("Mcp-Method", "subscriptions/listen").build(), DEADLINE_MS);
-        assertListenRefused(r, SESSION_REFUSED, "45");
+        assertListenRefused(r, "45");
     }
 
     @Test
     void listenHeaderWithABodyThatIsNotJsonIsAnsweredAtOnce() throws Exception {
         HttpResponse<String> r = sendWithDeadline(post("not json {")
                 .header("Mcp-Method", "subscriptions/listen").build(), DEADLINE_MS);
-        assertListenRefused(r, SESSION_REFUSED, "null");
+        assertListenRefused(r, "null");
     }
 
-    // 2.16.1: a well-formed stateless listen is 404 on every path the filter
-    // answers. Without a JSON body only the MCP-Protocol-Version header can
-    // say the request is stateless.
+    // A well-formed stateless listen is refused the same way on every path the
+    // filter answers. Without a JSON body only the MCP-Protocol-Version header
+    // can say the request is stateless.
     @Test
-    void statelessListenIsNotFoundOnEveryPath() throws Exception {
+    void statelessListenIsRefusedOnEveryPath() throws Exception {
         HttpResponse<String> notJson = sendWithDeadline(statelessPost("subscriptions/listen", "not json {")
                 .build(), DEADLINE_MS);
-        assertListenRefused(notJson, STATELESS_REFUSED, "null");
+        assertListenRefused(notJson, "null");
 
         HttpResponse<String> headerOnly = sendWithDeadline(statelessPost("subscriptions/listen", """
                 {"jsonrpc":"2.0","id":46,"params":{"notifications":{}}}
                 """).build(), DEADLINE_MS);
-        assertListenRefused(headerOnly, STATELESS_REFUSED, "46");
+        assertListenRefused(headerOnly, "46");
     }
 
     // Review of 2.16.1: a listen whose protocol version headers are wrong is
     // refused as extension 2.1.0 refuses any other method with the same
-    // headers, with 400, and not as a listen (404 or 200). The listen still
+    // headers, with 400, and not as a listen (200 with -32601). The listen still
     // never reaches the extension: the filter writes the answer, and this
     // test compares it, status and body, with the extension's own answer to
     // a method that does not exist. If an upgrade changes the extension's
@@ -589,24 +585,27 @@ class McpListenLimitTest {
         }
     }
 
-    // 2.16.1: with well-formed stateless headers, the listen the filter
-    // refuses and a method the extension does not implement answer the same
-    // HTTP status. With wrong version headers both answer 400
+    // 2.17.0: a deliberate difference from the 2026-07-28 spec, pinned. A
+    // stateless method the server does not implement is HTTP 404 (the
+    // extension, since 2.1.0, #1081), and 2.16.1 answered the listen the same
+    // way. The listen goes back to 200 (the filter), with the same -32601
+    // body: Claude Code 2.1.331 sends subscriptions/listen on connect, and it
+    // logs a 404 on it as a dropped connection ("HTTP connection dropped",
+    // "Connection error: Error POSTing to endpoint") and closes "with errors",
+    // where a 200 is read as "listen not offered" and the connection closes
+    // cleanly. With wrong version headers both answer 400
     // (listenWithWrongVersionHeadersIsRefusedLikeAnyOtherMethod).
     @Test
-    void statelessListenAnswersLikeAnUnknownStatelessMethod() throws Exception {
+    void statelessListenIsRefusedWith200UnlikeAnUnknownStatelessMethod() throws Exception {
         HttpResponse<String> listen = sendWithDeadline(
                 statelessPost("subscriptions/listen", statelessListen("50")).build(), DEADLINE_MS);
         HttpResponse<String> unknown = sendWithDeadline(statelessPost("no/such-method", """
                 {"jsonrpc":"2.0","id":51,"method":"no/such-method","params":{%s}}
                 """.formatted(statelessMeta())).build(), DEADLINE_MS);
+        assertEquals(404, unknown.statusCode(), unknown.body());
         assertEquals(-32601, new JsonObject(unknown.body()).getJsonObject("error").getInteger("code"),
                 unknown.body());
-        assertEquals(-32601, new JsonObject(listen.body()).getJsonObject("error").getInteger("code"),
-                listen.body());
-        assertEquals(unknown.statusCode(), listen.statusCode(),
-                "unknown method: " + unknown.statusCode() + " " + unknown.body()
-                        + "; listen: " + listen.statusCode() + " " + listen.body());
+        assertListenRefused(listen, "50");
     }
 
     @Test
@@ -686,7 +685,7 @@ class McpListenLimitTest {
         HttpResponse<String> r = sendWithDeadline(
                 statelessPost("subscriptions/listen", statelessListen("1")).build(), DEADLINE_MS);
         long elapsedMs = (System.nanoTime() - start) / 1_000_000;
-        assertListenRefused(r, STATELESS_REFUSED, "1");
+        assertListenRefused(r, "1");
         assertTrue(elapsedMs < 1000, "the listen took " + elapsedMs + " ms");
         assertEquals(before + 1, mcpCount());
     }

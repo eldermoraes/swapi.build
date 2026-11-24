@@ -53,6 +53,18 @@ The MCP server publishes an Agent Skill. The answers of the four tools, the
   the read of the `SKILL.md` and `skills/get` (`-32602` for an unknown skill,
   paired with the real one); the native smoke checks `skills/list` and the
   read of the `SKILL.md`.
+- A well-formed stateless `subscriptions/listen` (protocol 2026-07-28)
+  answers HTTP `200` again, with the same `-32601` body, as in the session
+  era and as up to 2.16.0; 2.16.1 is the only version that answered it
+  `404`. Claude Code 2.1.331 sends the listen on connect and tries three
+  times: against the `404` it logged each attempt as a dropped connection
+  and closed the server "with errors", against the `200` it reads "not
+  offered" and closes cleanly (tools worked in both cases). This departs on
+  purpose from the 2026-07-28 specification, which gives a stateless method
+  the server does not implement `404`, for this one method: any other such
+  method, the stateless `resources/subscribe` among them, still answers
+  `404`, and a listen with wrong version headers still gets `400`. The
+  deploy and native-smoke probes expect the `200`.
 
 ## [2.16.1] - 2026-11-24
 

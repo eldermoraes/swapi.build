@@ -877,16 +877,19 @@ mcp_stateless() {
     -d '{"jsonrpc":"2.0","id":1,"method":"'"$method"'","params":{'"$params${params:+,}$STATELESS_META"'}}'
 }
 # 2.12.0 left this stream open with no limit; the curl must end on its own.
-# 2.16.1: a stateless method the server does not offer answers HTTP 404 with
-# the -32601 body (spec 2026-07-28; extension 2.1.0 for every other method,
-# McpTransportFilter for the listen). Up to 2.16.0 both were 200.
+# The listen answers HTTP 200 with the -32601 body, as in a session (2.17.0).
+# 2.16.1 alone answered it 404, as the 2026-07-28 spec gives a stateless
+# method the server does not implement; Claude Code 2.1.331 reads that 404 as
+# a dropped connection, so McpTransportFilter departs from the spec on purpose.
+# The stateless subscribe goes on to extension 2.1.0: 404 from 2.16.1 on (200
+# up to 2.16.0).
 resp=$(mcp_stateless subscriptions/listen '"notifications":{"toolsListChanged":true}' '' 5 status); rc=$?
 code=$(printf '%s\n' "$resp" | tail -1); resp=$(printf '%s\n' "$resp" | sed '$d')
-if [ "$rc" = "0" ] && [ "$code" = "404" ] && printf '%s' "$resp" | grep -qF '"code":-32601' \
+if [ "$rc" = "0" ] && [ "$code" = "200" ] && printf '%s' "$resp" | grep -qF '"code":-32601' \
    && printf '%s' "$resp" | grep -qF 'subscriptions/listen'; then
-  pass "MCP subscriptions/listen answered at once: 404, -32601"
+  pass "MCP subscriptions/listen answered at once: 200, -32601"
 else
-  fail "MCP subscriptions/listen" "curl ends within 5 s, 404 with -32601 citing subscriptions/listen" \
+  fail "MCP subscriptions/listen" "curl ends within 5 s, 200 with -32601 citing subscriptions/listen" \
     "curl exit $rc, HTTP $code, $(printf '%s' "$resp" | head -c 160)"
 fi
 resp=$(mcp_stateless resources/subscribe '"uri":"swapi://people/1"' '' 90 status)
@@ -916,9 +919,8 @@ if [ -z "$SESSION_ERA_SID" ]; then
   fail "MCP session listen and subscribe" "session id issued on initialize 2025-11-25" \
     "none (guard: probes NOT executed)"
 else
-  # 2.16.1: the status depends on the era. In a session it stays 200 (404 is
-  # the stateless answer; a session-era client could take a 404 for a lost
-  # session).
+  # 200 in a session, as stateless (a session-era client could take a 404
+  # for a lost session).
   resp=$(mcp_session '{"jsonrpc":"2.0","id":42,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true}}}' 5 status); rc=$?
   code=$(printf '%s\n' "$resp" | tail -1); resp=$(printf '%s\n' "$resp" | sed '$d')
   if [ "$rc" = "0" ] && [ "$code" = "200" ] && printf '%s' "$resp" | grep -qF '"code":-32601' \

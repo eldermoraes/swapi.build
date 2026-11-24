@@ -290,10 +290,13 @@ toolchain, a CLI); it closes the moved-tag path only.
   served (200); `GET /mcp` is 405; `GET /mcp/sse` is 404 (legacy transport
   rejected); `POST /mcp/messages/*` is 404 with a JSON body citing `/mcp`.
 - **MCP listen, subscribe and extension 2.1.0 (2.12.1+; the statuses below
-  need 2.16.1+)**: a stateless
+  need 2.17.0+)**: a stateless
   `subscriptions/listen` under `curl --max-time 5` ends on its own with HTTP
-  `404` and `-32601` citing `subscriptions/listen` (up to 2.12.0 it stayed open
-  with no limit; up to 2.16.0 the status was `200`); a session listen with the
+  `200` and `-32601` citing `subscriptions/listen` (up to 2.12.0 it stayed open
+  with no limit; 2.16.1 alone answered `404`, as the 2026-07-28 spec gives a
+  stateless method the server does not implement, and 2.17.0 departs from the
+  spec on purpose because Claude Code 2.1.331 reads that `404` as a dropped
+  connection); a session listen with the
   method only in the body (no `Mcp-Method`) ends the same way, with `200`,
   which the probe checks too (the body `method` wins over the header; neither
   opens a stream); a
@@ -395,7 +398,7 @@ applied there and verified with the probe on 2026-10-26 (18:25 BRT).
 |---|---|
 | 404 `Mcp session not found` on a stateful MCP call | `quarkus.mcp.server.http.streamable.auto-init=true` is off in the running version. It serves an unknown session id with a throwaway session (introduced for Vercel's lack of session affinity; on the single host it keeps clients working across restarts). |
 | A `subscriptions/listen` on `/mcp` stays open (an SSE stream that never ends) | Must not happen from 2.12.1 on: `McpTransportFilter` answers it at once with `-32601`, and the listen probe reads `FAIL` otherwise. The running version is 2.12.0 or older, or the filter stopped reading the body (it does so before the extension's route: `McpListenLimitTest`). Roll back (see [5. Rollback](#5-rollback)) or redeploy 2.12.1+. |
-| The listen or the stateless `resources/subscribe` probe reads `FAIL` with `HTTP 200` (expected `404`), and nothing stays open | Not the stream defect: the binary is 2.16.0 or older, which answers both at once with `200`, and the script is from 2.16.1+. The versions of the script and of the binary do not match: a deploy that did not take, or a rollback probed with the script of `main`. Check `readlink /opt/swapi/current` and run the `verify-deploy.sh` of the tag that is live. The reverse (a session listen `FAIL` with `HTTP 404`) is a defect in `McpTransportFilter`: roll back. |
+| The stateless listen probe reads `FAIL` with `HTTP 404` (expected `200`), or the stateless `resources/subscribe` probe reads `FAIL` with `HTTP 200` (expected `404`), and nothing stays open | Not the stream defect: the versions of the script and of the binary do not match, a deploy that did not take or a rollback probed with the script of `main`. 2.16.1 is the one version whose stateless listen answers `404`: a listen `FAIL` with `HTTP 404` is a 2.16.1 binary probed with a 2.17.0+ script, and a listen `FAIL` with `HTTP 200` (expected `404`) is a 2.17.0+ binary (or 2.16.0 or older) probed with the 2.16.1 script. The stateless subscribe still expects `404` from 2.16.1 on (extension 2.1.0); a `200` there is a 2.16.0 or older binary. Check `readlink /opt/swapi/current` and run the `verify-deploy.sh` of the tag that is live. A session listen `FAIL` with `HTTP 404` is a defect in `McpTransportFilter`: roll back. |
 | 202 responses from the API | Legacy quirk retired 2026-08-01 — current builds return 200; a 202 means a very old binary is live. |
 | The OpenAPI version probe fails right after a deploy | The host still runs the previous version: `swapi-update` failed, or the probe ran against a tag other than the deployed one. Read the `deploy` job log; on the host, `readlink /opt/swapi/current`. |
 | A file from `public/` or an asset answers 404 from 2.9.1 on | Its path has no dot in the last segment and is not under `/assets/`, so `SeoRoutes` treats it as a page and, not knowing it, answers the not-found document. Every new file in `public/` needs an extension. |
