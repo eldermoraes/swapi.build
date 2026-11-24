@@ -36,31 +36,40 @@ import java.util.Optional;
  * This server sends no notifications: the data never changes. So nothing that
  * opens or feeds a server->client stream has anything to deliver, and the
  * answers below do not depend on the session existing. Two requests are
- * answered here because the extension would otherwise keep state per request
+ * answered here because the extension would otherwise keep state for nothing
  * (2.12.1):
  * - subscriptions/listen (spec 2026-07-28, served by the extension in every
- *   protocol version): the extension opens an SSE stream with no time limit
- *   and no count, so anyone could hold hundreds open. Answered at once with
- *   -32601, the code the extension uses for a method that is not available.
+ *   protocol version): the extension (still in 2.1.0) opens an SSE stream
+ *   with no time limit and no count, so anyone could hold hundreds open.
+ *   Answered at once with -32601, the code the extension uses for a method
+ *   that is not available, under the HTTP status the extension gives that
+ *   code (2.16.1, D1): 404 when the request is stateless, as the 2026-07-28
+ *   spec says for a method the server does not implement (the extension does
+ *   so since 2.1.0, quarkus-mcp-server #1081), 200 in the session era.
  * - resources/subscribe and resources/unsubscribe with a session (up to
- *   2025-11-25): the extension appends one subscriber per request to a list
- *   per URI that is never cleaned when the session dies, and auto-init gives
- *   every request a new session. Answered without keeping anything, with or
+ *   2025-11-25): the extension records a subscriber that will never get a
+ *   notification. Since 2.1.0 (#1154) it keeps one entry per connection and
+ *   URI and drops a connection's entries when the connection closes, so a
+ *   throwaway auto-init session leaves none behind; up to 2.0.x it appended
+ *   one per request to a list never cleaned. What is left is a genuine
+ *   session's entries, kept for nothing until its idle timeout or DELETE.
+ *   Answered without keeping anything, with or
  *   without Mcp-Session-Id: {} for a registered resource (2.13.0+, the records
  *   of SwapiResources), -32002 for any other URI, as the extension answers.
  *   Only when the extension would have handled them (supported protocol
  *   version, Accept); otherwise its 400 stands. The stateless era
- *   goes on to the extension, which already refuses them with -32601 without
- *   keeping anything.
+ *   goes on to the extension, which refuses them with -32601 (HTTP 404 since
+ *   2.1.0) without keeping anything.
  *
  * A JSON array (a JSON-RPC batch) is answered here too, always the same way:
  * 400 with -32600, without looking inside it (issue #70). The extension
- * (2.0.3) refuses an array on its own, but only as a side effect: it casts the
- * decoded body to a JSON object inside a try and answers the failed cast as a
- * parse error (200, -32700), before any session or stream (or, without the
- * Accept the transport requires, a bare 400 before that). That is not a
- * contract. A version that accepted batches would serve a subscriptions/listen
- * inside one with an open stream, so no array goes on to the extension, and
+ * (2.0.3, unchanged in 2.1.0) refuses an array on its own, but only as a side
+ * effect: it casts the decoded body to a JSON object inside a try and answers
+ * the failed cast as a parse error (200, -32700), before any session or stream
+ * (or, without the Accept the transport requires, a bare 400 before that).
+ * That is not a contract. A version that accepted batches would serve a
+ * subscriptions/listen inside one with an open stream, so no array goes on to
+ * the extension, and
  * McpListenLimitTest.theExtensionItselfStillRefusesABatch fails the day this
  * guard stops being a second lock and becomes the only one.
  *
@@ -160,10 +169,11 @@ public class McpTransportFilter {
             // of the map, closes the connection (a status flip), cancels its
             // ping timer if any and drops its pending cancellations: all in
             // memory, no I/O, fine on the event loop.
-            // The extension's own DELETE (2.0.3, terminateSession) is not
-            // used on purpose: it answers 200 for a known id, 404 for any
-            // other and 405 with a stateless MCP-Protocol-Version, and it logs
-            // the id the client sent. Nothing is logged here.
+            // The extension's own DELETE (terminateSession, the same in 2.0.3
+            // and 2.1.0) is not used on purpose: it answers 200 for a known
+            // id, 404 for any other and 405 with a stateless
+            // MCP-Protocol-Version, and it logs the id the client sent.
+            // Nothing is logged here.
             // ConnectionManager is an internal of the extension:
             // McpDeleteSessionTest fails if an upgrade changes what this does.
             String session = rc.request().getHeader(SESSION_HEADER);
@@ -203,7 +213,7 @@ public class McpTransportFilter {
             Object id = request.getValue("id");
             String method = request.getValue("method") instanceof String s ? s : null;
             if (LISTEN.equals(method) || (method == null && LISTEN.equals(headerMethod))) {
-                end(rc, 200, error(id, METHOD_NOT_FOUND, LISTEN_NOT_OFFERED));
+                end(rc, listenStatus(isStateless(rc, request)), error(id, METHOD_NOT_FOUND, LISTEN_NOT_OFFERED));
                 return;
             }
             if ((SUBSCRIBE.equals(method) || UNSUBSCRIBE.equals(method)) && isSessionRequest(rc, request)) {
@@ -211,11 +221,17 @@ public class McpTransportFilter {
                 return;
             }
         } else if (LISTEN.equals(headerMethod)) {
-            // Not JSON, but the header says listen: never open a stream.
-            end(rc, 200, error(null, METHOD_NOT_FOUND, LISTEN_NOT_OFFERED));
+            // Not JSON, but the header says listen: never open a stream. With
+            // no body to read, only the header can say it is stateless.
+            end(rc, listenStatus(hasStatelessHeader(rc)), error(null, METHOD_NOT_FOUND, LISTEN_NOT_OFFERED));
             return;
         }
         rc.next();
+    }
+
+    // D1 (2.16.1): the HTTP status the extension gives -32601 in each era.
+    private static int listenStatus(boolean stateless) {
+        return stateless ? 404 : 200;
     }
 
     // A resource this server registered (none in 2.12.1) -> empty result, the
@@ -237,11 +253,11 @@ public class McpTransportFilter {
     // a supported (or absent) MCP-Protocol-Version and the Accept the
     // transport requires. With a bad version or Accept the extension answers
     // 400, and in the stateless era -32601; none records a subscriber or opens
-    // a stream, so those go on to it. The 400 for the Accept comes before any
-    // session exists. The 400 for the version does not (extension 2.0.3,
-    // issue #45): without a session id, or with one the process does not know,
-    // the session is created first and stays in the heap until
-    // quarkus.mcp.server.connection-idle-timeout (McpSessionIdleTimeoutTest).
+    // a stream, so those go on to it. Both 400s come before any session
+    // exists: since extension 2.1.0 the version is checked before the session
+    // lookup (up to 2.0.3 a request without a known session id got a session
+    // first, left to quarkus.mcp.server.connection-idle-timeout, issue #45,
+    // McpSessionIdleTimeoutTest).
     // Without Mcp-Session-Id the extension does NOT answer 400: auto-init
     // creates a session for the request and would record the subscriber like
     // any other, so that case is answered here too.
@@ -267,17 +283,24 @@ public class McpTransportFilter {
         return false;
     }
 
-    // The extension's rule (StreamableHttpMcpMessageHandler.isStatelessRequest):
-    // a stateless MCP-Protocol-Version header, or a stateless version in _meta.
+    // The extension's rule (StreamableHttpMcpMessageHandler.isStatelessRequest,
+    // the same in 2.0.3 and 2.1.0): a stateless MCP-Protocol-Version header, or
+    // a stateless version in _meta. The extension also takes server/discover
+    // as stateless and initialize as not, whatever the version; the filter
+    // asks only about listen and subscribe, where neither applies.
     private static boolean isStateless(RoutingContext rc, JsonObject request) {
-        String header = rc.request().getHeader(PROTOCOL_HEADER);
-        if (header != null && McpProtocolVersion.isStateless(header)) {
+        if (hasStatelessHeader(rc)) {
             return true;
         }
         JsonObject params = request.getValue("params") instanceof JsonObject p ? p : null;
         JsonObject meta = params != null && params.getValue("_meta") instanceof JsonObject m ? m : null;
         String version = meta != null && meta.getValue(META_PROTOCOL_VERSION) instanceof String s ? s : null;
         return version != null && McpProtocolVersion.isStateless(version);
+    }
+
+    private static boolean hasStatelessHeader(RoutingContext rc) {
+        String header = rc.request().getHeader(PROTOCOL_HEADER);
+        return header != null && McpProtocolVersion.isStateless(header);
     }
 
     // Parsed with the same decoder the extension uses, so an escaped method

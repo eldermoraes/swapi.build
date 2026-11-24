@@ -5,8 +5,8 @@ import io.quarkiverse.mcp.server.ResourceManager;
 import io.quarkiverse.mcp.server.ResourceResponse;
 import io.quarkiverse.mcp.server.TextResourceContents;
 import io.quarkiverse.mcp.server.http.runtime.StreamableHttpMcpMessageHandler;
+import io.quarkiverse.mcp.server.runtime.ResourceSubscriptions;
 import io.quarkiverse.mcp.server.runtime.config.McpServersRuntimeConfig;
-import io.quarkus.arc.ClientProxy;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.smallrye.config.SmallRyeConfig;
@@ -18,7 +18,6 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Field;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -37,7 +36,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 2.12.1: swapi.build sends no notifications (the data never changes), but the
  * extension answers subscriptions/listen with an SSE stream that stays open
  * with no time limit, and records one subscriber per resources/subscribe in a
- * list that is never cleaned. McpTransportFilter answers both itself.
+ * list that is never cleaned. McpTransportFilter answers both itself. On
+ * extension 2.1.0 the listen still opens that stream; the subscribers are kept
+ * once per connection and dropped when it closes, and the filter still keeps
+ * them out (see McpTransportFilter).
  *
  * java.net.http with a hard deadline, not rest-assured: on 2.12.0 the listen
  * never ends, and the test must fail by time instead of hanging the build.
@@ -63,6 +65,13 @@ class McpListenLimitTest {
 
     @Inject
     StreamableHttpMcpMessageHandler extensionHandler;
+
+    // Where the extension keeps the subscribers (2.1.0+), by URI. An internal
+    // of the extension (runtime package), like the ConnectionManager the
+    // filter uses: if an upgrade moves it, these tests stop compiling instead
+    // of passing on a map nobody writes to.
+    @Inject
+    ResourceSubscriptions subscriptions;
 
     private static String statelessMeta() {
         return """
@@ -124,8 +133,15 @@ class McpListenLimitTest {
                 .header("MCP-Protocol-Version", SESSION_ERA);
     }
 
-    private static void assertListenRefused(HttpResponse<String> r, String expectedId) {
-        assertEquals(200, r.statusCode());
+    // 2.16.1: a stateless listen is refused with HTTP 404, the status the
+    // 2026-07-28 spec gives a stateless method the server does not implement
+    // (the extension answers every other one so since 2.1.0, #1081); in the
+    // session era it stays 200. Same body either way.
+    private static final int STATELESS_REFUSED = 404;
+    private static final int SESSION_REFUSED = 200;
+
+    private static void assertListenRefused(HttpResponse<String> r, int expectedStatus, String expectedId) {
+        assertEquals(expectedStatus, r.statusCode(), r.body());
         assertTrue(r.headers().firstValue("Content-Type").orElse("").startsWith("application/json"),
                 "a JSON answer, not an event stream: " + r.headers().map());
         JsonObject body = new JsonObject(r.body());
@@ -140,7 +156,7 @@ class McpListenLimitTest {
         HttpResponse<String> r = sendWithDeadline(
                 statelessPost("subscriptions/listen", statelessListen("\"listen-7\"")).build(), DEADLINE_MS);
         long elapsedMs = (System.nanoTime() - start) / 1_000_000;
-        assertListenRefused(r, "listen-7");
+        assertListenRefused(r, STATELESS_REFUSED, "listen-7");
         assertTrue(elapsedMs < DEADLINE_MS, "took " + elapsedMs + " ms");
     }
 
@@ -151,7 +167,7 @@ class McpListenLimitTest {
                 {"jsonrpc":"2.0","id":42,"method":"subscriptions/listen",
                  "params":{"notifications":{"toolsListChanged":true}}}
                 """).build(), DEADLINE_MS);
-        assertListenRefused(r, "42");
+        assertListenRefused(r, SESSION_REFUSED, "42");
         assertEquals(session, r.headers().firstValue("Mcp-Session-Id").orElse(null));
     }
 
@@ -165,12 +181,12 @@ class McpListenLimitTest {
                 {"jsonrpc":"2.0","id":43,"method":"subscriptions\\/listen",
                  "params":{"notifications":{"toolsListChanged":true}}}
                 """).build(), DEADLINE_MS);
-        assertListenRefused(r, "43");
+        assertListenRefused(r, SESSION_REFUSED, "43");
         HttpResponse<String> unicode = sendWithDeadline(sessionPost(session, """
                 {"jsonrpc":"2.0","id":44,"method":"subscriptions\\u002flisten",
                  "params":{"notifications":{"toolsListChanged":true}}}
                 """).build(), DEADLINE_MS);
-        assertListenRefused(unicode, "44");
+        assertListenRefused(unicode, SESSION_REFUSED, "44");
     }
 
     @Test
@@ -260,9 +276,9 @@ class McpListenLimitTest {
     // hands a batch to the extension's POST handler behind a route of its
     // own, setting the server name as the extension's route does before it
     // calls the same handler (HttpMcpServerRecorder; that wrapper is not
-    // reachable from here, so a batch split there would not be seen). In
-    // 2.0.3 the handler casts the decoded body to JsonObject inside its try,
-    // so any array is answered as a parse error (200, -32700) before a
+    // reachable from here, so a batch split there would not be seen). From
+    // 2.0.3 to 2.1.0 the handler casts the decoded body to JsonObject inside
+    // its try, so any array is answered as a parse error (200, -32700) before a
     // session or a stream exists: today the guard is a second lock. If the
     // batch part fails, an upgraded extension started to accept batches: a
     // subscriptions/listen inside one would open a stream with no limit, the
@@ -323,14 +339,17 @@ class McpListenLimitTest {
     }
 
     // Guard: on the stateless era the extension already refuses subscribe
-    // without keeping anything (conferred on production, 27/10).
+    // without keeping anything (conferred on production, 27/10). Since 2.16.1
+    // (extension 2.1.0, quarkus-mcp-server #1081) a stateless method the
+    // server does not implement answers HTTP 404 with the same -32601 body,
+    // as the 2026-07-28 spec says; it was 200.
     @Test
     void statelessSubscribeIsMethodNotFound() throws Exception {
         HttpResponse<String> r = sendWithDeadline(statelessPost("resources/subscribe", """
                 {"jsonrpc":"2.0","id":5,"method":"resources/subscribe",
                  "params":{"uri":"swapi://people/1",%s}}
                 """.formatted(statelessMeta())).build(), DEADLINE_MS);
-        assertEquals(200, r.statusCode(), r.body());
+        assertEquals(404, r.statusCode(), r.body());
         JsonObject body = new JsonObject(r.body());
         assertEquals(-32601, body.getJsonObject("error").getInteger("code"), r.body());
         assertTrue(body.getJsonObject("error").getString("message").contains("stateless"), r.body());
@@ -360,9 +379,9 @@ class McpListenLimitTest {
     // still leaves nothing in the extension's subscriber map.
     @Test
     void sessionSubscribeToAKnownUriSucceedsWithoutState() throws Exception {
-        Map<?, ?> subscribers = subscribers();
+        java.util.List<String> uris = java.util.List.of("swapi://people/1", "swapi://films");
         String session = openSession();
-        for (String uri : java.util.List.of("swapi://people/1", "swapi://films")) {
+        for (String uri : uris) {
             HttpResponse<String> r = sendWithDeadline(sessionPost(session, """
                     {"jsonrpc":"2.0","id":14,"method":"resources/subscribe","params":{"uri":"%s"}}
                     """.formatted(uri)).build(), DEADLINE_MS);
@@ -371,14 +390,20 @@ class McpListenLimitTest {
             assertEquals(new JsonObject(), body.getJsonObject("result"), r.body());
             assertEquals(14, body.getInteger("id"));
         }
-        assertTrue(subscribers.isEmpty(), "the extension recorded subscribers for " + subscribers.keySet());
+        for (String uri : uris) {
+            assertEquals(java.util.Set.of(), subscriptions.subscribers(uri),
+                    "the extension recorded subscribers for " + uri);
+        }
     }
 
-    // The state itself, not a log line: ResourceManagerImpl keeps the
-    // subscribers in uriToSubscribers (a map per URI, never cleaned when the
-    // session dies). The extension only records a subscriber for a resource it
-    // knows; the test registers its own for the duration (2.12.1 had none):
-    // without the filter, 100 subscribes would leave 100 ids there.
+    // The state itself, not a log line: ResourceSubscriptions keeps the
+    // subscribers per URI. Since extension 2.1.0 (quarkus-mcp-server #1154) it
+    // records a connection once per URI and drops a connection's entries when
+    // the connection closes; up to 2.0.x it appended one id per subscribe and
+    // never cleaned them. The extension only records a subscriber for a
+    // resource it knows; the test registers its own for the duration (2.12.1
+    // had none). Without the filter, the subscribes with the session leave
+    // that session's id there until the session goes.
     @Test
     void sessionSubscribeKeepsNoState() throws Exception {
         String uri = "swapi://test/keeps-no-state";
@@ -388,7 +413,6 @@ class McpListenLimitTest {
                 .setHandler(args -> new ResourceResponse(TextResourceContents.create(uri, "x")))
                 .register();
         try {
-            Map<?, ?> subscribers = subscribers();
             String session = openSession();
             for (int i = 0; i < 100; i++) {
                 String method = i % 10 == 9 ? "resources/unsubscribe" : "resources/subscribe";
@@ -406,31 +430,20 @@ class McpListenLimitTest {
                 assertEquals(new JsonObject(), body.getJsonObject("result"), r.body());
                 assertEquals(100 + i, body.getInteger("id"));
             }
-            assertTrue(subscribers.isEmpty(), "the extension recorded subscribers for "
-                    + subscribers.keySet() + ": " + subscribers.values().stream()
-                            .mapToInt(ids -> ((java.util.List<?>) ids).size()).sum() + " ids");
+            assertEquals(java.util.Set.of(), subscriptions.subscribers(uri),
+                    "the extension recorded subscribers for " + uri);
         } finally {
             resources.removeResource(uri);
         }
     }
 
-    private Map<?, ?> subscribers() throws Exception {
-        Object manager = ClientProxy.unwrap(resources);
-        Field field = manager.getClass().getDeclaredField("uriToSubscribers");
-        field.setAccessible(true);
-        Object value = field.get(manager);
-        assertNotNull(value, "ResourceManagerImpl.uriToSubscribers");
-        return (Map<?, ?>) value;
-    }
-
     // The filter only answers a subscribe the extension would have handled.
     // With an unsupported protocol version or without the required Accept,
     // the extension answers 400 itself, as before 2.12.1, records no
-    // subscriber and opens nothing. Only the Accept is refused before any
-    // session exists. A bad version is refused after the session lookup: with
-    // the real session id these tests send nothing new is created, but
-    // without one (or with an unknown one) extension 2.0.3 creates a session
-    // and leaves it to the idle timeout (issue #45,
+    // subscriber and opens nothing. Since extension 2.1.0 both are refused
+    // before any session exists; up to 2.0.3 a bad version was refused after
+    // the session lookup, and without a session id (or with an unknown one)
+    // the session it created was left to the idle timeout (issue #45,
     // McpSessionIdleTimeoutTest.sessionsLeftByRefusedRequestsAreDropped).
     @Test
     void subscribeWithoutTheRequiredAcceptIsLeftToTheExtension() throws Exception {
@@ -465,14 +478,61 @@ class McpListenLimitTest {
         HttpResponse<String> r = sendWithDeadline(post("""
                 {"jsonrpc":"2.0","id":45,"params":{"notifications":{}}}
                 """).header("Mcp-Method", "subscriptions/listen").build(), DEADLINE_MS);
-        assertListenRefused(r, "45");
+        assertListenRefused(r, SESSION_REFUSED, "45");
     }
 
     @Test
     void listenHeaderWithABodyThatIsNotJsonIsAnsweredAtOnce() throws Exception {
         HttpResponse<String> r = sendWithDeadline(post("not json {")
                 .header("Mcp-Method", "subscriptions/listen").build(), DEADLINE_MS);
-        assertListenRefused(r, "null");
+        assertListenRefused(r, SESSION_REFUSED, "null");
+    }
+
+    // D1 (2.16.1): a stateless listen is 404 on every path the filter answers.
+    // Without a JSON body only the MCP-Protocol-Version header can say the
+    // request is stateless; with one, the header or the version in _meta
+    // (the extension's rule, StreamableHttpMcpMessageHandler.isStatelessRequest).
+    @Test
+    void statelessListenIsNotFoundOnEveryPath() throws Exception {
+        HttpResponse<String> notJson = sendWithDeadline(statelessPost("subscriptions/listen", "not json {")
+                .build(), DEADLINE_MS);
+        assertListenRefused(notJson, STATELESS_REFUSED, "null");
+
+        HttpResponse<String> headerOnly = sendWithDeadline(statelessPost("subscriptions/listen", """
+                {"jsonrpc":"2.0","id":46,"params":{"notifications":{}}}
+                """).build(), DEADLINE_MS);
+        assertListenRefused(headerOnly, STATELESS_REFUSED, "46");
+
+        // Stateless by _meta alone, without the MCP-Protocol-Version header.
+        // The extension would answer 400 (-32020, #1083), but a listen never
+        // reaches it: the filter answers it as the stateless listen it is.
+        HttpResponse<String> metaOnly = sendWithDeadline(post(statelessListen("47")).build(), DEADLINE_MS);
+        assertListenRefused(metaOnly, STATELESS_REFUSED, "47");
+
+        // A session-era version in the header with a stateless _meta: the
+        // extension's rule reads either, so this is stateless too.
+        HttpResponse<String> mixed = sendWithDeadline(post(statelessListen("48"))
+                .header("MCP-Protocol-Version", SESSION_ERA).build(), DEADLINE_MS);
+        assertListenRefused(mixed, STATELESS_REFUSED, "48");
+    }
+
+    // D1 (2.16.1): the listen the filter refuses and a method the extension
+    // does not implement answer the same HTTP status in the stateless era, so
+    // a client cannot tell the filter from the extension by the status.
+    @Test
+    void statelessListenAnswersLikeAnUnknownStatelessMethod() throws Exception {
+        HttpResponse<String> listen = sendWithDeadline(
+                statelessPost("subscriptions/listen", statelessListen("50")).build(), DEADLINE_MS);
+        HttpResponse<String> unknown = sendWithDeadline(statelessPost("no/such-method", """
+                {"jsonrpc":"2.0","id":51,"method":"no/such-method","params":{%s}}
+                """.formatted(statelessMeta())).build(), DEADLINE_MS);
+        assertEquals(-32601, new JsonObject(unknown.body()).getJsonObject("error").getInteger("code"),
+                unknown.body());
+        assertEquals(-32601, new JsonObject(listen.body()).getJsonObject("error").getInteger("code"),
+                listen.body());
+        assertEquals(unknown.statusCode(), listen.statusCode(),
+                "unknown method: " + unknown.statusCode() + " " + unknown.body()
+                        + "; listen: " + listen.statusCode() + " " + listen.body());
     }
 
     @Test
@@ -552,7 +612,7 @@ class McpListenLimitTest {
         HttpResponse<String> r = sendWithDeadline(
                 statelessPost("subscriptions/listen", statelessListen("1")).build(), DEADLINE_MS);
         long elapsedMs = (System.nanoTime() - start) / 1_000_000;
-        assertListenRefused(r, "1");
+        assertListenRefused(r, STATELESS_REFUSED, "1");
         assertTrue(elapsedMs < 1000, "the listen took " + elapsedMs + " ms");
         assertEquals(before + 1, mcpCount());
     }

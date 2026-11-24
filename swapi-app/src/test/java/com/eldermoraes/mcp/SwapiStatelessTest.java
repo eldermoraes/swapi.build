@@ -37,7 +37,7 @@ public class SwapiStatelessTest {
                 .statusCode(200)
                 // 2.12.1 (extension 2.0.3, quarkus-mcp-server PR #1037): the
                 // serverInfo of server/discover moved into _meta, as the
-                // 2026-07-28 schema says.
+                // 2026-07-28 schema says. Still so on extension 2.1.0.
                 .body("result._meta.'io.modelcontextprotocol/serverInfo'.name", equalTo("swapi.build"))
                 .body("result", not(hasKey("serverInfo")))
                 .body("result.ttlMs", equalTo(0))
@@ -163,5 +163,49 @@ public class SwapiStatelessTest {
         } finally {
             client.disconnect();
         }
+    }
+
+    // 2.16.1 (extension 2.1.0, quarkus-mcp-server #1083): a request that is
+    // stateless only by its _meta must also send the MCP-Protocol-Version
+    // header, as the 2026-07-28 server validation rules say; without it the
+    // answer is 400 with -32020 (HeaderMismatch) and the request id, where
+    // 2.16.0 served it. The same request with the header is served.
+    @Test
+    public void statelessRequestWithoutTheProtocolVersionHeaderIsRefused() {
+        String body = """
+                {"jsonrpc":"2.0","id":7,"method":"tools/list","params":{
+                  "_meta":{
+                    "io.modelcontextprotocol/protocolVersion":"2026-07-28",
+                    "io.modelcontextprotocol/clientInfo":{"name":"regression-test","version":"1.0"},
+                    "io.modelcontextprotocol/clientCapabilities":{}
+                  }
+                }}
+                """;
+        given()
+                .contentType("application/json")
+                .accept("application/json, text/event-stream")
+                .header("Mcp-Method", "tools/list")
+                .body(body)
+        .when()
+                .post("/mcp")
+        .then()
+                .statusCode(400)
+                .body("error.code", equalTo(-32020))
+                .body("error.message", org.hamcrest.Matchers.containsStringIgnoringCase("MCP-Protocol-Version"))
+                .body("id", equalTo(7))
+                .body("$", not(hasKey("result")));
+
+        given()
+                .contentType("application/json")
+                .accept("application/json, text/event-stream")
+                .header("Mcp-Method", "tools/list")
+                .header("MCP-Protocol-Version", "2026-07-28")
+                .body(body)
+        .when()
+                .post("/mcp")
+        .then()
+                .statusCode(200)
+                .body("id", equalTo(7))
+                .body("result.tools.name", org.hamcrest.Matchers.hasItem("sw_get"));
     }
 }

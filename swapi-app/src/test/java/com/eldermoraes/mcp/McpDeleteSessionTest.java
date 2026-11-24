@@ -164,8 +164,9 @@ class McpDeleteSessionTest {
     // one whose session was dropped (auto-init), and that request does not
     // bring the session back.
     //
-    // Extension 2.0.3 writes the answer (response.end in HttpMcpRequest.send)
-    // before it removes the throwaway session (handle(...).onComplete in
+    // The extension (2.0.3, unchanged in 2.1.0) writes the answer
+    // (response.end in HttpMcpRequest.send) before it removes the throwaway
+    // session (handle(...).onComplete in
     // StreamableHttpMcpMessageHandler.handleStateful), so right after the
     // response that session can still be in the heap. The test waits a few
     // seconds for it to go: a session really left behind stays past that and
