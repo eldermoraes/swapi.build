@@ -400,6 +400,45 @@ class McpListenLimitTest {
         }
     }
 
+    // 2.17.0: the files of the skill are resources the extension knows, so a
+    // subscribe to one is accepted ({}), with the session and without it, and
+    // recorded nowhere: the files change only with a release, and a client
+    // learns of that from the digests of skills/list, not from a notification.
+    @Test
+    void sessionSubscribeToASkillFileSucceedsWithoutState() throws Exception {
+        java.util.List<String> uris = java.util.List.of("skill://star-wars-research/SKILL.md",
+                "skill://star-wars-research/references/relations.md");
+        String session = openSession();
+        int id = 60;
+        for (String uri : uris) {
+            for (boolean withSession : new boolean[]{true, false}) {
+                String message = """
+                        {"jsonrpc":"2.0","id":%d,"method":"resources/subscribe","params":{"uri":"%s"}}
+                        """.formatted(id, uri);
+                HttpRequest request = withSession
+                        ? sessionPost(session, message).build()
+                        : post(message).header("MCP-Protocol-Version", SESSION_ERA).build();
+                HttpResponse<String> r = sendWithDeadline(request, DEADLINE_MS);
+                assertEquals(200, r.statusCode(), r.body());
+                JsonObject body = new JsonObject(r.body());
+                assertEquals(new JsonObject(), body.getJsonObject("result"), uri + ": " + r.body());
+                assertEquals(id, body.getInteger("id"));
+                id++;
+            }
+        }
+        for (String uri : uris) {
+            assertEquals(java.util.Set.of(), subscriptions.subscribers(uri),
+                    "the extension recorded subscribers for " + uri);
+        }
+        // Pair: a skill URI the server does not serve is not found, as any
+        // other unknown resource.
+        HttpResponse<String> unknown = sendWithDeadline(sessionPost(session, """
+                {"jsonrpc":"2.0","id":70,"method":"resources/subscribe","params":{"uri":"skill://nope/SKILL.md"}}
+                """).build(), DEADLINE_MS);
+        assertEquals(-32002, new JsonObject(unknown.body()).getJsonObject("error").getInteger("code"),
+                unknown.body());
+    }
+
     // The state itself, not a log line: ResourceSubscriptions keeps the
     // subscribers per URI. Since extension 2.1.0 (quarkus-mcp-server #1154) it
     // records a connection once per URI and drops a connection's entries when

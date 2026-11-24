@@ -114,6 +114,10 @@ public class SwapiToolsTest {
         // 2.13.0 (slice F1): the instructions point at the new arguments.
         assertTrue(instructions.contains("expand"), instructions);
         assertTrue(instructions.contains("fields"), instructions);
+        // 2.17.0: the pointer to the skill, for a client that does not list
+        // skills (the extension's "Pointer from Server Instructions").
+        assertTrue(instructions.contains("For questions that take several calls, load the skill "
+                + "skill://star-wars-research/SKILL.md."), instructions);
     }
 
     // 2.13.0 (slice F1): Claude Code saves a tool result over about 50 000

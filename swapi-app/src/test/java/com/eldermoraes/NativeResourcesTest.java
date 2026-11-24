@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class NativeResourcesTest {
 
     @Test
-    void nativeImageIncludesTheDataAndTheSeoFile() throws IOException {
+    void nativeImageIncludesTheDataTheSeoFileAndTheSkill() throws IOException {
         Properties properties = new Properties();
         try (Reader reader = Files.newBufferedReader(
                 Path.of("src/main/resources/application.properties"), StandardCharsets.UTF_8)) {
@@ -33,5 +33,8 @@ class NativeResourcesTest {
         List<String> globs = Arrays.stream(includes.split(",")).map(String::trim).toList();
         assertTrue(globs.contains("data/*.json"), includes);
         assertTrue(globs.contains("seo/*.json"), includes);
+        // 2.17.0: the files of the MCP skill. SwapiSkills reads them at
+        // startup and refuses to start without them.
+        assertTrue(globs.contains("mcp/skills/**"), includes);
     }
 }

@@ -66,7 +66,9 @@ public class SwapiStatelessTest {
         .then()
                 .statusCode(200)
                 .body("result.instructions", containsString("sw_search"))
-                .body("result.instructions", containsString("not an episode number"));
+                .body("result.instructions", containsString("not an episode number"))
+                // 2.17.0: the pointer to the skill.
+                .body("result.instructions", containsString("skill://star-wars-research/SKILL.md"));
     }
 
     // 2.13.0 (slice F1): with resources and a prompt registered, the

@@ -20,7 +20,9 @@
 # Since 2.13.0: sw_get with expand, sw_list with fields, resources/list and
 # resources/read swapi://people/1, prompts/get. Since 2.14.0 (md_probe): the
 # Markdown copies /docs/mcp.md and /resource/films/1.md and /llms-full.txt
-# (## Records, the copies: five since 2.15.0, with /faq and /faq.md). Content only: without Caddy in front,
+# (## Records, the copies: five since 2.15.0, with /faq and /faq.md). Since 2.17.0:
+# skills/list (the skill's URI and a digest) and resources/read of its SKILL.md,
+# the files SwapiSkills reads from mcp/skills/**. Content only: without Caddy in front,
 # the poisoning checks belong to verify-deploy.sh. Also run against the jar and
 # the local native build in the release rehearsal (docs/RELEASE.md).
 set -u
@@ -169,6 +171,18 @@ mcp_probe "MCP resources/read swapi://people/1: Luke Skywalker" resources/read '
 mcp_probe "MCP prompts/get character_profile: Darth Vader" prompts/get \
   '"name":"character_profile","arguments":{"name":"Darth Vader"}' character_profile 20 vader_profile \
   'sw_search and Darth Vader'
+# 2.17.0+: the skill. SwapiSkills reads its files from the classpath at
+# startup, from a fixed list of paths; a native image built without
+# mcp/skills/** in quarkus.native.resources.includes does not start.
+lists_skill() { local b; b=$(cat); [ "$MCP_STATUS" = "200" ] \
+  && printf '%s' "$b" | grep -qF '"uri":"skill://star-wars-research/SKILL.md"' \
+  && printf '%s' "$b" | grep -qE '"digest":"sha256:[0-9a-f]{64}"'; }
+skill_text() { [ "$MCP_STATUS" = "200" ] && grep -qF 'name: star-wars-research'; }
+mcp_probe "MCP skills/list: star-wars-research with a digest" skills/list '' '' 20 lists_skill \
+  'HTTP 200, "uri":"skill://star-wars-research/SKILL.md", "digest":"sha256:<64 hex>"'
+mcp_probe "MCP resources/read skill://star-wars-research/SKILL.md" resources/read \
+  '"uri":"skill://star-wars-research/SKILL.md"' 'skill://star-wars-research/SKILL.md' 20 skill_text \
+  'HTTP 200, name: star-wars-research'
 
 # The branch only the filter has: a 2025-11-25 session, the listen with the
 # method only in the body (no Mcp-Method) and a subscribe that the extension
