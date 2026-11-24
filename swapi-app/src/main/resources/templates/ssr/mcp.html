@@ -59,6 +59,19 @@
       spaces, so use one word there; a full name works in clients that send prompt arguments as JSON.</p>
     </section>
 
+    <section class="mcp-skill">
+      <h2>Skill</h2>
+      <p>The server also publishes an Agent Skill, <code>star-wars-research</code>, through the MCP Skills
+      extension: short instructions for questions that take several calls, such as which tool to start with, which
+      relations <code>expand</code> accepts for each type and which fields <code>fields</code> accepts. It comes
+      with the server, so there is nothing to install. Its two files are resources:
+      <code>skill://star-wars-research/SKILL.md</code> and
+      <code>skill://star-wars-research/references/relations.md</code>.</p>
+      <p>In Claude Code it appears as <code>swapi-build:star-wars-research</code>. Skills from MCP servers need
+      Claude Code v2.1.331 or later and are a beta feature of the client. A client without them still sees the two
+      files as resources, and the server instructions point at the skill.</p>
+    </section>
+
     <section class="mcp-setup">
       <h2>Connect your client</h2>
       <div class="tabs sw-tabs" role="tablist" aria-label="MCP client setup">

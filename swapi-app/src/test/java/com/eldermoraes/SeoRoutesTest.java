@@ -74,6 +74,8 @@ class SeoRoutesTest {
         Assertions.assertTrue(body.contains("fields"), body);
         Assertions.assertTrue(body.contains("swapi://people/1"), body);
         Assertions.assertTrue(body.contains("character_profile"), body);
+        // 2.17.0: and the skill, by its URI.
+        Assertions.assertTrue(body.contains("skill://star-wars-research/SKILL.md"), body);
         Assertions.assertFalse(body.contains("<resource>"), body);
     }
 

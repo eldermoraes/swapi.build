@@ -197,8 +197,26 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   per record `swapi://<type>/<id>`, registered at startup so `resources/list`
   (one page, `quarkus.mcp.server.resources.page-size=300`) feeds the `@`
   picker of Claude Code, plus six templates that take only the canonical id.
-  One prompt, `character_profile` (`SwapiPrompts`). Every tool and resource
-  read sets and restores `RequestBaseUrl` through `SwapiTools.withBaseUrl`.
+  One prompt, `character_profile` (`SwapiPrompts`). Every tool and record
+  resource read sets and restores `RequestBaseUrl` through
+  `SwapiTools.withBaseUrl`. One skill (2.17.0+), `star-wars-research`, through
+  the extension `io.modelcontextprotocol/skills` (`SwapiSkillsExtension`, no
+  `directoryRead`): `skills/list` (one page, a `cursor` is `-32602`) and
+  `skills/get` (only `skill://star-wars-research/SKILL.md`; any other URI is
+  `-32602`), `ttlMs` 300000 and `cacheScope` `public`. Its two files
+  (`mcp/skills/star-wars-research/`, `SKILL.md` and `references/relations.md`)
+  are concrete `text/markdown` resources in `resources/list` (268 entries),
+  read by `SwapiSkills` at startup from a fixed list of paths
+  (`mcp/skills/**` in `quarkus.native.resources.includes`); the manifest's
+  size and digest come from the same bytes `resources/read` serves, and the
+  boot fails on a frontmatter other than a plain `name` and `description`.
+  The server instructions point at the skill URI. `SwapiSkillsTest` checks
+  what a client checks (size, SHA-256 and frontmatter of every file);
+  `SwapiSkillsContentTest` fails when `references/relations.md` drifts from
+  `RecordFields.relations` and the fields `fields` accepts. The skill files
+  carry no URL or domain and no count of records, and speak only of this
+  server's four tools. Changing one byte of a skill file asks every user who
+  approved the skill to approve it again: say so in the changelog.
   Structured output (`outputSchema` / `structuredContent`) is postponed on
   purpose: after a rollback, a TypeScript SDK session that kept the schema
   rejects every answer until it reconnects.
