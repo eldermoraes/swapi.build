@@ -15,7 +15,7 @@
 # main_text the deploy probes use). Since 2.12.1, MCP too (mcp_probe): tools/list
 # with the four tools, sw_get PEOPLE 1, subscriptions/listen answered within 5 s
 # with -32601 (McpTransportFilter reads the body: a path new to the native
-# image) and, in a 2025-11-25 session, the listen with the method only in the
+# image; HTTP 404 since 2.16.1) and, in a 2025-11-25 session, the listen with the method only in the
 # body and a resources/subscribe to an unknown URI (-32002), each within 5 s.
 # Since 2.13.0: sw_get with expand, sw_list with fields, resources/list and
 # resources/read swapi://people/1, prompts/get. Since 2.14.0 (md_probe): the
@@ -118,30 +118,37 @@ fi
 
 # 2.12.1+: the MCP endpoint, stateless, one request per check.
 # mcp_probe <label> <method> <params without _meta, or ''> <Mcp-Name or ''> <max s> <check> <expected>
-# The check is a function that reads the body on stdin and returns 0 when it holds.
+# The check is a function that reads the body on stdin and returns 0 when it
+# holds; the HTTP status of the answer is in MCP_STATUS while it runs.
 STATELESS_META='"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"native-smoke","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}'
+MCP_STATUS=""
 mcp_probe() {
   local label="$1" method="$2" params="$3" name="$4" max="$5" check="$6" expected="$7" extra=() resp rc
   [ -n "$name" ] && extra=(-H "Mcp-Name: $name")
-  resp=$(curl -s --max-time "$max" -X POST "$BASE/mcp" \
+  resp=$(curl -s --max-time "$max" -w '\n%{http_code}' -X POST "$BASE/mcp" \
     -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
     -H "Mcp-Method: $method" -H 'MCP-Protocol-Version: 2026-07-28' ${extra[@]+"${extra[@]}"} \
     -d '{"jsonrpc":"2.0","id":1,"method":"'"$method"'","params":{'"$params${params:+,}$STATELESS_META"'}}')
   rc=$?
+  MCP_STATUS="${resp##*$'\n'}"; resp="${resp%$'\n'*}"
   if [ "$rc" = "0" ] && printf '%s' "$resp" | "$check"; then
     pass "$label"
   else
-    fail "$label" "$expected" "curl exit $rc, $(printf '%s' "$resp" | head -c 160)"
+    fail "$label" "$expected" "curl exit $rc, HTTP $MCP_STATUS, $(printf '%s' "$resp" | head -c 160)"
   fi
 }
 four_tools() { [ "$(grep -o '"name":"sw_[a-z]*"' | wc -l | tr -d ' ')" = "4" ]; }
 has_luke() { grep -qF 'Luke Skywalker'; }
 listen_refused() { local b; b=$(cat); printf '%s' "$b" | grep -qF '"code":-32601' && printf '%s' "$b" | grep -qF 'subscriptions/listen'; }
+# 2.16.1: stateless, the listen is HTTP 404 with the -32601 body (spec
+# 2026-07-28, as extension 2.1.0 answers any method it does not offer).
+stateless_listen_refused() { [ "$MCP_STATUS" = "404" ] && listen_refused; }
 mcp_probe "MCP tools/list: the four sw_ tools" tools/list '' '' 20 four_tools '4 "name":"sw_..." entries'
 mcp_probe "MCP sw_get PEOPLE 1: Luke Skywalker" tools/call \
   '"name":"sw_get","arguments":{"resource":"PEOPLE","id":1}' sw_get 20 has_luke 'Luke Skywalker'
-mcp_probe "MCP subscriptions/listen answered within 5 s: -32601" subscriptions/listen \
-  '"notifications":{"toolsListChanged":true}' '' 5 listen_refused 'curl ends, -32601 citing subscriptions/listen'
+mcp_probe "MCP subscriptions/listen answered within 5 s: 404, -32601" subscriptions/listen \
+  '"notifications":{"toolsListChanged":true}' '' 5 stateless_listen_refused \
+  'curl ends, HTTP 404, -32601 citing subscriptions/listen'
 # 2.13.0+: expand and fields (RecordExpansion builds its valid fields at
 # startup, JSON-P projects), the resources registered by the ResourceManager
 # at startup, and the prompt: paths new to the native image.

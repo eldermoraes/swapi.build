@@ -289,17 +289,19 @@ toolchain, a CLI); it closes the moved-tag path only.
 - **MCP foreign session and edges**: a session id that never existed is still
   served (200); `GET /mcp` is 405; `GET /mcp/sse` is 404 (legacy transport
   rejected); `POST /mcp/messages/*` is 404 with a JSON body citing `/mcp`.
-- **MCP listen, subscribe and extension 2.0.3 (2.12.1+)**: a stateless
-  `subscriptions/listen` under `curl --max-time 5` ends on its own with
-  `-32601` citing `subscriptions/listen` (up to 2.12.0 it stayed open with no
-  limit); a session listen with the method only in the body (no `Mcp-Method`)
-  ends the same way (the body `method` wins over the header; neither opens a
-  stream); a `resources/subscribe` with `Mcp-Session-Id` answers `-32002` for
+- **MCP listen, subscribe and extension 2.1.0 (2.12.1+)**: a stateless
+  `subscriptions/listen` under `curl --max-time 5` ends on its own with HTTP
+  `404` and `-32601` citing `subscriptions/listen` (up to 2.12.0 it stayed open
+  with no limit; up to 2.16.0 the status was `200`); a session listen with the
+  method only in the body (no `Mcp-Method`) ends the same way, with `200` (the
+  body `method` wins over the header; neither opens a stream); a
+  `resources/subscribe` with `Mcp-Session-Id` answers `-32002` for
   `swapi://people/9999` and `{}` for `swapi://people/1` (2.13.0+), neither
-  recording a subscriber; a stateless `resources/subscribe` answers
-  `-32601`; a body over 256K is `413`; `server/discover` carries
-  `io.modelcontextprotocol/serverInfo` with `swapi.build` in `_meta`
-  (extension 2.0.3).
+  recording a subscriber; a stateless `resources/subscribe` answers HTTP `404`
+  with `-32601` (extension 2.1.0, as for any stateless method the server does
+  not offer; `200` up to 2.16.0); a body over 256K is `413`; `server/discover`
+  carries `io.modelcontextprotocol/serverInfo` with `swapi.build` in `_meta`
+  (since extension 2.0.3).
 - **MCP surface (2.13.0+)**: `server/discover` advertises `resources` and
   `prompts`; `tools/list` has `expand`, `fields` and
   `anthropic/maxResultSizeChars`, with the `required` lists of 2.12.1;
