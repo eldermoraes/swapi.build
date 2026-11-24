@@ -48,6 +48,12 @@ requests.
 - The deploy and native-smoke probes check the HTTP `404` of the stateless
   `subscriptions/listen` and `resources/subscribe`, next to the `-32601`
   body.
+- Load rehearsal on the native binary of this version, in a container
+  (`scripts/mcp-listen-load.sh`), after the native smoke had run: 500
+  concurrent `subscriptions/listen` all answered within 2 s with `-32601`,
+  none open at 30 s, memory flat (186.9 to 187.5 MB, and 187.5 MB after a
+  second run); 20 000 tool calls all `200`, memory not growing (187.5 to
+  174.1 MB). Not compared with a 2.16.0 binary on the same machine.
 
 ## [2.16.0] - 2026-11-12
 
