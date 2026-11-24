@@ -319,6 +319,14 @@ toolchain, a CLI); it closes the moved-tag path only.
   names `sw_search`. Poisoning: `tools/call sw_get` and
   `resources/read swapi://people/1` with `X-Forwarded-Host: evil.example` carry
   the record on `$BASE` and no `evil.example` (only behind Caddy).
+- **MCP skill (2.17.0+)**: `server/discover` advertises
+  `io.modelcontextprotocol/skills` (200); `skills/list` has
+  `"uri":"skill://star-wars-research/SKILL.md"`, a `sha256:` digest and
+  `"cacheScope":"public"` (200); `resources/read` of that URI (with `Mcp-Name`)
+  has `name: star-wars-research` (200); `skills/get` of `skill://nope/SKILL.md`
+  is `-32602` while the same request for the real URI has `"skill":` (the
+  pair). Before 2.17.0 these four fail, and only these. The skill files carry
+  no URL, so no poisoning pair applies to them.
 - **CORS and `Vary: Origin`**: CORS echoes the request `Origin`, so cacheable
   responses (`/api/*`, the SPA HTML and, from 2.9.1, the SEO files `robots.txt`,
   `sitemap.xml` and `llms.txt`) must carry `Vary: Origin`, and a

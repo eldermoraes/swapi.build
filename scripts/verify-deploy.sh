@@ -5,7 +5,8 @@
 # usage: verify-deploy.sh origin <host>    (the self-hosted origin behind Caddy, docs/DEPLOY.md
 #                                           "Self-hosted origin on Oracle Cloud"): REST, OpenAPI, SEO,
 #                                           the site pages and assets, the not-found variants,
-#                                           MCP (stateless, stateful burst, edges), CORS, the
+#                                           MCP (stateless, stateful burst, edges; 2.17.0+: the
+#                                           skill over the Skills extension), CORS, the
 #                                           X-Forwarded-Host / Forwarded poisoning probes, the
 #                                           record addresses (2.10.0+: films indexable with their
 #                                           own canonical and title, 21 sitemap URLs since 2.15.0, no lastmod),
@@ -1057,6 +1058,50 @@ if printf '%s' "$resp" | grep -qF 'sw_search' && printf '%s' "$resp" | grep -qF 
   pass "MCP prompts/get character_profile Darth Vader"
 else
   fail "MCP prompts/get character_profile" 'sw_search and Darth Vader' "$(printf '%s' "$resp" | head -c 160)"
+fi
+
+# --- MCP 2.17.0: the skill star-wars-research (Skills over MCP) ---------------
+# The extension io.modelcontextprotocol/skills: skills/list and skills/get
+# describe the skill, resources/read serves its files. The files carry no URL,
+# so nothing here depends on the host.
+SKILL_URI='skill://star-wars-research/SKILL.md'
+resp=$(mcp_stateless server/discover '' '' 90 status)
+code=$(printf '%s\n' "$resp" | tail -1); resp=$(printf '%s\n' "$resp" | sed '$d')
+if [ "$code" = "200" ] && printf '%s' "$resp" | grep -qF '"io.modelcontextprotocol/skills"'; then
+  pass "MCP server/discover: the skills extension"
+else
+  fail "MCP server/discover skills extension" '200 with "io.modelcontextprotocol/skills"' \
+    "HTTP $code, $(printf '%s' "$resp" | head -c 160)"
+fi
+resp=$(mcp_stateless skills/list '' '' 90 status)
+code=$(printf '%s\n' "$resp" | tail -1); resp=$(printf '%s\n' "$resp" | sed '$d')
+if [ "$code" = "200" ] && printf '%s' "$resp" | grep -qF "\"uri\":\"$SKILL_URI\"" \
+   && printf '%s' "$resp" | grep -qF '"digest":"sha256:' && printf '%s' "$resp" | grep -qF '"cacheScope":"public"'; then
+  pass "MCP skills/list: star-wars-research, digests, cacheScope public"
+else
+  fail "MCP skills/list" "200 with \"uri\":\"$SKILL_URI\", a sha256 digest and \"cacheScope\":\"public\"" \
+    "HTTP $code, $(printf '%s' "$resp" | head -c 160)"
+fi
+resp=$(mcp_stateless resources/read "\"uri\":\"$SKILL_URI\"" "$SKILL_URI" 90 status)
+code=$(printf '%s\n' "$resp" | tail -1); resp=$(printf '%s\n' "$resp" | sed '$d')
+if [ "$code" = "200" ] && printf '%s' "$resp" | grep -qF 'name: star-wars-research'; then
+  pass "MCP resources/read $SKILL_URI: the frontmatter"
+else
+  fail "MCP resources/read $SKILL_URI" '200 with name: star-wars-research' \
+    "HTTP $code, $(printf '%s' "$resp" | head -c 160)"
+fi
+# The -32602 pair: the same request shape, a skill the server does not serve
+# and the one it does.
+bad=$(mcp_stateless skills/get '"uri":"skill://nope/SKILL.md"')
+good=$(mcp_stateless skills/get "\"uri\":\"$SKILL_URI\"" '' 90 status)
+code=$(printf '%s\n' "$good" | tail -1); good=$(printf '%s\n' "$good" | sed '$d')
+if printf '%s' "$bad" | grep -qF '"code":-32602' && ! printf '%s' "$bad" | grep -qF '"skill":' \
+   && [ "$code" = "200" ] && printf '%s' "$good" | grep -qF '"skill":' \
+   && printf '%s' "$good" | grep -qF "\"uri\":\"$SKILL_URI\""; then
+  pass "MCP skills/get: -32602 for skill://nope, the entry for star-wars-research"
+else
+  fail "MCP skills/get" "-32602 for skill://nope/SKILL.md; 200 with \"skill\": for $SKILL_URI" \
+    "nope: $(printf '%s' "$bad" | head -c 100); ours: HTTP $code, $(printf '%s' "$good" | head -c 100)"
 fi
 
 # --- CORS / cache poisoning via Origin --------------------------------------
