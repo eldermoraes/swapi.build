@@ -492,10 +492,9 @@ class McpListenLimitTest {
         assertListenRefused(r, SESSION_REFUSED, "null");
     }
 
-    // 2.16.1: a stateless listen is 404 on every path the filter answers.
-    // Without a JSON body only the MCP-Protocol-Version header can say the
-    // request is stateless; with one, the header or the version in _meta
-    // (the extension's rule, StreamableHttpMcpMessageHandler.isStatelessRequest).
+    // 2.16.1: a well-formed stateless listen is 404 on every path the filter
+    // answers. Without a JSON body only the MCP-Protocol-Version header can
+    // say the request is stateless.
     @Test
     void statelessListenIsNotFoundOnEveryPath() throws Exception {
         HttpResponse<String> notJson = sendWithDeadline(statelessPost("subscriptions/listen", "not json {")
@@ -506,23 +505,55 @@ class McpListenLimitTest {
                 {"jsonrpc":"2.0","id":46,"params":{"notifications":{}}}
                 """).build(), DEADLINE_MS);
         assertListenRefused(headerOnly, STATELESS_REFUSED, "46");
-
-        // Stateless by _meta alone, without the MCP-Protocol-Version header.
-        // The extension would answer 400 (-32020, #1083), but a listen never
-        // reaches it: the filter answers it as the stateless listen it is.
-        HttpResponse<String> metaOnly = sendWithDeadline(post(statelessListen("47")).build(), DEADLINE_MS);
-        assertListenRefused(metaOnly, STATELESS_REFUSED, "47");
-
-        // A session-era version in the header with a stateless _meta: the
-        // extension's rule reads either, so this is stateless too.
-        HttpResponse<String> mixed = sendWithDeadline(post(statelessListen("48"))
-                .header("MCP-Protocol-Version", SESSION_ERA).build(), DEADLINE_MS);
-        assertListenRefused(mixed, STATELESS_REFUSED, "48");
     }
 
-    // 2.16.1: the listen the filter refuses and a method the extension
-    // does not implement answer the same HTTP status in the stateless era, so
-    // a client cannot tell the filter from the extension by the status.
+    // Review of 2.16.1: a listen whose protocol version headers are wrong is
+    // refused as extension 2.1.0 refuses any other method with the same
+    // headers, with 400, and not as a listen (404 or 200). The listen still
+    // never reaches the extension: the filter writes the answer, and this
+    // test compares it, status and body, with the extension's own answer to
+    // a method that does not exist. If an upgrade changes the extension's
+    // answer, this fails and the filter follows.
+    @Test
+    void listenWithWrongVersionHeadersIsRefusedLikeAnyOtherMethod() throws Exception {
+        record Shape(String name, String header, boolean statelessMeta) {
+        }
+        java.util.List<Shape> shapes = java.util.List.of(
+                // stateless by _meta alone: the header is required (#1083)
+                new Shape("no header, stateless _meta", null, true),
+                // the header and the _meta disagree
+                new Shape("session header, stateless _meta", SESSION_ERA, true),
+                // versions the extension does not support, one of them sorting
+                // after 2026-07-28 (a string comparison would call it stateless)
+                new Shape("unsupported header 1999-01-01", "1999-01-01", false),
+                new Shape("unsupported header 2027-01-01", "2027-01-01", true),
+                new Shape("unsupported header latest", "latest", false));
+        for (Shape shape : shapes) {
+            String params = shape.statelessMeta() ? statelessMeta() : "\"x\":1";
+            HttpRequest.Builder listen = post("""
+                    {"jsonrpc":"2.0","id":52,"method":"subscriptions/listen","params":{%s}}
+                    """.formatted(params)).header("Mcp-Method", "subscriptions/listen");
+            HttpRequest.Builder other = post("""
+                    {"jsonrpc":"2.0","id":52,"method":"no/such-method","params":{%s}}
+                    """.formatted(params)).header("Mcp-Method", "no/such-method");
+            if (shape.header() != null) {
+                listen.header("MCP-Protocol-Version", shape.header());
+                other.header("MCP-Protocol-Version", shape.header());
+            }
+            HttpResponse<String> l = sendWithDeadline(listen.build(), DEADLINE_MS);
+            HttpResponse<String> o = sendWithDeadline(other.build(), DEADLINE_MS);
+            assertEquals(400, o.statusCode(), shape.name() + ": the extension, " + o.body());
+            assertEquals(o.statusCode(), l.statusCode(), shape.name() + ": " + l.body());
+            assertEquals(new JsonObject(o.body()), new JsonObject(l.body()), shape.name());
+            assertTrue(l.headers().firstValue("Content-Type").orElse("").startsWith("application/json"),
+                    shape.name() + ": " + l.headers().map());
+        }
+    }
+
+    // 2.16.1: with well-formed stateless headers, the listen the filter
+    // refuses and a method the extension does not implement answer the same
+    // HTTP status. With wrong version headers both answer 400
+    // (listenWithWrongVersionHeadersIsRefusedLikeAnyOtherMethod).
     @Test
     void statelessListenAnswersLikeAnUnknownStatelessMethod() throws Exception {
         HttpResponse<String> listen = sendWithDeadline(

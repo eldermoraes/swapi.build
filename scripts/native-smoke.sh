@@ -179,24 +179,27 @@ sid=$("${CURL[@]}" -D - -o /dev/null -X POST "$BASE/mcp" \
   | tr -d '\r' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
 session_probe() {
   local label="$1" body="$2" check="$3" expected="$4" resp rc
-  resp=$(curl -s --max-time 5 -X POST "$BASE/mcp" \
+  resp=$(curl -s --max-time 5 -w '\n%{http_code}' -X POST "$BASE/mcp" \
     -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
     -H "Mcp-Session-Id: $sid" -H 'MCP-Protocol-Version: 2025-11-25' -d "$body")
   rc=$?
+  MCP_STATUS="${resp##*$'\n'}"; resp="${resp%$'\n'*}"
   if [ "$rc" = "0" ] && printf '%s' "$resp" | "$check"; then
     pass "$label"
   else
-    fail "$label" "$expected" "curl exit $rc, $(printf '%s' "$resp" | head -c 160)"
+    fail "$label" "$expected" "curl exit $rc, HTTP $MCP_STATUS, $(printf '%s' "$resp" | head -c 160)"
   fi
 }
+# 2.16.1: in a session the listen stays HTTP 200 (404 is the stateless answer).
+session_listen_refused() { [ "$MCP_STATUS" = "200" ] && listen_refused; }
 # 2.13.0: swapi://people/1 is a resource; the unknown URI is people/9999.
 not_found() { local b; b=$(cat); printf '%s' "$b" | grep -qF '"code":-32002' && printf '%s' "$b" | grep -qF 'swapi://people/9999'; }
 if [ -z "$sid" ]; then
   fail "MCP session probes" "a session id on initialize 2025-11-25" "none (probes NOT executed)"
 else
-  session_probe "MCP session listen, method only in the body: -32601 within 5 s" \
+  session_probe "MCP session listen, method only in the body: 200, -32601 within 5 s" \
     '{"jsonrpc":"2.0","id":42,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true}}}' \
-    listen_refused 'curl ends, -32601 citing subscriptions/listen'
+    session_listen_refused 'curl ends, HTTP 200, -32601 citing subscriptions/listen'
   session_probe "MCP session resources/subscribe unknown URI: -32002 within 5 s" \
     '{"jsonrpc":"2.0","id":43,"method":"resources/subscribe","params":{"uri":"swapi://people/9999"}}' \
     not_found '-32002 citing swapi://people/9999'

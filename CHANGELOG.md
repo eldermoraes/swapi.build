@@ -37,7 +37,10 @@ requests.
     without the `MCP-Protocol-Version` header, is refused with HTTP `400` and
     `-32020` (it was served), as the 2026-07-28 server validation rules say.
     A client that sends the header, as the specification requires, sees no
-    change.
+    change. A `subscriptions/listen` with wrong version headers gets the
+    same answers as any other method: `400` with `-32020` without the header
+    or when it differs from the `_meta` version, `400` with `-32022` for a
+    version the server does not support.
   - An unsupported `MCP-Protocol-Version` in the session era answers `400`
     with a JSON-RPC error (`-32022`, with the supported versions) before any
     session exists; 2.0.3 answered a bare `400` and, without a known

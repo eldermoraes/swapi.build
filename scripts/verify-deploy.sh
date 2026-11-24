@@ -902,22 +902,30 @@ SESSION_ERA_SID=$("${CURL[@]}" -D - -o /dev/null -X POST "$BASE/mcp" \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"verify-deploy","version":"1.0"}}}' \
   | tr -d '\r' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
+# <body> [max seconds] [status]: with "status" the HTTP status follows the body
+# on a line of its own, as in mcp_stateless.
 mcp_session() {
+  local extra=()
+  [ "${3:-}" = "status" ] && extra=(-w '\n%{http_code}')
   curl -s --max-time "${2:-90}" -X POST "$BASE/mcp" \
     -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-    -H "Mcp-Session-Id: $SESSION_ERA_SID" -H 'MCP-Protocol-Version: 2025-11-25' -d "$1"
+    -H "Mcp-Session-Id: $SESSION_ERA_SID" -H 'MCP-Protocol-Version: 2025-11-25' ${extra[@]+"${extra[@]}"} -d "$1"
 }
 if [ -z "$SESSION_ERA_SID" ]; then
   fail "MCP session listen and subscribe" "session id issued on initialize 2025-11-25" \
     "none (guard: probes NOT executed)"
 else
-  resp=$(mcp_session '{"jsonrpc":"2.0","id":42,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true}}}' 5); rc=$?
-  if [ "$rc" = "0" ] && printf '%s' "$resp" | grep -qF '"code":-32601' \
+  # 2.16.1: the status depends on the era. In a session it stays 200 (404 is
+  # the stateless answer; a session-era client could take a 404 for a lost
+  # session).
+  resp=$(mcp_session '{"jsonrpc":"2.0","id":42,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true}}}' 5 status); rc=$?
+  code=$(printf '%s\n' "$resp" | tail -1); resp=$(printf '%s\n' "$resp" | sed '$d')
+  if [ "$rc" = "0" ] && [ "$code" = "200" ] && printf '%s' "$resp" | grep -qF '"code":-32601' \
      && printf '%s' "$resp" | grep -qF '"id":42'; then
-    pass "MCP session listen, method only in the body: -32601 at once"
+    pass "MCP session listen, method only in the body: 200, -32601 at once"
   else
-    fail "MCP session listen (no Mcp-Method)" "curl ends within 5 s, -32601 with id 42" \
-      "curl exit $rc, $(printf '%s' "$resp" | head -c 160)"
+    fail "MCP session listen (no Mcp-Method)" "curl ends within 5 s, 200 with -32601 and id 42" \
+      "curl exit $rc, HTTP $code, $(printf '%s' "$resp" | head -c 160)"
   fi
   # 2.13.0: swapi://people/1 is a resource, so the unknown URI is a record
   # that does not exist; the known one is accepted, still without state.

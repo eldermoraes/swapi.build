@@ -173,7 +173,10 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   and a subscribe with an unsupported protocol version or `Accept`, go on to
   the extension (`-32601` with HTTP 404 / `400`, nothing kept). A stateless
   request must carry the `MCP-Protocol-Version` header: extension 2.1.0
-  refuses one without it (400, `-32020`). The body `method` wins over the
+  refuses one without it (400, `-32020`), and the filter answers a listen
+  with wrong version headers (missing, different from `_meta`, unsupported)
+  with the extension's own 400, compared byte for byte in
+  `listenWithWrongVersionHeadersIsRefusedLikeAnyOtherMethod`. The body `method` wins over the
   `Mcp-Method` header. Every JSON-RPC batch (a JSON array), whatever it
   carries, gets one answer from the filter, without looking inside it: HTTP
   400, `-32600`, `id` null, counted once. The extension refuses arrays only as

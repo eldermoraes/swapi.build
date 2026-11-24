@@ -111,6 +111,10 @@ public class McpTransportFilter {
     private static final int METHOD_NOT_FOUND = -32601;
     private static final int INVALID_PARAMS = -32602;
     private static final int RESOURCE_NOT_FOUND = -32002;
+    // The extension's spelling of the header in its error messages.
+    private static final String PROTOCOL_HEADER_AS_THE_EXTENSION_WRITES_IT = "Mcp-Protocol-Version";
+    private static final int HEADER_MISMATCH = -32020;
+    private static final int UNSUPPORTED_PROTOCOL_VERSION = -32022;
 
     // Legacy 2024-11-05 transport: the SSE stream and the POSTs to
     // /mcp/messages/<id> need session-affine state, which this server never
@@ -213,7 +217,12 @@ public class McpTransportFilter {
             Object id = request.getValue("id");
             String method = request.getValue("method") instanceof String s ? s : null;
             if (LISTEN.equals(method) || (method == null && LISTEN.equals(headerMethod))) {
-                end(rc, listenStatus(isStateless(rc, request)), error(id, METHOD_NOT_FOUND, LISTEN_NOT_OFFERED));
+                JsonObject refused = wrongVersionHeaders(rc, request, id);
+                if (refused != null) {
+                    end(rc, 400, refused);
+                } else {
+                    end(rc, listenStatus(isStateless(rc, request)), error(id, METHOD_NOT_FOUND, LISTEN_NOT_OFFERED));
+                }
                 return;
             }
             if ((SUBSCRIBE.equals(method) || UNSUBSCRIBE.equals(method)) && isSessionRequest(rc, request)) {
@@ -232,6 +241,41 @@ public class McpTransportFilter {
     // 2.16.1: the HTTP status the extension gives -32601 in each era.
     private static int listenStatus(boolean stateless) {
         return stateless ? 404 : 200;
+    }
+
+    // 2.16.1: the answer extension 2.1.0 gives any method whose protocol
+    // version headers are wrong, or null when they are right. The listen
+    // never reaches the extension, so without this it answered "method not
+    // found" where every other method answers 400. In the extension's order
+    // (StreamableHttpMcpMessageHandler.handle, validateStatelessHeaders):
+    // a version it does not support; a stateless request without the
+    // MCP-Protocol-Version header (#1083); a header that differs from the
+    // version in _meta. McpListenLimitTest compares each with the extension's
+    // own answer, status and body, so an upgrade that changes one fails there.
+    // The extension's Mcp-Method checks are not mirrored: here the body
+    // method wins over that header, on purpose.
+    private static JsonObject wrongVersionHeaders(RoutingContext rc, JsonObject request, Object id) {
+        String header = rc.request().getHeader(PROTOCOL_HEADER);
+        if (header != null && !McpProtocolVersion.SUPPORTED_VERSIONS.contains(header)) {
+            JsonObject unsupported = error(id, UNSUPPORTED_PROTOCOL_VERSION, "Unsupported protocol version");
+            unsupported.getJsonObject("error").put("data", new JsonObject()
+                    .put("supported", new JsonArray(List.copyOf(McpProtocolVersion.SUPPORTED_VERSIONS)))
+                    .put("requested", header));
+            return unsupported;
+        }
+        if (!isStateless(rc, request)) {
+            return null;
+        }
+        if (header == null) {
+            return error(id, HEADER_MISMATCH, "Missing required header: " + PROTOCOL_HEADER_AS_THE_EXTENSION_WRITES_IT);
+        }
+        String meta = metaVersion(request);
+        if (meta != null && !header.equals(meta)) {
+            return error(id, HEADER_MISMATCH, "Header mismatch: " + PROTOCOL_HEADER_AS_THE_EXTENSION_WRITES_IT
+                    + " header value '" + header
+                    + "' does not match _meta value '" + meta + "'");
+        }
+        return null;
     }
 
     // A resource this server registered (none in 2.12.1) -> empty result, the
@@ -295,10 +339,14 @@ public class McpTransportFilter {
         if (hasStatelessHeader(rc)) {
             return true;
         }
+        String version = metaVersion(request);
+        return version != null && McpProtocolVersion.isStateless(version);
+    }
+
+    private static String metaVersion(JsonObject request) {
         JsonObject params = request.getValue("params") instanceof JsonObject p ? p : null;
         JsonObject meta = params != null && params.getValue("_meta") instanceof JsonObject m ? m : null;
-        String version = meta != null && meta.getValue(META_PROTOCOL_VERSION) instanceof String s ? s : null;
-        return version != null && McpProtocolVersion.isStateless(version);
+        return meta != null && meta.getValue(META_PROTOCOL_VERSION) instanceof String s ? s : null;
     }
 
     private static boolean hasStatelessHeader(RoutingContext rc) {
