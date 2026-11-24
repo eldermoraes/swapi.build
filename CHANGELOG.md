@@ -16,6 +16,48 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.16.1] - 2026-11-24
+
+The MCP server extension moves to 2.1.0. No address, field, tool, resource
+or prompt changes; the changes below are in how `/mcp` answers a few
+requests.
+
+### Changed
+
+- MCP extension `quarkus-mcp-server` 2.0.3 → 2.1.0. On the wire:
+  - A stateless request (protocol 2026-07-28) for a method the server does
+    not implement answers HTTP `404` with the same `-32601` body (it was
+    `200`), as the 2026-07-28 specification says. A stateless
+    `resources/subscribe` is one of them.
+  - The stateless `subscriptions/listen`, which the server answers itself,
+    follows: HTTP `404` (it was `200`) with the same `-32601` body, still at
+    once and never a stream. In the session era (up to 2025-11-25) it stays
+    `200`.
+  - A request that is stateless only by the protocol version in its `_meta`,
+    without the `MCP-Protocol-Version` header, is refused with HTTP `400` and
+    `-32020` (it was served), as the 2026-07-28 server validation rules say.
+    A client that sends the header, as the specification requires, sees no
+    change. A `subscriptions/listen` with wrong version headers gets the
+    same answers as any other method: `400` with `-32020` without the header
+    or when it differs from the `_meta` version, `400` with `-32022` for a
+    version the server does not support.
+  - An unsupported `MCP-Protocol-Version` in the session era answers `400`
+    with a JSON-RPC error (`-32022`, with the supported versions) before any
+    session exists; 2.0.3 answered a bare `400` and, without a known
+    session id, left a session in memory until the idle timeout.
+  - The "resource not found" error of `resources/read` carries the URI in
+    `data.uri`, and so does the one a session-era `resources/subscribe` or
+    `unsubscribe` gets for an unknown URI.
+- The deploy and native-smoke probes check the HTTP `404` of the stateless
+  `subscriptions/listen` and `resources/subscribe`, next to the `-32601`
+  body.
+- Load rehearsal on the native binary of this version, in a container
+  (`scripts/mcp-listen-load.sh`), after the native smoke had run: 500
+  concurrent `subscriptions/listen` all answered within 2 s with `-32601`,
+  none open at 30 s, memory flat (186.9 to 187.5 MB, and 187.5 MB after a
+  second run); 20 000 tool calls all `200`, memory not growing (187.5 to
+  174.1 MB). Not compared with a 2.16.0 binary on the same machine.
+
 ## [2.16.0] - 2026-11-12
 
 The fixes of the November 2026 audit. Every address, field and tool of
@@ -1128,7 +1170,7 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.16.0...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.16.1...HEAD
 [2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
@@ -1178,6 +1220,7 @@ snapshot version is not a release. -->
 
 [2.12.1]: https://github.com/eldermoraes/swapi.build/compare/v2.12.0...v2.12.1
 
+[2.16.1]: https://github.com/eldermoraes/swapi.build/compare/v2.16.0...v2.16.1
 [2.16.0]: https://github.com/eldermoraes/swapi.build/compare/v2.15.0...v2.16.0
 [2.15.0]: https://github.com/eldermoraes/swapi.build/compare/v2.14.0...v2.15.0
 [2.14.0]: https://github.com/eldermoraes/swapi.build/compare/v2.13.0...v2.14.0

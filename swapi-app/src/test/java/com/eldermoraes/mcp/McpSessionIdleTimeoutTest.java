@@ -119,13 +119,16 @@ class McpSessionIdleTimeoutTest {
         assertTrue(list.body().contains("sw_search"), list.body());
     }
 
-    // Extension 2.0.3 creates the session before it looks at the request, and
+    // The extension creates the session before it looks at the request, and
     // these requests end without removing it (StreamableHttpMcpMessageHandler.
     // handleStateful): none is initialized, so the removal of auto-init
     // sessions at the end of the request skips them. The idle timeout is what
-    // takes them out. Measured while writing this test: one session held after
-    // each of the three requests. The test asks only that none is left after
-    // the timeout, so it keeps passing the day the extension stops leaving them.
+    // takes them out. Measured on 2.0.3 while writing this test: one session
+    // held after each of the three requests. Measured again on 2.1.0 (2.16.1):
+    // still one after the second and the third; none after the first, whose
+    // 400 now comes before the session lookup. The test asks only that none is
+    // left after the timeout, so it keeps passing as the extension stops
+    // leaving them.
     @Test
     void sessionsLeftByRefusedRequestsAreDropped() throws Exception {
         // 1. An unsupported MCP-Protocol-Version without a session id: 400.

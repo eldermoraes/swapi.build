@@ -163,12 +163,20 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   The server sends no notifications (the data never changes), so
   `McpTransportFilter` (2.12.1+) reads the POST body before the extension and
   answers `subscriptions/listen` itself, at once, with `-32601` (the extension
-  would keep an SSE stream open with no limit), and `resources/subscribe` /
-  `unsubscribe` of the session era, with or without `Mcp-Session-Id` (auto-init
-  gives one), without recording anything (the extension keeps one subscriber
-  per request in a list never cleaned). Stateless subscribe, and a subscribe
-  with an unsupported protocol version or `Accept`, go on to the extension
-  (`-32601` / `400`, nothing kept). The body `method` wins over the
+  would keep an SSE stream open with no limit): HTTP 404 when the request is
+  stateless (2.16.1, as the 2026-07-28 spec and extension 2.1.0 answer a
+  method the server does not implement), 200 in the session era. It also
+  answers `resources/subscribe` / `unsubscribe` of the session era, with or
+  without `Mcp-Session-Id` (auto-init gives one), without recording anything
+  (extension 2.1.0 would keep one subscriber per session and URI until the
+  session closes, for notifications that never come). Stateless subscribe,
+  and a subscribe with an unsupported protocol version or `Accept`, go on to
+  the extension (`-32601` with HTTP 404 / `400`, nothing kept). A stateless
+  request must carry the `MCP-Protocol-Version` header: extension 2.1.0
+  refuses one without it (400, `-32020`), and the filter answers a listen
+  with wrong version headers (missing, different from `_meta`, unsupported)
+  with the extension's own 400, compared byte for byte in
+  `listenWithWrongVersionHeadersIsRefusedLikeAnyOtherMethod`. The body `method` wins over the
   `Mcp-Method` header. Every JSON-RPC batch (a JSON array), whatever it
   carries, gets one answer from the filter, without looking inside it: HTTP
   400, `-32600`, `id` null, counted once. The extension refuses arrays only as

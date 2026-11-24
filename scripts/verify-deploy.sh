@@ -861,29 +861,40 @@ else
   fail "POST /mcp/messages/*" "404 + body citing /mcp" "$code $(echo "$edge" | head -c 120)"
 fi
 
-# --- MCP 2.12.1: listen and subscribe answered without state; extension 2.0.3 --
-# One stateless request: <method> <params without _meta, or ''> [Mcp-Name] [max seconds].
+# --- MCP 2.12.1: listen and subscribe answered without state; extension 2.1.0 --
+# One stateless request: <method> <params without _meta, or ''> [Mcp-Name] [max seconds]
+# [status]. With "status" as the fifth argument the HTTP status follows the
+# body on a line of its own.
 STATELESS_META='"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"verify-deploy","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}'
 mcp_stateless() {
   local method="$1" params="$2" name="${3:-}" max="${4:-90}" extra=()
   [ -n "$name" ] && extra=(-H "Mcp-Name: $name")
+  [ "${5:-}" = "status" ] && extra+=(-w '\n%{http_code}')
   curl -s --max-time "$max" -X POST "$BASE/mcp" \
     -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
     -H "Mcp-Method: $method" -H 'MCP-Protocol-Version: 2026-07-28' ${extra[@]+"${extra[@]}"} \
     -d '{"jsonrpc":"2.0","id":1,"method":"'"$method"'","params":{'"$params${params:+,}$STATELESS_META"'}}'
 }
 # 2.12.0 left this stream open with no limit; the curl must end on its own.
-resp=$(mcp_stateless subscriptions/listen '"notifications":{"toolsListChanged":true}' '' 5); rc=$?
-if [ "$rc" = "0" ] && printf '%s' "$resp" | grep -qF '"code":-32601' \
+# 2.16.1: a stateless method the server does not offer answers HTTP 404 with
+# the -32601 body (spec 2026-07-28; extension 2.1.0 for every other method,
+# McpTransportFilter for the listen). Up to 2.16.0 both were 200.
+resp=$(mcp_stateless subscriptions/listen '"notifications":{"toolsListChanged":true}' '' 5 status); rc=$?
+code=$(printf '%s\n' "$resp" | tail -1); resp=$(printf '%s\n' "$resp" | sed '$d')
+if [ "$rc" = "0" ] && [ "$code" = "404" ] && printf '%s' "$resp" | grep -qF '"code":-32601' \
    && printf '%s' "$resp" | grep -qF 'subscriptions/listen'; then
-  pass "MCP subscriptions/listen answered at once: -32601"
+  pass "MCP subscriptions/listen answered at once: 404, -32601"
 else
-  fail "MCP subscriptions/listen" "curl ends within 5 s, -32601 citing subscriptions/listen" \
-    "curl exit $rc, $(printf '%s' "$resp" | head -c 160)"
+  fail "MCP subscriptions/listen" "curl ends within 5 s, 404 with -32601 citing subscriptions/listen" \
+    "curl exit $rc, HTTP $code, $(printf '%s' "$resp" | head -c 160)"
 fi
-resp=$(mcp_stateless resources/subscribe '"uri":"swapi://people/1"')
-printf '%s' "$resp" | grep -qF '"code":-32601' && pass "MCP stateless resources/subscribe -> -32601" \
-  || fail "MCP stateless resources/subscribe" '"code":-32601' "$(printf '%s' "$resp" | head -c 160)"
+resp=$(mcp_stateless resources/subscribe '"uri":"swapi://people/1"' '' 90 status)
+code=$(printf '%s\n' "$resp" | tail -1); resp=$(printf '%s\n' "$resp" | sed '$d')
+if [ "$code" = "404" ] && printf '%s' "$resp" | grep -qF '"code":-32601'; then
+  pass "MCP stateless resources/subscribe -> 404, -32601"
+else
+  fail "MCP stateless resources/subscribe" '404 with "code":-32601' "HTTP $code, $(printf '%s' "$resp" | head -c 160)"
+fi
 # The branch only the filter has: a session of the 2025-11-25 era, where the
 # listen comes with the method only in the body (no Mcp-Method) and a
 # subscribe would leave a subscriber in the extension.
@@ -891,22 +902,30 @@ SESSION_ERA_SID=$("${CURL[@]}" -D - -o /dev/null -X POST "$BASE/mcp" \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"verify-deploy","version":"1.0"}}}' \
   | tr -d '\r' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
+# <body> [max seconds] [status]: with "status" the HTTP status follows the body
+# on a line of its own, as in mcp_stateless.
 mcp_session() {
+  local extra=()
+  [ "${3:-}" = "status" ] && extra=(-w '\n%{http_code}')
   curl -s --max-time "${2:-90}" -X POST "$BASE/mcp" \
     -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
-    -H "Mcp-Session-Id: $SESSION_ERA_SID" -H 'MCP-Protocol-Version: 2025-11-25' -d "$1"
+    -H "Mcp-Session-Id: $SESSION_ERA_SID" -H 'MCP-Protocol-Version: 2025-11-25' ${extra[@]+"${extra[@]}"} -d "$1"
 }
 if [ -z "$SESSION_ERA_SID" ]; then
   fail "MCP session listen and subscribe" "session id issued on initialize 2025-11-25" \
     "none (guard: probes NOT executed)"
 else
-  resp=$(mcp_session '{"jsonrpc":"2.0","id":42,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true}}}' 5); rc=$?
-  if [ "$rc" = "0" ] && printf '%s' "$resp" | grep -qF '"code":-32601' \
+  # 2.16.1: the status depends on the era. In a session it stays 200 (404 is
+  # the stateless answer; a session-era client could take a 404 for a lost
+  # session).
+  resp=$(mcp_session '{"jsonrpc":"2.0","id":42,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true}}}' 5 status); rc=$?
+  code=$(printf '%s\n' "$resp" | tail -1); resp=$(printf '%s\n' "$resp" | sed '$d')
+  if [ "$rc" = "0" ] && [ "$code" = "200" ] && printf '%s' "$resp" | grep -qF '"code":-32601' \
      && printf '%s' "$resp" | grep -qF '"id":42'; then
-    pass "MCP session listen, method only in the body: -32601 at once"
+    pass "MCP session listen, method only in the body: 200, -32601 at once"
   else
-    fail "MCP session listen (no Mcp-Method)" "curl ends within 5 s, -32601 with id 42" \
-      "curl exit $rc, $(printf '%s' "$resp" | head -c 160)"
+    fail "MCP session listen (no Mcp-Method)" "curl ends within 5 s, 200 with -32601 and id 42" \
+      "curl exit $rc, HTTP $code, $(printf '%s' "$resp" | head -c 160)"
   fi
   # 2.13.0: swapi://people/1 is a resource, so the unknown URI is a record
   # that does not exist; the known one is accepted, still without state.
@@ -945,7 +964,8 @@ if printf '%s' "$resp" | grep -qF 'A New Hope' && printf '%s' "$resp" | grep -qF
 else
   fail "MCP resources/read swapi://films" 'A New Hope in the swapi://films contents' "$(printf '%s' "$resp" | head -c 160)"
 fi
-# Extension 2.0.3 (PR #1037): the serverInfo of server/discover is in _meta.
+# Extension 2.0.3 (PR #1037): the serverInfo of server/discover is in _meta
+# (still so on 2.1.0, SwapiStatelessTest).
 resp=$(mcp_stateless server/discover '')
 if printf '%s' "$resp" | grep -qF 'io.modelcontextprotocol/serverInfo' && printf '%s' "$resp" | grep -qF 'swapi.build'; then
   pass "MCP server/discover: serverInfo in _meta"
