@@ -97,9 +97,12 @@ fields `fields` accept per type, and the film id trap. Its files are the resourc
 In Claude Code (v2.1.331 or later, a beta feature there) it appears as
 `swapi-build:star-wars-research`.
 
-**Caching:** Quarkiverse MCP Server 2.0.0 emits the required `ttlMs: 0` and
+**Caching:** Quarkiverse MCP Server (2.0.0 and later) emits the required `ttlMs: 0` and
 `cacheScope: "public"` fields on stateless discovery and tool-list responses.
-Zero TTL means immediately stale; no positive freshness period is configured.
+Zero TTL means immediately stale; the extension's methods configure no positive freshness
+period. The skills methods are the exception: `skills/list` and `skills/get` answer
+`ttlMs: 300000` (five minutes) with `cacheScope: "public"`, since the skill's files change only
+with a release and a client checks the digest of every file it reads.
 Its [cache hints](https://github.com/quarkiverse/quarkus-mcp-server/blob/2.0.0/docs/modules/ROOT/pages/release-notes.adoc)
 apply to discovery, list methods and `resources/read`, **not `tools/call`**.
 Tool-result caching is not enabled, including for `sw_random`. REST/edge caching is a separate mechanism.
