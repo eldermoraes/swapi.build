@@ -4,23 +4,32 @@ import io.quarkiverse.mcp.server.McpProtocolVersion;
 import io.quarkiverse.mcp.server.ResourceManager;
 import io.quarkiverse.mcp.server.runtime.ConnectionManager;
 import io.quarkus.runtime.configuration.MemorySize;
+import io.quarkus.security.AuthenticationException;
+import io.quarkus.security.ForbiddenException;
+import io.quarkus.security.UnauthorizedException;
 import io.quarkus.vertx.http.runtime.BodyConfig;
 import io.quarkus.vertx.http.runtime.VertxHttpConfig;
 import io.quarkus.vertx.web.RouteFilter;
 import io.smallrye.config.SmallRyeConfig;
 import io.vertx.core.Handler;
+import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpMethod;
+import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RequestBody;
+import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
+import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.ConfigProvider;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -124,6 +133,7 @@ public class McpTransportFilter {
     private static final int INVALID_REQUEST = -32600;
     private static final int METHOD_NOT_FOUND = -32601;
     private static final int INVALID_PARAMS = -32602;
+    private static final int INTERNAL_ERROR = -32603;
     private static final int RESOURCE_NOT_FOUND = -32002;
     // The extension's spelling of the header in its error messages.
     private static final String PROTOCOL_HEADER_AS_THE_EXTENSION_WRITES_IT = "Mcp-Protocol-Version";
@@ -144,7 +154,16 @@ public class McpTransportFilter {
     @Inject
     ConnectionManager sessions;
 
+    @Inject
+    Vertx vertx;
+
+    @ConfigProperty(name = "swapi.mcp.response-deadline")
+    Duration responseDeadline;
+
     private static final Object NOT_JSON = new Object();
+    // The id of the request passed on to the extension, for the answers of
+    // the deadline and the failure handler (the body is not decoded again).
+    private static final String REQUEST_ID = "swapi.mcp.request-id";
 
     private final OncePerMinute warnings = new OncePerMinute(Logger.getLogger(McpTransportFilter.class));
 
@@ -262,7 +281,79 @@ public class McpTransportFilter {
                     error(null, INVALID_REQUEST, "Invalid request: the body must be a JSON-RPC object"));
             return;
         }
+        forward(rc, message instanceof JsonObject request ? request.getValue("id") : null);
+    }
+
+    // 2.17.1: the net under the shape checks. A shape nobody has found yet
+    // could still make the extension fail where it never answers, and then
+    // the connection stayed open until quarkus.http.idle-timeout (30 minutes
+    // by default). Every POST passed on to the extension gets a deadline
+    // (swapi.mcp.response-deadline, 10 s): one timer, armed here on the
+    // request's event loop and cancelled when the response ends (the end
+    // handler also runs when the connection closes). No answer of this
+    // server takes more than milliseconds and none is a stream (the listen
+    // is answered above). A future operation that legitimately takes longer
+    // (a task, a long-running tool) needs an explicit exception here, not a
+    // larger value.
+    //
+    // At the deadline: if nothing was written, -32603 with the request's id,
+    // under HTTP 200 as the extension sends its own "Internal error"; if the
+    // head was already written, the response cannot become an error any
+    // more, so it is reset (HTTP/2: the stream; HTTP/1.1: the connection).
+    // This frees the connection, not what the extension kept for the request
+    // (only the shape checks prevent that). If the extension writes later,
+    // Vert.x refuses the write and logs it; the server goes on serving
+    // (McpResponseDeadlineTest).
+    private void forward(RoutingContext rc, Object id) {
+        rc.put(REQUEST_ID, id);
+        long timer = vertx.setTimer(responseDeadline.toMillis(), t -> deadlineReached(rc, id));
+        rc.addEndHandler(done -> vertx.cancelTimer(timer));
         rc.next();
+    }
+
+    private void deadlineReached(RoutingContext rc, Object id) {
+        HttpServerResponse response = rc.response();
+        if (response.ended() || response.closed()) {
+            return;
+        }
+        warnings.warn("An MCP request got no answer within swapi.mcp.response-deadline");
+        if (response.headWritten()) {
+            response.reset();
+            return;
+        }
+        end(rc, 200, error(id, INTERNAL_ERROR, "Internal error: no answer within the server's deadline"));
+    }
+
+    // 2.17.1: an exception thrown while the extension handles a POST (its
+    // route handler casts request fields without checking them) became
+    // Quarkus's error page, HTTP 500 with the stack trace in the log. It is
+    // answered here as JSON-RPC, -32603 with the request's id under HTTP
+    // 200, like the extension's own "Internal error", and logged as one WARN
+    // line a minute per exception class, without the trace. Only an
+    // exception (status 500): the extension's own refusals through
+    // ctx.fail(status) -- 400 for the Accept, 404 for an unknown session
+    // when auto-init is off -- and the 413 of the body handler go on to
+    // Quarkus as before, and so do the security failures the extension
+    // answers in its own failure handler on /mcp. Registered on the router
+    // at startup, so it comes before Quarkus's error handler (the last
+    // route); the request was counted and passed CORS on the way in.
+    void registerFailureHandler(@Observes Router router) {
+        router.post(MCP_PATH).failureHandler(this::answerFailure);
+    }
+
+    void answerFailure(RoutingContext rc) {
+        Throwable failure = rc.failure();
+        HttpServerResponse response = rc.response();
+        if (rc.statusCode() != 500 || response.ended() || response.headWritten()
+                || failure instanceof AuthenticationException
+                || failure instanceof UnauthorizedException
+                || failure instanceof ForbiddenException) {
+            rc.next();
+            return;
+        }
+        warnings.warn("An MCP request failed in the extension: "
+                + (failure == null ? "status 500" : failure.getClass().getName()));
+        end(rc, 200, error(rc.get(REQUEST_ID), INTERNAL_ERROR, "Internal error"));
     }
 
     // 2.17.1: the shapes the extension cannot handle (McpRequestShape) are

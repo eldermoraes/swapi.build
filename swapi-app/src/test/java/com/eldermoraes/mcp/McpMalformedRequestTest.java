@@ -559,6 +559,18 @@ class McpMalformedRequestTest {
         sendWithDeadline(HttpRequest.newBuilder(mcp).header("Mcp-Session-Id", session).DELETE().build(), DEADLINE_MS);
     }
 
+    // The deadline McpTransportFilter gives every POST it passes on to the
+    // extension (McpResponseDeadlineTest shows what it does). No answer of
+    // this server takes more than milliseconds; ten seconds covers a slow
+    // machine without holding a connection for long. A future operation that
+    // legitimately takes longer needs an explicit exception, not a larger
+    // value here.
+    @Test
+    void responseDeadlineIsTenSeconds() {
+        assertEquals(Duration.ofSeconds(10), org.eclipse.microprofile.config.ConfigProvider.getConfig()
+                .getValue("swapi.mcp.response-deadline", Duration.class));
+    }
+
     // A refused request is one HTTP request in the /mcp group of /stats.
     @Test
     void aRefusedRequestIsCountedOnceAsMcp() throws Exception {
