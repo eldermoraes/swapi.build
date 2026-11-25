@@ -7,6 +7,7 @@ import io.quarkiverse.mcp.server.TextResourceContents;
 import io.quarkiverse.mcp.server.http.runtime.StreamableHttpMcpMessageHandler;
 import io.quarkiverse.mcp.server.runtime.ResourceSubscriptions;
 import io.quarkiverse.mcp.server.runtime.config.McpServersRuntimeConfig;
+import io.quarkus.arc.Arc;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.smallrye.config.SmallRyeConfig;
@@ -57,8 +58,10 @@ class McpListenLimitTest {
     @TestHTTPResource("/api/stats")
     URI stats;
 
-    @Inject
-    ResourceManager resources;
+    // Looked up, not injected (not even as Instance<>): this class is in the
+    // default test profile, and an injection point of a manager here would
+    // make that test build advertise listChanged (McpCapabilitiesTest).
+    private final ResourceManager resources = Arc.container().instance(ResourceManager.class).get();
 
     @Inject
     Router router;

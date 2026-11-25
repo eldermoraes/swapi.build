@@ -3,10 +3,10 @@ package com.eldermoraes.mcp;
 import io.quarkiverse.mcp.server.ResourceManager;
 import io.quarkiverse.mcp.server.ResourceResponse;
 import io.quarkiverse.mcp.server.TextResourceContents;
+import io.quarkus.arc.Arc;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
-import jakarta.inject.Inject;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -91,8 +91,6 @@ public class SwapiSkills {
     public record Skill(String uri, Map<String, String> frontmatter, List<SkillFile> files) {
     }
 
-    @Inject ResourceManager resources;
-
     // Written once on the main thread by the StartupEvent observer, read by
     // request threads. Quarkus opens the HTTP socket only after the
     // StartupEvent observers return (VertxHttpProcessor.openSocket consumes
@@ -103,6 +101,9 @@ public class SwapiSkills {
     void register(@Observes StartupEvent event) {
         Skill loaded = parse(NAME, readClasspath(NAME, FILES));
         skill = loaded;
+        // Looked up, not injected (not even as Instance<>): an injection point
+        // of a manager makes the extension advertise listChanged (SwapiResources).
+        ResourceManager resources = Arc.container().instance(ResourceManager.class).get();
         for (SkillFile file : loaded.files()) {
             boolean main = file.path().equals(SKILL_FILE);
             ResourceManager.ResourceDefinition resource = resources

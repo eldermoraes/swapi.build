@@ -4,6 +4,7 @@ import io.quarkiverse.mcp.server.ToolManager;
 import io.quarkiverse.mcp.server.ToolResponse;
 import io.quarkiverse.mcp.server.http.runtime.StreamableHttpMcpMessageHandler;
 import io.quarkiverse.mcp.server.runtime.ConnectionManager;
+import io.quarkus.arc.Arc;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.QuarkusTestProfile;
@@ -274,8 +275,10 @@ class McpResponseDeadlineTest {
 
     private static final String SLOW_TOOL = "test_slow_tool";
 
-    @Inject
-    ToolManager tools;
+    // Looked up, not injected (not even as Instance<>), like every manager
+    // here: an injection point would make this profile's build advertise
+    // tools.listChanged (McpCapabilitiesTest, SwapiResources).
+    private final ToolManager tools = Arc.container().instance(ToolManager.class).get();
 
     @Inject
     StreamableHttpMcpMessageHandler extensionHandler;

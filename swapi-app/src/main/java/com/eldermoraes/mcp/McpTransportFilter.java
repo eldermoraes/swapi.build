@@ -3,6 +3,7 @@ package com.eldermoraes.mcp;
 import io.quarkiverse.mcp.server.McpProtocolVersion;
 import io.quarkiverse.mcp.server.ResourceManager;
 import io.quarkiverse.mcp.server.runtime.ConnectionManager;
+import io.quarkus.arc.Arc;
 import io.quarkus.runtime.configuration.MemorySize;
 import io.quarkus.security.AuthenticationException;
 import io.quarkus.security.ForbiddenException;
@@ -148,8 +149,11 @@ public class McpTransportFilter {
             {"error":"The legacy HTTP+SSE transport (spec 2024-11-05) is not \
             supported. Use the Streamable HTTP endpoint at /mcp."}""";
 
-    @Inject
-    ResourceManager resources;
+    // Looked up once, when the filter is built (before the first request),
+    // not injected, not even as Instance<>: an injection point of a manager
+    // makes the extension advertise listChanged (SwapiResources). A
+    // @Singleton of the extension, so keeping the reference is right.
+    private final ResourceManager resources = Arc.container().instance(ResourceManager.class).get();
 
     @Inject
     ConnectionManager sessions;
