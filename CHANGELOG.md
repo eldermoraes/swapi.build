@@ -16,6 +16,59 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.17.2] - 2026-11-25
+
+A fix for the server log of the MCP endpoint, and the end of a capability
+the server never honoured. Apart from the capabilities below, a request with
+one defect gets the same answer as in 2.17.1, byte for byte. The skill is
+unchanged (not one byte), so no client is asked to approve it again.
+
+### Security
+
+- Some invalid MCP requests were answered at once and correctly by the MCP
+  server extension (`quarkus-mcp-server` 2.1.0), but logged at every request:
+  a body that is not a JSON object (with a stack trace), an `Accept` header
+  without both `application/json` and `text/event-stream`, a cursor that does
+  not decode in `tools/list`, `resources/list`, `resources/templates/list` or
+  `prompts/list`, and a `notifications/cancelled` for a request that is not in
+  progress. `McpTransportFilter` now gives these requests the extension's own
+  answer itself, and the server log gets at most one line a minute for each
+  kind, without the request's text, instead of a line at every request.
+- A POST to `/mcp` whose body never arrives whole (the connection closed in
+  the middle of the body, a malformed chunk) got an `ERROR` in the server log
+  at every request. It still gets no answer, as before, and is now logged at
+  most once a minute. A form body (`application/x-www-form-urlencoded` or
+  `multipart/form-data`) that the server's form decoder refuses is now
+  answered `400` without a body (it was a `400` with an error page) and
+  logged at most once a minute, instead of an `ERROR` at every request.
+- `notifications/cancelled` no longer reaches the extension: the filter
+  answers it as the extension did (`202`, or `200` without a body when it
+  carries an `id`). No answer of this server lasts long enough to be
+  cancelled, and nothing on the server reads a cancellation, so nothing a
+  client sees changes. A cancel the extension refused for another reason
+  keeps that refusal.
+- Two checks the extension makes before the method, for a stateless request,
+  now also come first when the filter answers: an unknown log level in
+  `_meta` and a protocol version in `_meta` that is not a string get the
+  extension's `400`. A request with one of these and a defect the filter
+  refused itself in 2.17.1 now gets that `400` instead of the filter's
+  refusal.
+
+### Changed
+
+- The server no longer advertises `resources.listChanged`: the data never
+  changes, so the server never sends that notification. `initialize` and
+  `server/discover` now carry `resources: {subscribe: true}`, `tools: {}` and
+  `prompts: {}` in every protocol revision. Claude Code and the MCP Inspector
+  opened a `subscriptions/listen` on every connection because of it, which the
+  server refused; they stop sending it. A client that sends the listen or a
+  `resources/subscribe` anyway gets the same answer as before.
+- `native-smoke.sh` and `verify-deploy.sh` check that `server/discover` and
+  `initialize` carry no `listChanged`. `native-smoke.sh` also sends one
+  request of each kind above, and the release pipeline fails when the native
+  binary logs a `WARN` or `ERROR` during the smoke that is not one of the
+  filter's lines or the startup line of the usage counters.
+
 ## [2.17.1] - 2026-11-24
 
 A security fix for the MCP endpoint. A well-formed request gets the same
@@ -1275,7 +1328,7 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.17.1...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.17.2...HEAD
 [2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
@@ -1325,6 +1378,7 @@ snapshot version is not a release. -->
 
 [2.12.1]: https://github.com/eldermoraes/swapi.build/compare/v2.12.0...v2.12.1
 
+[2.17.2]: https://github.com/eldermoraes/swapi.build/compare/v2.17.1...v2.17.2
 [2.17.1]: https://github.com/eldermoraes/swapi.build/compare/v2.17.0...v2.17.1
 [2.17.0]: https://github.com/eldermoraes/swapi.build/compare/v2.16.1...v2.17.0
 [2.16.1]: https://github.com/eldermoraes/swapi.build/compare/v2.16.0...v2.16.1

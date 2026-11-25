@@ -8,6 +8,7 @@ import io.quarkiverse.mcp.server.ResourceResponse;
 import io.quarkiverse.mcp.server.ResourceTemplate;
 import io.quarkiverse.mcp.server.ResourceTemplateArg;
 import io.quarkiverse.mcp.server.TextResourceContents;
+import io.quarkus.arc.Arc;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -32,9 +33,14 @@ import java.util.regex.Pattern;
  * leading zero) is a record; anything else returns null, which the extension
  * answers as "not found" (-32602 stateless, -32002 in a session).
  *
- * Registering resources makes the extension advertise subscribe and
- * listChanged. Neither produces traffic: McpTransportFilter answers the listen
- * and the session subscribe itself, and the list never changes.
+ * Registering resources makes the extension advertise subscribe, always (it
+ * has no switch for it). It would also advertise listChanged if any bean had
+ * an injection point of a ResourceManager (or of another manager), Instance<>
+ * and Provider<> included (McpServerProcessor.analyzeManagerUsage, at build
+ * time), and the list never changes: so the manager is looked up through
+ * Arc.container(), which that analysis does not see (2.17.2, issue #122;
+ * McpCapabilitiesTest). McpTransportFilter still answers the listen and the
+ * session subscribe itself, for a client that sends them anyway.
  *
  * Every read goes through SwapiTools.withBaseUrl: the URLs follow the request
  * host (or swapi.public-base-url), and the thread gets its previous base back.
@@ -49,9 +55,11 @@ public class SwapiResources {
 
     @Inject SwapiTools tools;
     @Inject KnownEntities known;
-    @Inject ResourceManager resources;
 
     void register(@Observes StartupEvent event) {
+        // Not injected, not even as Instance<>: an injection point of a
+        // manager makes the extension advertise listChanged (class comment).
+        ResourceManager resources = Arc.container().instance(ResourceManager.class).get();
         for (SwResource resource : SwResource.values()) {
             String type = resource.type();
             String index = SCHEME + type;

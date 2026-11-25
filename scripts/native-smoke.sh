@@ -24,7 +24,14 @@
 # skills/list (the skill's URI and a digest) and resources/read of its SKILL.md,
 # the files SwapiSkills reads from mcp/skills/**. Since 2.17.1: a params that is
 # not an object (400, -32602, paired with tools/list) and a prompts/get without
-# a name (-32602 within 5 s). Content only: without Caddy in front,
+# a name (-32602 within 5 s). Since 2.17.2: the capabilities of initialize
+# 2025-11-25 and server/discover carry resources {subscribe:true} and no
+# listChanged; and one request of each kind the filter now answers in the
+# extension's place (a body that is not a JSON object, an Accept without both
+# types, an invalid cursor paired with the initial one, a cancel of nothing),
+# a form body the form decoder refuses (400 without a body) and a body cut
+# short, for the "Native log" step of native-binary.yml, which
+# reads what the binary logged. Content only: without Caddy in front,
 # the poisoning checks belong to verify-deploy.sh. Also run against the jar and
 # the local native build in the release rehearsal (docs/RELEASE.md).
 set -u
@@ -191,10 +198,29 @@ mcp_probe "MCP resources/read skill://star-wars-research/SKILL.md" resources/rea
 # The branch only the filter has: a 2025-11-25 session, the listen with the
 # method only in the body (no Mcp-Method) and a subscribe that the extension
 # would record. Each curl has a time limit, so a stream left open is a FAIL.
-sid=$("${CURL[@]}" -D - -o /dev/null -X POST "$BASE/mcp" \
+init=$("${CURL[@]}" -i -X POST "$BASE/mcp" \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"native-smoke","version":"1.0"}}}' \
-  | tr -d '\r' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
+  | tr -d '\r')
+sid=$(printf '%s\n' "$init" | sed '/^$/q' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
+init_body=$(printf '%s\n' "$init" | sed '1,/^$/d')
+# 2.17.2 (#122): the capabilities promise no notification the server never
+# sends. The extension decides listChanged at build time, from the injection
+# points of the application (McpCapabilitiesTest): the native binary must say
+# the same as the jar. The exact text of resources (a one-key map always
+# prints the same) and no listChanged anywhere in the answer (it does not
+# echo the client's capabilities).
+no_list_changed() { local b; b=$(cat); printf '%s' "$b" | grep -qF '"resources":{"subscribe":true}' \
+  && ! printf '%s' "$b" | grep -qF '"listChanged"'; }
+if printf '%s' "$init_body" | no_list_changed; then
+  pass "MCP initialize 2025-11-25: resources {subscribe:true}, no listChanged"
+else
+  fail "MCP initialize 2025-11-25 capabilities" '"resources":{"subscribe":true} and no "listChanged"' \
+    "$(printf '%s' "$init_body" | grep -o '"capabilities":{.*' | head -c 200)"
+fi
+discover_no_list_changed() { [ "$MCP_STATUS" = "200" ] && no_list_changed; }
+mcp_probe "MCP server/discover: resources {subscribe:true}, no listChanged" server/discover '' '' 20 \
+  discover_no_list_changed 'HTTP 200, "resources":{"subscribe":true} and no "listChanged"'
 session_probe() {
   local label="$1" body="$2" check="$3" expected="$4" resp rc
   resp=$(curl -s --max-time 5 -w '\n%{http_code}' -X POST "$BASE/mcp" \
@@ -245,6 +271,65 @@ fi
 invalid_params_200() { [ "$MCP_STATUS" = "200" ] && grep -qF '"code":-32602'; }
 mcp_probe "MCP prompts/get without a name -> 200, -32602 within 5 s" prompts/get '' character_profile 5 \
   invalid_params_200 'curl ends within 5 s, HTTP 200, -32602'
+
+# 2.17.2+ (#126): the refusals the extension made itself and logged at every
+# request are written by McpTransportFilter, with the extension's answer
+# (new code in the native image). One request of each kind, so that the
+# "Native log" step of native-binary.yml reads what the binary logs for
+# them: a body that is not a JSON object, an Accept without both types, a
+# cursor that does not decode (paired with the initial cursor, served), a
+# cancel of nothing, a form body the form decoder refuses, and a body that
+# never arrives whole.
+mcp_raw() { # <max s> <body> [header ...]: the body, then the HTTP status on a line of its own
+  local max="$1" body="$2"; shift 2
+  curl -s --max-time "$max" -w '\n%{http_code}' -X POST "$BASE/mcp" -H 'Content-Type: application/json' "$@" -d "$body"
+}
+raw_probe() { # <label> <expected> <status> <grep -F text, or ''> <max s> <body> [header ...]
+  local label="$1" expected="$2" want="$3" text="$4" resp rc code; shift 4
+  resp=$(mcp_raw "$@"); rc=$?
+  code="${resp##*$'\n'}"; resp="${resp%$'\n'*}"
+  if [ "$rc" = "0" ] && [ "$code" = "$want" ] && { [ -z "$text" ] || printf '%s' "$resp" | grep -qF "$text"; }; then
+    pass "$label"
+  else
+    fail "$label" "$expected" "curl exit $rc, HTTP $code, $(printf '%s' "$resp" | head -c 160)"
+  fi
+}
+TRANSPORT_ACCEPT='Accept: application/json, text/event-stream'
+raw_probe "MCP body that is not a JSON object -> 200, -32700" 'HTTP 200, -32700' 200 '"code":-32700' 5 \
+  '"x"' -H "$TRANSPORT_ACCEPT"
+raw_probe "MCP Accept without text/event-stream -> 400" 'HTTP 400' 400 '' 5 \
+  '{"jsonrpc":"2.0","id":8,"method":"tools/list"}' -H 'Accept: application/json'
+raw_probe "MCP tools/list with an invalid cursor -> 200, -32602" 'HTTP 200, -32602 Invalid cursor' 200 \
+  'Invalid cursor detected' 5 '{"jsonrpc":"2.0","id":9,"method":"tools/list","params":{"cursor":"x"}}' \
+  -H "$TRANSPORT_ACCEPT"
+raw_probe "MCP tools/list with the initial cursor -> 200, the tools" 'HTTP 200 with sw_get' 200 '"name":"sw_get"' 5 \
+  '{"jsonrpc":"2.0","id":10,"method":"tools/list","params":{"cursor":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}}' \
+  -H "$TRANSPORT_ACCEPT"
+form_400_empty() { [ -z "$(cat)" ]; }
+fresp=$(curl -s --max-time 5 -w '\n%{http_code}' -X POST "$BASE/mcp" -H 'Content-Type: application/x-www-form-urlencoded' \
+  -H "$TRANSPORT_ACCEPT" -d 'a=%zz&b=1'); rc=$?
+fcode="${fresp##*$'\n'}"; fresp="${fresp%$'\n'*}"
+if [ "$rc" = "0" ] && [ "$fcode" = "400" ] && printf '%s' "$fresp" | form_400_empty; then
+  pass "MCP form body the form decoder refuses -> 400 without a body"
+else
+  fail "MCP form body the form decoder refuses" 'HTTP 400, no body' "curl exit $rc, HTTP $fcode, $(printf '%s' "$fresp" | head -c 160)"
+fi
+raw_probe "MCP notifications/cancelled of nothing -> 202" 'HTTP 202' 202 '' 5 \
+  '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":99}}' -H "$TRANSPORT_ACCEPT"
+# A body shorter than its Content-Length, then the connection closed, over
+# bash's /dev/tcp (an http://host:port base only); then the server must go
+# on serving.
+hostport="${BASE#http://}"; hostport="${hostport%%/*}"
+if [[ "$BASE" == http://*:* ]] && exec 3<>"/dev/tcp/${hostport%:*}/${hostport##*:}"; then
+  printf 'POST /mcp HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\n%s\r\nContent-Length: 200\r\n\r\n{"jsonrpc":"2.0"' \
+    "$hostport" "$TRANSPORT_ACCEPT" >&3
+  exec 3>&-
+  sleep 0.5
+  raw_probe "MCP served after a body cut short" 'HTTP 200 with sw_get' 200 '"name":"sw_get"' 5 \
+    '{"jsonrpc":"2.0","id":11,"method":"tools/list"}' -H "$TRANSPORT_ACCEPT"
+else
+  fail "MCP body cut short" "an http://host:port base and a /dev/tcp connection" "$BASE (probe NOT executed)"
+fi
 
 echo
 if [ "$FAILURES" -eq 0 ]; then
