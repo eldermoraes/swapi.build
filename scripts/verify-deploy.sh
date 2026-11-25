@@ -6,7 +6,8 @@
 #                                           "Self-hosted origin on Oracle Cloud"): REST, OpenAPI, SEO,
 #                                           the site pages and assets, the not-found variants,
 #                                           MCP (stateless, stateful burst, edges; 2.17.0+: the
-#                                           skill over the Skills extension), CORS, the
+#                                           skill over the Skills extension; 2.17.1+: malformed
+#                                           requests refused at once), CORS, the
 #                                           X-Forwarded-Host / Forwarded poisoning probes, the
 #                                           record addresses (2.10.0+: films indexable with their
 #                                           own canonical and title, 21 sitemap URLs since 2.15.0, no lastmod),
@@ -954,6 +955,35 @@ code=$(head -c 300000 /dev/zero | tr '\0' 'y' | curl -s --max-time 20 -o /dev/nu
   -X POST "$BASE/mcp" -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' --data-binary @-)
 [ "$code" = "413" ] && pass "MCP body over 256K -> 413" || fail "MCP body over 256K" "413" "$code"
+# 2.17.1: McpTransportFilter refuses the malformed requests the extension
+# cannot handle, with -32602 (HTTP 400 for a stateless params that is not an
+# object). Up to 2.17.0 some got HTTP 500, and a few no answer at all. Paired
+# with a well-formed tools/list, so a FAIL tells a refusal that is too wide
+# from one that is missing.
+good=$(mcp_stateless tools/list '' '' 20 status)
+good_code=$(printf '%s\n' "$good" | tail -1)
+bad=$(curl -s --max-time 5 -w '\n%{http_code}' -X POST "$BASE/mcp" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'Mcp-Method: tools/list' -H 'MCP-Protocol-Version: 2026-07-28' \
+  -d '{"jsonrpc":"2.0","id":7,"method":"tools/list","params":[]}'); rc=$?
+bad_code=$(printf '%s\n' "$bad" | tail -1); bad=$(printf '%s\n' "$bad" | sed '$d')
+if [ "$good_code" = "200" ] && printf '%s' "$good" | grep -qF '"name":"sw_get"' \
+   && [ "$rc" = "0" ] && [ "$bad_code" = "400" ] && printf '%s' "$bad" | grep -qF '"code":-32602' \
+   && printf '%s' "$bad" | grep -qF '"id":7'; then
+  pass "MCP params that is not an object -> 400, -32602 (tools/list itself -> 200)"
+else
+  fail "MCP params that is not an object" "tools/list 200 with sw_get; params [] 400 with -32602 and id 7" \
+    "tools/list HTTP $good_code; curl exit $rc, HTTP $bad_code, $(printf '%s' "$bad" | head -c 160)"
+fi
+# A prompts/get without a name must end on its own, within 5 s, refused.
+resp=$(mcp_stateless prompts/get '' character_profile 5 status); rc=$?
+code=$(printf '%s\n' "$resp" | tail -1); resp=$(printf '%s\n' "$resp" | sed '$d')
+if [ "$rc" = "0" ] && [ "$code" = "200" ] && printf '%s' "$resp" | grep -qF '"code":-32602'; then
+  pass "MCP prompts/get without a name -> 200, -32602 within 5 s"
+else
+  fail "MCP prompts/get without a name" "curl ends within 5 s, 200 with -32602" \
+    "curl exit $rc, HTTP $code, $(printf '%s' "$resp" | head -c 160)"
+fi
 # 2.13.0 turned these two around (2.12.1: an empty list and -32602).
 resp=$(mcp_stateless resources/list '')
 if printf '%s' "$resp" | grep -qF '"uri":"swapi://people/1"' && printf '%s' "$resp" | grep -qF '"uri":"swapi://vehicles"'; then

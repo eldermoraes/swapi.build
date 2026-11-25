@@ -16,6 +16,61 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.17.1] - 2026-11-24
+
+A security fix for the MCP endpoint. A well-formed request gets the same
+answer as in 2.17.0, byte for byte; the skill is unchanged, so no client is
+asked to approve it again.
+
+### Security
+
+- Malformed MCP requests are refused before they reach the MCP server
+  extension (`quarkus-mcp-server` 2.1.0), which reads request fields without
+  checking their type. Up to 2.17.0 some malformed requests got HTTP `500`
+  with a stack trace in the server log, and a few never got an answer at all:
+  the connection stayed open until the client gave up, and the server kept
+  state for each one until a restart. Each of these shapes is now answered at
+  once with a JSON-RPC error carrying the request's `id`: `-32602` (invalid
+  params) with a message naming the field, or `-32600` with `id` null for a
+  body that is the JSON `null`. HTTP status: `200` in the session era; in the
+  stateless era (`MCP-Protocol-Version: 2026-07-28`) `400` when the defect is
+  in `params` or `_meta`, as the extension answers a `_meta` it refuses, and
+  `200` when it is in a method's own fields, as it answers an unknown tool
+  name. What is refused: a `params` or `params._meta` that is not an object; a
+  client description (`clientInfo` of `initialize` or of `_meta`) that is not
+  an object or lacks `name` or `version`, or whose icons are not well formed;
+  a `_meta` client capabilities that is not an object; a `tools/call` or
+  `prompts/get` without a `name` as a string, or with `arguments` that are not
+  an object (these answered `-32603` before); a `completion/complete` whose
+  `ref` or `argument` is not an object, or whose argument lacks `name` or
+  `value`. A request whose `id` is neither a string nor a number is
+  answered `-32600` with `id` null, with the status of a defect of `params`
+  (it was served before, with an error in the server log). A request the extension already refused
+  cleanly keeps its answer, wrong protocol version headers included.
+- A body shaped like a JSON-RPC response (`result` or `error`) answers HTTP
+  `202` without a body, as before, but no longer leaves a session behind (some
+  answered `500`). This server never sends a request to a client, so no
+  response is awaited.
+- Every POST to `/mcp` that reaches the extension has a deadline,
+  `swapi.mcp.response-deadline` (10 s): a request still unanswered then gets
+  `-32603` with its `id` (or, if its answer had started, the stream is
+  closed), where it could stay open for 30 minutes. An exception while the
+  extension handles a request answers `-32603` too, instead of the HTTP `500`
+  error page. Both are a net for a malformed shape not yet known: the
+  extension may still keep state for such a request. No answer of this server
+  takes more than milliseconds.
+- The server log gets at most one `WARN` line a minute for each kind of
+  refusal or failure, without a stack trace, instead of an `ERROR` with the
+  full trace per request.
+
+### Changed
+
+- `verify-deploy.sh` and `native-smoke.sh` check that a `params` that is not an
+  object answers `400` with `-32602` (paired with a well-formed `tools/list`)
+  and that a `prompts/get` without a name ends within 5 s with `-32602`.
+  `scripts/mcp-listen-load.sh` has a `malformed` mode for the release
+  rehearsal (never against production).
+
 ## [2.17.0] - 2026-11-24
 
 The MCP server publishes an Agent Skill. The answers of the four tools, the
@@ -1220,7 +1275,7 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.17.0...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.17.1...HEAD
 [2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
@@ -1270,6 +1325,7 @@ snapshot version is not a release. -->
 
 [2.12.1]: https://github.com/eldermoraes/swapi.build/compare/v2.12.0...v2.12.1
 
+[2.17.1]: https://github.com/eldermoraes/swapi.build/compare/v2.17.0...v2.17.1
 [2.17.0]: https://github.com/eldermoraes/swapi.build/compare/v2.16.1...v2.17.0
 [2.16.1]: https://github.com/eldermoraes/swapi.build/compare/v2.16.0...v2.16.1
 [2.16.0]: https://github.com/eldermoraes/swapi.build/compare/v2.15.0...v2.16.0

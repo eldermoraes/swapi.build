@@ -4,22 +4,32 @@ import io.quarkiverse.mcp.server.McpProtocolVersion;
 import io.quarkiverse.mcp.server.ResourceManager;
 import io.quarkiverse.mcp.server.runtime.ConnectionManager;
 import io.quarkus.runtime.configuration.MemorySize;
+import io.quarkus.security.AuthenticationException;
+import io.quarkus.security.ForbiddenException;
+import io.quarkus.security.UnauthorizedException;
 import io.quarkus.vertx.http.runtime.BodyConfig;
 import io.quarkus.vertx.http.runtime.VertxHttpConfig;
 import io.quarkus.vertx.web.RouteFilter;
 import io.smallrye.config.SmallRyeConfig;
 import io.vertx.core.Handler;
+import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpMethod;
+import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RequestBody;
+import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
+import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.ConfigProvider;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jboss.logging.Logger;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -78,6 +88,14 @@ import java.util.Optional;
  * McpListenLimitTest.theExtensionItselfStillRefusesABatch fails the day this
  * guard stops being a second lock and becomes the only one.
  *
+ * A malformed request the extension cannot handle is answered here too
+ * (2.17.1, refuseMalformed and McpRequestShape): with -32602, or a 202 for a
+ * body shaped like a response. In the extension (2.1.0, unchanged in its
+ * main branch when this was written) such a request got HTTP 500 and a stack
+ * trace in the log, and a few never got an answer and left state behind
+ * until a restart. McpExtensionShapeGuardTest pins what the extension does
+ * with each shape, and fails the day it handles one itself.
+ *
  * The method in the body wins over the Mcp-Method header; the header alone
  * counts only when the body has no method (or is not JSON). Either way a
  * listen is answered here, so neither path opens a stream.
@@ -115,6 +133,7 @@ public class McpTransportFilter {
     private static final int INVALID_REQUEST = -32600;
     private static final int METHOD_NOT_FOUND = -32601;
     private static final int INVALID_PARAMS = -32602;
+    private static final int INTERNAL_ERROR = -32603;
     private static final int RESOURCE_NOT_FOUND = -32002;
     // The extension's spelling of the header in its error messages.
     private static final String PROTOCOL_HEADER_AS_THE_EXTENSION_WRITES_IT = "Mcp-Protocol-Version";
@@ -134,6 +153,19 @@ public class McpTransportFilter {
 
     @Inject
     ConnectionManager sessions;
+
+    @Inject
+    Vertx vertx;
+
+    @ConfigProperty(name = "swapi.mcp.response-deadline")
+    Duration responseDeadline;
+
+    private static final Object NOT_JSON = new Object();
+    // The id of the request passed on to the extension, for the answers of
+    // the deadline and the failure handler (the body is not decoded again).
+    private static final String REQUEST_ID = "swapi.mcp.request-id";
+
+    private final OncePerMinute warnings = new OncePerMinute(Logger.getLogger(McpTransportFilter.class));
 
     private final Handler<RoutingContext> bodyHandler = quarkusBodyHandler();
 
@@ -222,7 +254,7 @@ public class McpTransportFilter {
             Object id = request.getValue("id");
             String method = request.getValue("method") instanceof String s ? s : null;
             if (LISTEN.equals(method) || (method == null && LISTEN.equals(headerMethod))) {
-                JsonObject refused = wrongVersionHeaders(rc, request, id);
+                JsonObject refused = wrongVersionHeaders(rc, request, id, isStateless(rc, request));
                 if (refused != null) {
                     end(rc, 400, refused);
                 } else {
@@ -234,12 +266,235 @@ public class McpTransportFilter {
                 end(rc, 200, subscribeAnswer(id, request));
                 return;
             }
+            if (refuseMalformed(rc, request, id)) {
+                return;
+            }
         } else if (LISTEN.equals(headerMethod)) {
             // Not JSON, but the header says listen: never open a stream.
             end(rc, 200, error(null, METHOD_NOT_FOUND, LISTEN_NOT_OFFERED));
             return;
+        } else if (message == null && acceptsTransport(rc)) {
+            // The JSON literal null: the extension dereferences it (HTTP 500).
+            // Answered as a request that is not one, -32600 with id null.
+            refused(rc, "body null");
+            end(rc, hasStatelessHeader(rc) ? 400 : 200,
+                    error(null, INVALID_REQUEST, "Invalid request: the body must be a JSON-RPC object"));
+            return;
         }
+        forward(rc, message instanceof JsonObject request ? request.getValue("id") : null);
+    }
+
+    // 2.17.1: the net under the shape checks. A shape nobody has found yet
+    // could still make the extension fail where it never answers, and then
+    // the connection stayed open until quarkus.http.idle-timeout (30 minutes
+    // by default). Every POST passed on to the extension gets a deadline
+    // (swapi.mcp.response-deadline, 10 s): one timer, armed here on the
+    // request's event loop and cancelled when the response ends (the end
+    // handler also runs when the connection closes). No answer of this
+    // server takes more than milliseconds and none is a stream (the listen
+    // is answered above). A future operation that legitimately takes longer
+    // (a task, a long-running tool) needs an explicit exception here, not a
+    // larger value.
+    //
+    // At the deadline: if nothing was written, -32603 with the request's id,
+    // under HTTP 200 as the extension sends its own "Internal error"; if the
+    // head was already written, the response cannot become an error any
+    // more, so it is reset (HTTP/2: the stream; HTTP/1.1: the connection).
+    // This frees the connection, not what the extension kept for the request
+    // (only the shape checks prevent that). If the extension writes later,
+    // the write is dropped without a log line, the extension releases what
+    // it kept for the request once the method returns, and the server goes
+    // on serving (McpResponseDeadlineTest, with a late tool of the real
+    // extension in both eras).
+    private void forward(RoutingContext rc, Object id) {
+        rc.put(REQUEST_ID, id);
+        long timer = vertx.setTimer(responseDeadline.toMillis(), t -> deadlineReached(rc, id));
+        rc.addEndHandler(done -> vertx.cancelTimer(timer));
         rc.next();
+    }
+
+    private void deadlineReached(RoutingContext rc, Object id) {
+        HttpServerResponse response = rc.response();
+        if (response.ended() || response.closed()) {
+            return;
+        }
+        warnings.warn("An MCP request got no answer within swapi.mcp.response-deadline");
+        if (response.headWritten()) {
+            response.reset();
+            return;
+        }
+        end(rc, 200, error(id, INTERNAL_ERROR, "Internal error: no answer within the server's deadline"));
+    }
+
+    // 2.17.1: an exception thrown while the extension handles a POST (its
+    // route handler casts request fields without checking them) became
+    // Quarkus's error page, HTTP 500 with the stack trace in the log. It is
+    // answered here as JSON-RPC, -32603 with the request's id under HTTP
+    // 200, like the extension's own "Internal error", and logged as one WARN
+    // line a minute per exception class, without the trace. Only an
+    // exception (status 500): the extension's own refusals through
+    // ctx.fail(status) -- 400 for the Accept, 404 for an unknown session
+    // when auto-init is off -- and the 413 of the body handler go on to
+    // Quarkus as before, and so do the security failures the extension
+    // answers in its own failure handler on /mcp. Registered on the router
+    // at startup, so it comes before Quarkus's error handler (the last
+    // route); the request was counted and passed CORS on the way in.
+    void registerFailureHandler(@Observes Router router) {
+        router.post(MCP_PATH).failureHandler(this::answerFailure);
+    }
+
+    void answerFailure(RoutingContext rc) {
+        Throwable failure = rc.failure();
+        HttpServerResponse response = rc.response();
+        if (rc.statusCode() != 500 || response.ended() || response.headWritten()
+                || failure instanceof AuthenticationException
+                || failure instanceof UnauthorizedException
+                || failure instanceof ForbiddenException) {
+            rc.next();
+            return;
+        }
+        warnings.warn("An MCP request failed in the extension: "
+                + (failure == null ? "status 500" : failure.getClass().getName()));
+        end(rc, 200, error(rc.get(REQUEST_ID), INTERNAL_ERROR, "Internal error"));
+    }
+
+    // 2.17.1: the shapes the extension cannot handle (McpRequestShape) are
+    // answered here, so they never reach it. Before, some got HTTP 500 and a
+    // stack trace in the log, and a few never got an answer and left state
+    // in the extension until a restart.
+    //
+    // Only requests the extension would get that far with: a request it
+    // refuses first, and cleanly, keeps the extension's own answer. In its
+    // order (StreamableHttpMcpMessageHandler.handle, handleStateless,
+    // McpMessageHandler.handle): the Accept of the transport (a bare 400);
+    // an unsupported protocol version (400); then it reads params and _meta,
+    // so their type is checked here at that point; a stateless request
+    // without the MCP-Protocol-Version header or with one that differs from
+    // _meta, the Mcp-Method and Mcp-Name headers and the required members of
+    // _meta (400); the jsonrpc member and the method (200, -32600 and
+    // -32601). So a request with wrong version headers keeps the answer it
+    // had.
+    //
+    // HTTP status, as the extension answers the nearest error it handles
+    // itself: 200 in the session era; in the stateless era 400 for params
+    // and _meta (it answers 400 for a _meta it refuses) and 200 for a
+    // method's own fields (it answers 200 for an unknown tool name). A body
+    // shaped like a response gets 202 without a body, as the extension
+    // answers one, but without the session it created for it: this server
+    // never sends a request to a client, so no response is awaited.
+    private boolean refuseMalformed(RoutingContext rc, JsonObject request, Object id) {
+        if (!acceptsTransport(rc)) {
+            return false;
+        }
+        String version = rc.request().getHeader(PROTOCOL_HEADER);
+        if (version != null && !McpProtocolVersion.SUPPORTED_VERSIONS.contains(version)) {
+            return false;
+        }
+        String method = request.getString("method");
+        boolean stateless = extensionTakesAsStateless(rc, request, method);
+        McpRequestShape.Refusal refusal = McpRequestShape.envelope(request);
+        if (refusal != null) {
+            refuse(rc, id, refusal, stateless);
+            return true;
+        }
+        // A missing or mismatched header is refused after params and _meta
+        // are read (findMeta), so only here.
+        if (wrongVersionHeaders(rc, request, id, stateless) != null) {
+            return false;
+        }
+        boolean validJsonRpc = "2.0".equals(request.getString("jsonrpc"));
+        if (request.containsKey("result") || request.containsKey("error")) {
+            if (!validJsonRpc) {
+                return false; // -32600 from the extension, which drops its session
+            }
+            refused(rc, "response");
+            String session = rc.request().getHeader(SESSION_HEADER);
+            if (session != null) {
+                rc.response().putHeader(SESSION_HEADER, session);
+            }
+            rc.response().setStatusCode(202).end();
+            return true;
+        }
+        JsonObject params = request.getValue("params") instanceof JsonObject p ? p : null;
+        JsonObject meta = params != null && params.getValue("_meta") instanceof JsonObject m ? m : null;
+        if (stateless && extensionRefusesStatelessEnvelope(rc, request, method, params, meta)) {
+            return false;
+        }
+        refusal = McpRequestShape.metaContent(meta);
+        if (refusal != null) {
+            refuse(rc, id, refusal, stateless);
+            return true;
+        }
+        if (!validJsonRpc || method == null) {
+            return false;
+        }
+        // An id the extension cannot hold: a request that is not one, as
+        // JSON-RPC answers it, -32600 with id null; the status of a defect
+        // of the envelope, as for a body that is null.
+        if (!McpRequestShape.validId(id)) {
+            refused(rc, "id");
+            end(rc, stateless ? 400 : 200,
+                    error(null, INVALID_REQUEST, "Invalid request: id must be a string or a number"));
+            return true;
+        }
+        String knownMethod = request.getValue("method") instanceof String s ? s : null;
+        refusal = McpRequestShape.methodFields(knownMethod, params, !stateless);
+        if (refusal != null) {
+            refuse(rc, id, refusal, stateless);
+            return true;
+        }
+        return false;
+    }
+
+    // What the extension answers itself, with 400, for a stateless request
+    // before it decodes anything this filter checks: validateStatelessHeaders
+    // (Mcp-Method, Mcp-Name; the version headers are wrongVersionHeaders) and
+    // validateStatelessMeta (a _meta, its protocol version and client
+    // capabilities, a clientInfo that is an object). The values are compared
+    // as the extension compares them, through getString.
+    private static boolean extensionRefusesStatelessEnvelope(RoutingContext rc, JsonObject request, String method,
+                                                             JsonObject params, JsonObject meta) {
+        String methodHeader = rc.request().getHeader("Mcp-Method");
+        if (methodHeader == null || (method != null && !methodHeader.equals(method))) {
+            return true;
+        }
+        if ("tools/call".equals(method) || "prompts/get".equals(method) || "resources/read".equals(method)) {
+            String nameHeader = rc.request().getHeader("Mcp-Name");
+            String name = params == null ? null : params.getString("resources/read".equals(method) ? "uri" : "name");
+            if (nameHeader == null || (name != null && !nameHeader.equals(name))) {
+                return true;
+            }
+        }
+        return meta == null
+                || meta.getString(McpRequestShape.PROTOCOL_VERSION) == null
+                || (meta.containsKey(McpRequestShape.CLIENT_INFO)
+                        && !(meta.getValue(McpRequestShape.CLIENT_INFO) instanceof JsonObject))
+                || meta.getValue(McpRequestShape.CLIENT_CAPABILITIES) == null;
+    }
+
+    private void refuse(RoutingContext rc, Object id, McpRequestShape.Refusal refusal, boolean stateless) {
+        refused(rc, refusal.kind());
+        end(rc, refusal.envelope() && stateless ? 400 : 200, error(id, INVALID_PARAMS, refusal.message()));
+    }
+
+    private void refused(RoutingContext rc, String kind) {
+        warnings.warn("Refused a malformed MCP request: " + kind);
+    }
+
+    // The extension's rule (StreamableHttpMcpMessageHandler.isStatelessRequest
+    // and McpMessageHandler.isStatelessMessage): a stateless MCP-Protocol-Version
+    // header; or server/discover, always; or, except for initialize, a
+    // stateless version in _meta.
+    private static boolean extensionTakesAsStateless(RoutingContext rc, JsonObject request, String method) {
+        if (hasStatelessHeader(rc) || "server/discover".equals(method)) {
+            return true;
+        }
+        return !"initialize".equals(method) && isStateless(rc, request);
+    }
+
+    private static boolean acceptsTransport(RoutingContext rc) {
+        List<String> accepts = rc.request().headers().getAll("Accept");
+        return accepts(accepts, "application/json") && accepts(accepts, "text/event-stream");
     }
 
     // 2.16.1: the answer extension 2.1.0 gives any method whose protocol
@@ -253,7 +508,11 @@ public class McpTransportFilter {
     // own answer, status and body, so an upgrade that changes one fails there.
     // The extension's Mcp-Method checks are not mirrored: here the body
     // method wins over that header, on purpose.
-    private static JsonObject wrongVersionHeaders(RoutingContext rc, JsonObject request, Object id) {
+    // stateless: whether the extension takes the request as stateless (for
+    // the listen, isStateless; 2.17.1, the shape checks pass the extension's
+    // own rule, extensionTakesAsStateless).
+    private static JsonObject wrongVersionHeaders(RoutingContext rc, JsonObject request, Object id,
+                                                  boolean stateless) {
         String header = rc.request().getHeader(PROTOCOL_HEADER);
         if (header != null && !McpProtocolVersion.SUPPORTED_VERSIONS.contains(header)) {
             JsonObject unsupported = error(id, UNSUPPORTED_PROTOCOL_VERSION, "Unsupported protocol version");
@@ -262,7 +521,7 @@ public class McpTransportFilter {
                     .put("requested", header));
             return unsupported;
         }
-        if (!isStateless(rc, request)) {
+        if (!stateless) {
             return null;
         }
         if (header == null) {
@@ -315,8 +574,7 @@ public class McpTransportFilter {
         if (version != null && !McpProtocolVersion.SUPPORTED_VERSIONS.contains(version)) {
             return false;
         }
-        List<String> accepts = rc.request().headers().getAll("Accept");
-        return accepts(accepts, "application/json") && accepts(accepts, "text/event-stream");
+        return acceptsTransport(rc);
     }
 
     // The extension's check, as it is (StreamableHttpMcpMessageHandler.accepts).
@@ -355,14 +613,15 @@ public class McpTransportFilter {
 
     // Parsed with the same decoder the extension uses, so an escaped method
     // name ("subscriptions\/listen") is the same method here and there.
+    // null is the JSON literal null; a body that is not JSON is NOT_JSON.
     private static Object parse(Buffer buffer) {
         if (buffer == null || buffer.length() == 0) {
-            return null;
+            return NOT_JSON;
         }
         try {
             return Json.decodeValue(buffer);
         } catch (RuntimeException e) {
-            return null; // the extension answers the parse error
+            return NOT_JSON; // the extension answers the parse error
         }
     }
 
