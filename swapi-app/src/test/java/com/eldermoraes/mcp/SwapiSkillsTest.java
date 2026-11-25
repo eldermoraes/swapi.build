@@ -251,11 +251,12 @@ class SwapiSkillsTest {
     // params that is not an object (an array, a string, a number) never
     // reaches skills/list: extension 2.1.0 reads the _meta of every request
     // first (McpMessageHandler.findMeta -> Messages.getParams casts params to
-    // an object) and the failed cast becomes an HTTP 500 from Quarkus's error
-    // handler, not a JSON-RPC answer, in both eras and for its own methods
-    // too (tools/list here). Pinned as it is: if an upgrade starts to pass
-    // such a message on, listParamsThatAreNotAnObjectAreInvalidParams is what
-    // skills/list answers.
+    // an object), and the failed cast was an HTTP 500 from Quarkus's error
+    // handler up to 2.17.0. Since 2.17.1 McpTransportFilter refuses such a
+    // request before the extension, with -32602 (HTTP 200 in a session, 400
+    // when stateless), for every method (tools/list here). Should the
+    // extension ever pass one on, listParamsThatAreNotAnObjectAreInvalidParams
+    // is what skills/list answers.
     @Test
     void paramsThatAreNotAnObjectNeverReachTheMethod() throws Exception {
         String session = openSession();
@@ -273,8 +274,11 @@ class SwapiSkillsTest {
                 for (HttpResponse<String> r : List.of(stateless, inSession)) {
                     String what = method + " " + params + ": " + r.statusCode() + " "
                             + r.body().substring(0, Math.min(200, r.body().length()));
-                    assertEquals(500, r.statusCode(), what);
-                    assertFalse(new JsonObject(r.body()).containsKey("jsonrpc"), what);
+                    assertEquals(r == stateless ? 400 : 200, r.statusCode(), what);
+                    JsonObject body = new JsonObject(r.body());
+                    assertEquals(-32602, body.getJsonObject("error").getInteger("code"), what);
+                    assertEquals(4, body.getInteger("id"), what);
+                    assertFalse(body.containsKey("result"), what);
                 }
             }
         }
