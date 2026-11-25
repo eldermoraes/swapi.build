@@ -26,7 +26,11 @@
 # not an object (400, -32602, paired with tools/list) and a prompts/get without
 # a name (-32602 within 5 s). Since 2.17.2: the capabilities of initialize
 # 2025-11-25 and server/discover carry resources {subscribe:true} and no
-# listChanged. Content only: without Caddy in front,
+# listChanged; and one request of each kind the filter now answers in the
+# extension's place (a body that is not a JSON object, an Accept without both
+# types, an invalid cursor paired with the initial one, a cancel of nothing)
+# and a body cut short, for the "Native log" step of native-binary.yml, which
+# reads what the binary logged. Content only: without Caddy in front,
 # the poisoning checks belong to verify-deploy.sh. Also run against the jar and
 # the local native build in the release rehearsal (docs/RELEASE.md).
 set -u
@@ -266,6 +270,55 @@ fi
 invalid_params_200() { [ "$MCP_STATUS" = "200" ] && grep -qF '"code":-32602'; }
 mcp_probe "MCP prompts/get without a name -> 200, -32602 within 5 s" prompts/get '' character_profile 5 \
   invalid_params_200 'curl ends within 5 s, HTTP 200, -32602'
+
+# 2.17.2+ (#126): the refusals the extension made itself and logged at every
+# request are written by McpTransportFilter, with the extension's answer
+# (new code in the native image). One request of each kind, so that the
+# "Native log" step of native-binary.yml reads what the binary logs for
+# them: a body that is not a JSON object, an Accept without both types, a
+# cursor that does not decode (paired with the initial cursor, served), a
+# cancel of nothing, and a body that never arrives whole.
+mcp_raw() { # <max s> <body> [header ...]: the body, then the HTTP status on a line of its own
+  local max="$1" body="$2"; shift 2
+  curl -s --max-time "$max" -w '\n%{http_code}' -X POST "$BASE/mcp" -H 'Content-Type: application/json' "$@" -d "$body"
+}
+raw_probe() { # <label> <expected> <status> <grep -F text, or ''> <max s> <body> [header ...]
+  local label="$1" expected="$2" want="$3" text="$4" resp rc code; shift 4
+  resp=$(mcp_raw "$@"); rc=$?
+  code="${resp##*$'\n'}"; resp="${resp%$'\n'*}"
+  if [ "$rc" = "0" ] && [ "$code" = "$want" ] && { [ -z "$text" ] || printf '%s' "$resp" | grep -qF "$text"; }; then
+    pass "$label"
+  else
+    fail "$label" "$expected" "curl exit $rc, HTTP $code, $(printf '%s' "$resp" | head -c 160)"
+  fi
+}
+TRANSPORT_ACCEPT='Accept: application/json, text/event-stream'
+raw_probe "MCP body that is not a JSON object -> 200, -32700" 'HTTP 200, -32700' 200 '"code":-32700' 5 \
+  '"x"' -H "$TRANSPORT_ACCEPT"
+raw_probe "MCP Accept without text/event-stream -> 400" 'HTTP 400' 400 '' 5 \
+  '{"jsonrpc":"2.0","id":8,"method":"tools/list"}' -H 'Accept: application/json'
+raw_probe "MCP tools/list with an invalid cursor -> 200, -32602" 'HTTP 200, -32602 Invalid cursor' 200 \
+  'Invalid cursor detected' 5 '{"jsonrpc":"2.0","id":9,"method":"tools/list","params":{"cursor":"x"}}' \
+  -H "$TRANSPORT_ACCEPT"
+raw_probe "MCP tools/list with the initial cursor -> 200, the tools" 'HTTP 200 with sw_get' 200 '"name":"sw_get"' 5 \
+  '{"jsonrpc":"2.0","id":10,"method":"tools/list","params":{"cursor":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}}' \
+  -H "$TRANSPORT_ACCEPT"
+raw_probe "MCP notifications/cancelled of nothing -> 202" 'HTTP 202' 202 '' 5 \
+  '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":99}}' -H "$TRANSPORT_ACCEPT"
+# A body shorter than its Content-Length, then the connection closed, over
+# bash's /dev/tcp (an http://host:port base only); then the server must go
+# on serving.
+hostport="${BASE#http://}"; hostport="${hostport%%/*}"
+if [[ "$BASE" == http://*:* ]] && exec 3<>"/dev/tcp/${hostport%:*}/${hostport##*:}"; then
+  printf 'POST /mcp HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\n%s\r\nContent-Length: 200\r\n\r\n{"jsonrpc":"2.0"' \
+    "$hostport" "$TRANSPORT_ACCEPT" >&3
+  exec 3>&-
+  sleep 0.5
+  raw_probe "MCP served after a body cut short" 'HTTP 200 with sw_get' 200 '"name":"sw_get"' 5 \
+    '{"jsonrpc":"2.0","id":11,"method":"tools/list"}' -H "$TRANSPORT_ACCEPT"
+else
+  fail "MCP body cut short" "an http://host:port base and a /dev/tcp connection" "$BASE (probe NOT executed)"
+fi
 
 echo
 if [ "$FAILURES" -eq 0 ]; then

@@ -213,6 +213,30 @@ jobs:
           fi
           exit "$status"
 
+      # 2.17.2+ (#126): no malformed request makes the server log a line per
+      # request. The smoke sends one request of each kind the filter answers
+      # in the extension's place, and a body cut short; this reads what the
+      # binary logged for the whole smoke and fails on any WARN or ERROR
+      # outside a short, explicit list: McpTransportFilter (its fixed lines,
+      # once per kind per minute) and the start line of StatsPersistence (the
+      # runner has no STATE_DIRECTORY). A legitimate new WARN joins the list
+      # here, with a comment. The only check of the native binary's log
+      # before a release; the application stopped in the step above.
+      - name: Native log has no WARN or ERROR outside its list
+        run: |
+          log="$RUNNER_TEMP/native-smoke.log"
+          unexpected=$(grep -E '^[0-9-]+ [0-9:,]+ (WARN|ERROR) ' "$log" \
+            | grep -vE '^[0-9-]+ [0-9:,]+ WARN +\[com\.eldermoraes\.mcp\.McpTransportFilter\] ' \
+            | grep -vE '^[0-9-]+ [0-9:,]+ WARN +\[com\.eldermoraes\.stats\.StatsPersistence\] \(main\) no state directory ' \
+            || true)
+          if [ -n "$unexpected" ]; then
+            echo "The native binary logged a WARN or ERROR outside the list during the smoke:"
+            printf '%s\n' "$unexpected" | cut -c1-300
+            exit 1
+          fi
+          echo "Native log: $(grep -cE '^[0-9-]+ [0-9:,]+ WARN +\[com\.eldermoraes\.mcp\.McpTransportFilter\] ' "$log" || true) line(s) of McpTransportFilter, nothing else above INFO" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Attach to the Release
         if: github.event_name != 'pull_request'
         working-directory: dist
