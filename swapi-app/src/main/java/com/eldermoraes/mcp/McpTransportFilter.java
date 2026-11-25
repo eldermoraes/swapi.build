@@ -9,7 +9,6 @@ import io.quarkiverse.mcp.server.http.runtime.config.McpHttpServerRuntimeConfig;
 import io.quarkiverse.mcp.server.http.runtime.config.McpHttpServersRuntimeConfig;
 import io.quarkiverse.mcp.server.runtime.ConnectionManager;
 import io.quarkiverse.mcp.server.runtime.McpConnectionBase;
-import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
 import io.quarkus.arc.Arc;
 import io.quarkus.runtime.configuration.MemorySize;
 import io.quarkus.security.AuthenticationException;
@@ -122,11 +121,10 @@ import java.util.Optional;
  * answers and fails the day the extension stops logging one. At every
  * upgrade of the extension, read those four places again. A POST whose body
  * never arrives whole is logged the same way by the failure handler, not by
- * Quarkus's error handler (answerFailure). No malformed request to /mcp
- * makes the server log a line per request; only a defect of the server
- * does. One known exception, left open: a form body that the body handler's
- * form decoder refuses as it reads it still goes to Quarkus's error handler
- * (answerFailure leaves the decoder's exceptions alone).
+ * Quarkus's error handler, and so is a form body the body handler's form
+ * decoder refuses, answered 400 without a body (answerFailure). No malformed
+ * request to /mcp makes the server log a line per request; only a defect of
+ * the server does.
  *
  * The method in the body wins over the Mcp-Method header; the header alone
  * counts only when the body has no method (or is not JSON). Either way a
@@ -411,26 +409,46 @@ public class McpTransportFilter {
     void answerFailure(RoutingContext rc) {
         Throwable failure = rc.failure();
         HttpServerResponse response = rc.response();
-        // 2.17.2 (#126): a body that never arrived whole. The body handler of
-        // filter() fails the request when the connection closes mid-body or
-        // a chunk is malformed (BodyHandlerImpl: context.fail(200, t), before
-        // the request has ended; a malformed chunk fails twice, the codec's
-        // exception and then the close). Quarkus's error handler logged an
-        // ERROR for each, at every request. Ended here: the connection is
-        // closed without a byte (the client got none before either) and one
-        // fixed line a minute is logged. Left alone, as before: a failure
-        // without an exception (the 413 of the body handler, the Accept's
-        // 400), a form body that arrived but that the form decoder refuses
-        // (HttpPostRequestDecoder's exceptions: the body handler's 400, or
-        // the 500 answered below), anything that comes once the body has
-        // ended (the extension's 500, below) and the security failures.
+        // 2.17.2 (#126): a failure of the body handler of filter(), which
+        // comes before the request has ended (BodyHandlerImpl's exception
+        // handler: context.fail(400, t) for a DecoderException, with its
+        // cause when it has one, and context.fail(200, t) for anything else).
+        // Quarkus's error handler logged an ERROR for most of them, at every
+        // request, with a stack trace. Answered here, with one fixed line a
+        // minute, never with text of the request:
+        // - 400 on a form request (a Content-Type the body handler decodes as
+        //   a form: application/x-www-form-urlencoded or multipart/form-data):
+        //   the form decoder (Netty's HttpPostRequestDecoder, fed by Vert.x as
+        //   the data arrives) refused the body, a bad escape, too many fields,
+        //   a field or an attribute over quarkus.http.limits, a part it cannot
+        //   read. The cause varies (the decoder's own exception, an
+        //   IOException, a NullPointerException...), so it is not looked at.
+        //   The body handler's status, 400, with no body: Quarkus's error
+        //   page carried only a random error id.
+        // - 200, or 400 on any other request: the body never arrived whole,
+        //   the connection closed mid-body or a chunk is malformed (which
+        //   fails twice, the codec's exception and then the close). The
+        //   connection is closed without a byte; the client got none before
+        //   either.
+        // Left alone, as before: a failure without an exception (the 413 of
+        // the body handler, the Accept's 400), any other status (an empty
+        // multipart boundary fails when the body handler starts, a 500,
+        // answered below), anything that comes once the body has ended (the
+        // extension's 500, below; a bad escape in the last form field, which
+        // Vert.x decodes after the end, goes on to the extension) and the
+        // security failures.
         if (failure != null && !rc.request().isEnded()
-                && !(failure instanceof HttpPostRequestDecoder.ErrorDataDecoderException)
-                && !(failure instanceof HttpPostRequestDecoder.NotEnoughDataDecoderException)
-                && !(failure instanceof HttpPostRequestDecoder.EndOfDataDecoderException)
+                && (rc.statusCode() == 200 || rc.statusCode() == 400)
                 && !(failure instanceof AuthenticationException)
                 && !(failure instanceof UnauthorizedException)
                 && !(failure instanceof ForbiddenException)) {
+            if (rc.statusCode() == 400 && isForm(rc)) {
+                refused(rc, "form body");
+                if (!response.ended() && !response.headWritten() && !response.closed()) {
+                    response.setStatusCode(400).end();
+                }
+                return;
+            }
             warnings.warn("An MCP request body did not arrive whole");
             if (!response.closed()) {
                 rc.request().connection().close();
@@ -447,6 +465,17 @@ public class McpTransportFilter {
         warnings.warn("An MCP request failed in the extension: "
                 + (failure == null ? "status 500" : failure.getClass().getName()));
         end(rc, 200, error(rc.get(REQUEST_ID), INTERNAL_ERROR, "Internal error"));
+    }
+
+    // The body handler's own test (BodyHandlerImpl): a form when the
+    // Content-Type starts with one of the two form types, in any case.
+    private static boolean isForm(RoutingContext rc) {
+        String type = rc.request().getHeader("Content-Type");
+        if (type == null) {
+            return false;
+        }
+        String lower = type.toLowerCase(java.util.Locale.ROOT);
+        return lower.startsWith("multipart/form-data") || lower.startsWith("application/x-www-form-urlencoded");
     }
 
     // 2.17.1: the shapes the extension cannot handle (McpRequestShape) are
