@@ -28,8 +28,9 @@
 # 2025-11-25 and server/discover carry resources {subscribe:true} and no
 # listChanged; and one request of each kind the filter now answers in the
 # extension's place (a body that is not a JSON object, an Accept without both
-# types, an invalid cursor paired with the initial one, a cancel of nothing)
-# and a body cut short, for the "Native log" step of native-binary.yml, which
+# types, an invalid cursor paired with the initial one, a cancel of nothing),
+# a form body the form decoder refuses (400 without a body) and a body cut
+# short, for the "Native log" step of native-binary.yml, which
 # reads what the binary logged. Content only: without Caddy in front,
 # the poisoning checks belong to verify-deploy.sh. Also run against the jar and
 # the local native build in the release rehearsal (docs/RELEASE.md).
@@ -277,7 +278,8 @@ mcp_probe "MCP prompts/get without a name -> 200, -32602 within 5 s" prompts/get
 # "Native log" step of native-binary.yml reads what the binary logs for
 # them: a body that is not a JSON object, an Accept without both types, a
 # cursor that does not decode (paired with the initial cursor, served), a
-# cancel of nothing, and a body that never arrives whole.
+# cancel of nothing, a form body the form decoder refuses, and a body that
+# never arrives whole.
 mcp_raw() { # <max s> <body> [header ...]: the body, then the HTTP status on a line of its own
   local max="$1" body="$2"; shift 2
   curl -s --max-time "$max" -w '\n%{http_code}' -X POST "$BASE/mcp" -H 'Content-Type: application/json' "$@" -d "$body"
@@ -303,6 +305,15 @@ raw_probe "MCP tools/list with an invalid cursor -> 200, -32602" 'HTTP 200, -326
 raw_probe "MCP tools/list with the initial cursor -> 200, the tools" 'HTTP 200 with sw_get' 200 '"name":"sw_get"' 5 \
   '{"jsonrpc":"2.0","id":10,"method":"tools/list","params":{"cursor":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}}' \
   -H "$TRANSPORT_ACCEPT"
+form_400_empty() { [ -z "$(cat)" ]; }
+fresp=$(curl -s --max-time 5 -w '\n%{http_code}' -X POST "$BASE/mcp" -H 'Content-Type: application/x-www-form-urlencoded' \
+  -H "$TRANSPORT_ACCEPT" -d 'a=%zz&b=1'); rc=$?
+fcode="${fresp##*$'\n'}"; fresp="${fresp%$'\n'*}"
+if [ "$rc" = "0" ] && [ "$fcode" = "400" ] && printf '%s' "$fresp" | form_400_empty; then
+  pass "MCP form body the form decoder refuses -> 400 without a body"
+else
+  fail "MCP form body the form decoder refuses" 'HTTP 400, no body' "curl exit $rc, HTTP $fcode, $(printf '%s' "$fresp" | head -c 160)"
+fi
 raw_probe "MCP notifications/cancelled of nothing -> 202" 'HTTP 202' 202 '' 5 \
   '{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":99}}' -H "$TRANSPORT_ACCEPT"
 # A body shorter than its Content-Length, then the connection closed, over

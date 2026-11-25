@@ -234,13 +234,14 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   whose body never arrives whole (connection closed mid-body, malformed
   chunk) is logged the same way by the filter's failure handler, not by
   Quarkus's error handler, and gets no answer, as before
-  (`McpIncompleteBodyTest`). No malformed request to `/mcp` makes the server
-  log a line per request; only a defect of the server does (an `ERROR`, on
-  purpose, like the `VertxCoreRecorder` line). One known exception, open: a
-  form body (`application/x-www-form-urlencoded`) that the body handler's
-  form decoder refuses as it reads it is still answered and logged by
-  Quarkus's error handler (`aFormBodyTheDecoderRefusesKeepsItsAnswer` pins
-  the answer). `McpRequestMutationTest`
+  (`McpIncompleteBodyTest`). A form body (`application/x-www-form-urlencoded`
+  or `multipart/form-data`) that the body handler's form decoder refuses as
+  it reads it (a bad escape, too many fields, a field or attribute over
+  `quarkus.http.limits`, a part it cannot read) is answered there too, with
+  the body handler's 400 and no body (Quarkus's error page carried only a
+  random error id), logged the same way. No malformed request to `/mcp` makes
+  the server log a line per request; only a defect of the server does (an
+  `ERROR`, on purpose, like the `VertxCoreRecorder` line). `McpRequestMutationTest`
   fails on any `WARN` that is not the filter's, and the native smoke on any
   `WARN` or `ERROR` outside its short list. Checks are on types, on
   fields every supported revision requires and the extension fails without,

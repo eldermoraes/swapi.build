@@ -37,7 +37,10 @@ unchanged (not one byte), so no client is asked to approve it again.
 - A POST to `/mcp` whose body never arrives whole (the connection closed in
   the middle of the body, a malformed chunk) got an `ERROR` in the server log
   at every request. It still gets no answer, as before, and is now logged at
-  most once a minute.
+  most once a minute. A form body (`application/x-www-form-urlencoded` or
+  `multipart/form-data`) that the server's form decoder refuses is now
+  answered `400` without a body (it was a `400` with an error page) and
+  logged at most once a minute, instead of an `ERROR` at every request.
 - `notifications/cancelled` no longer reaches the extension: the filter
   answers it as the extension did (`202`, or `200` without a body when it
   carries an `id`). No answer of this server lasts long enough to be
