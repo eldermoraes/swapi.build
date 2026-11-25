@@ -302,8 +302,10 @@ public class McpTransportFilter {
     // more, so it is reset (HTTP/2: the stream; HTTP/1.1: the connection).
     // This frees the connection, not what the extension kept for the request
     // (only the shape checks prevent that). If the extension writes later,
-    // Vert.x refuses the write and logs it; the server goes on serving
-    // (McpResponseDeadlineTest).
+    // the write is dropped without a log line, the extension releases what
+    // it kept for the request once the method returns, and the server goes
+    // on serving (McpResponseDeadlineTest, with a late tool of the real
+    // extension in both eras).
     private void forward(RoutingContext rc, Object id) {
         rc.put(REQUEST_ID, id);
         long timer = vertx.setTimer(responseDeadline.toMillis(), t -> deadlineReached(rc, id));
