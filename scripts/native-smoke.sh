@@ -24,7 +24,9 @@
 # skills/list (the skill's URI and a digest) and resources/read of its SKILL.md,
 # the files SwapiSkills reads from mcp/skills/**. Since 2.17.1: a params that is
 # not an object (400, -32602, paired with tools/list) and a prompts/get without
-# a name (-32602 within 5 s). Content only: without Caddy in front,
+# a name (-32602 within 5 s). Since 2.17.2: the capabilities of initialize
+# 2025-11-25 and server/discover carry resources {subscribe:true} and no
+# listChanged. Content only: without Caddy in front,
 # the poisoning checks belong to verify-deploy.sh. Also run against the jar and
 # the local native build in the release rehearsal (docs/RELEASE.md).
 set -u
@@ -191,10 +193,29 @@ mcp_probe "MCP resources/read skill://star-wars-research/SKILL.md" resources/rea
 # The branch only the filter has: a 2025-11-25 session, the listen with the
 # method only in the body (no Mcp-Method) and a subscribe that the extension
 # would record. Each curl has a time limit, so a stream left open is a FAIL.
-sid=$("${CURL[@]}" -D - -o /dev/null -X POST "$BASE/mcp" \
+init=$("${CURL[@]}" -i -X POST "$BASE/mcp" \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"native-smoke","version":"1.0"}}}' \
-  | tr -d '\r' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
+  | tr -d '\r')
+sid=$(printf '%s\n' "$init" | sed '/^$/q' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
+init_body=$(printf '%s\n' "$init" | sed '1,/^$/d')
+# 2.17.2 (#122): the capabilities promise no notification the server never
+# sends. The extension decides listChanged at build time, from the injection
+# points of the application (McpCapabilitiesTest): the native binary must say
+# the same as the jar. The exact text of resources (a one-key map always
+# prints the same) and no listChanged anywhere in the answer (it does not
+# echo the client's capabilities).
+no_list_changed() { local b; b=$(cat); printf '%s' "$b" | grep -qF '"resources":{"subscribe":true}' \
+  && ! printf '%s' "$b" | grep -qF '"listChanged"'; }
+if printf '%s' "$init_body" | no_list_changed; then
+  pass "MCP initialize 2025-11-25: resources {subscribe:true}, no listChanged"
+else
+  fail "MCP initialize 2025-11-25 capabilities" '"resources":{"subscribe":true} and no "listChanged"' \
+    "$(printf '%s' "$init_body" | grep -o '"capabilities":{.*' | head -c 200)"
+fi
+discover_no_list_changed() { [ "$MCP_STATUS" = "200" ] && no_list_changed; }
+mcp_probe "MCP server/discover: resources {subscribe:true}, no listChanged" server/discover '' '' 20 \
+  discover_no_list_changed 'HTTP 200, "resources":{"subscribe":true} and no "listChanged"'
 session_probe() {
   local label="$1" body="$2" check="$3" expected="$4" resp rc
   resp=$(curl -s --max-time 5 -w '\n%{http_code}' -X POST "$BASE/mcp" \

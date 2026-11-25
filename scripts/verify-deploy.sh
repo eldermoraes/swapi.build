@@ -903,10 +903,12 @@ fi
 # The branch only the filter has: a session of the 2025-11-25 era, where the
 # listen comes with the method only in the body (no Mcp-Method) and a
 # subscribe would leave a subscriber in the extension.
-SESSION_ERA_SID=$("${CURL[@]}" -D - -o /dev/null -X POST "$BASE/mcp" \
+SESSION_ERA_INIT=$("${CURL[@]}" -i -X POST "$BASE/mcp" \
   -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"verify-deploy","version":"1.0"}}}' \
-  | tr -d '\r' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
+  | tr -d '\r')
+SESSION_ERA_SID=$(printf '%s\n' "$SESSION_ERA_INIT" | sed '/^$/q' | awk -F': ' 'tolower($1)=="mcp-session-id"{print $2}')
+SESSION_ERA_INIT_BODY=$(printf '%s\n' "$SESSION_ERA_INIT" | sed '1,/^$/d')
 # <body> [max seconds] [status]: with "status" the HTTP status follows the body
 # on a line of its own, as in mcp_stateless.
 mcp_session() {
@@ -1013,6 +1015,27 @@ if printf '%s' "$resp" | grep -qF '"resources":' && printf '%s' "$resp" | grep -
   pass "MCP server/discover: resources and prompts capabilities"
 else
   fail "MCP server/discover capabilities" '"resources" and "prompts"' "$(printf '%s' "$resp" | head -c 160)"
+fi
+# 2.17.2 (#122): no capability promises a notification the server never
+# sends. resources carries subscribe only (the exact text: a one-key map
+# always prints the same), and no listChanged anywhere in the answer (it does
+# not echo the client's capabilities). The same discover answer as above, and
+# the initialize 2025-11-25 of the session probes. After a rollback to 2.17.1
+# these read FAIL with nothing wrong: run the verify-deploy.sh of the tag
+# that is live (docs/DEPLOY.md).
+no_list_changed() { printf '%s' "$1" | grep -qF '"resources":{"subscribe":true}' \
+  && ! printf '%s' "$1" | grep -qF '"listChanged"'; }
+if no_list_changed "$resp"; then
+  pass "MCP server/discover: resources {subscribe:true}, no listChanged"
+else
+  fail "MCP server/discover listChanged" '"resources":{"subscribe":true} and no "listChanged"' \
+    "$(printf '%s' "$resp" | grep -o '"capabilities":{.*' | head -c 200)"
+fi
+if no_list_changed "$SESSION_ERA_INIT_BODY"; then
+  pass "MCP initialize 2025-11-25: resources {subscribe:true}, no listChanged"
+else
+  fail "MCP initialize 2025-11-25 listChanged" '"resources":{"subscribe":true} and no "listChanged"' \
+    "$(printf '%s' "$SESSION_ERA_INIT_BODY" | grep -o '"capabilities":{.*' | head -c 200)"
 fi
 # The new arguments are optional: the four required lists stay as in 2.12.1.
 resp=$(mcp_stateless tools/list '')
