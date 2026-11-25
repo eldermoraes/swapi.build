@@ -263,6 +263,31 @@ class McpResponseDeadlineTest {
                 .statusCode(413);
     }
 
+    // 2.17.2 (#126): the filter writes the extension's answer to a cancel and
+    // to a cursor that does not decode only where the extension would run the
+    // method. Without auto-init, a request without a session the process
+    // holds never gets that far: the extension's own answers stay, its 404
+    // for an unknown session and its -32601 for a first message that is not
+    // initialize.
+    @Test
+    void withoutAutoInitACancelOrACursorWithoutASessionKeepsTheExtensionsAnswer() throws Exception {
+        for (String body : List.of("""
+                {"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":99}}""", """
+                {"jsonrpc":"2.0","id":7,"method":"tools/list","params":{"cursor":"x"}}""")) {
+            HttpResponse<String> unknown = sendWithDeadline(post(body)
+                    .header("Mcp-Session-Id", "not-a-session-of-this-process")
+                    .header("MCP-Protocol-Version", "2025-11-25").build(), 5000);
+            assertNotNull(unknown, "no answer");
+            assertEquals(404, unknown.statusCode(), unknown.body());
+            HttpResponse<String> none = sendWithDeadline(post(body).build(), 5000);
+            assertNotNull(none, "no answer");
+            assertEquals(200, none.statusCode(), none.body());
+            JsonObject error = new JsonObject(none.body()).getJsonObject("error");
+            assertEquals(-32601, error.getInteger("code"), none.body());
+            assertTrue(error.getString("message").contains("initialize"), none.body());
+        }
+    }
+
     // ------------------------------------------------- the real extension, late
 
     // The synthetic routes above stand in for the extension. Here the

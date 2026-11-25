@@ -75,10 +75,17 @@ class McpMalformedRequestTest {
         // Left to the extension, which answers it itself: any JSON-RPC
         // answer (or 202) but a 500, and nothing left behind.
         static final Expect EXTENSION = new Expect(-1, null);
+        // Served: HTTP 200 with a result (a pair of a refusal, 2.17.2).
+        static final Expect SERVED = new Expect(200, 0);
     }
 
+    /** accepts: the Accept headers of the request; null for the transport's own. */
     record Shape(String name, String method, String mcpName, Function<Era, String> body,
-                 Map<Era, Expect> expected, boolean idNull) {
+                 Map<Era, Expect> expected, boolean idNull, List<String> accepts) {
+        Shape(String name, String method, String mcpName, Function<Era, String> body,
+              Map<Era, Expect> expected, boolean idNull) {
+            this(name, method, mcpName, body, expected, idNull, null);
+        }
     }
 
     @TestHTTPResource("/mcp")
@@ -317,12 +324,58 @@ class McpMalformedRequestTest {
         s.add(shape("tools/call with name 5", "tools/call", "5", era -> """
                 {"jsonrpc":"2.0","id":7,"method":"tools/call","params":%s}"""
                 .formatted(params(era, "\"name\":5,\"arguments\":{}")), field(-32602)));
+        // 2.17.2 (#126): the extension logged a line at every request for
+        // each of these, and the filter now writes its answer itself
+        // (McpExtensionLogGuardTest compares the two). A body that is not a
+        // JSON object: 200 with -32700 and id null, in every era.
+        for (String body : List.of("\"x\"", "\"" + McpExtensionLogGuardTest.MARKER + "\"", "1", "true", "", "   ",
+                "{", "hello", "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/list\"} x",
+                "[".repeat(1001) + "]".repeat(1001))) {
+            s.add(new Shape("body " + McpExtensionLogGuardTest.abbreviated(body), "tools/list", null, era -> body,
+                    all(new Expect(200, -32700)), true));
+        }
+        // An Accept without both types of the transport: Quarkus's bare 400.
+        // (java.net.http sends one line per header name; two Accept lines are
+        // in McpExtensionLogGuardTest, over a socket.)
+        for (List<String> accepts : List.of(List.<String>of(), List.of("application/json"),
+                List.of("text/event-stream"), List.of("text/" + McpExtensionLogGuardTest.MARKER))) {
+            s.add(new Shape("tools/list with Accept " + accepts, "tools/list", null, era -> """
+                    {"jsonrpc":"2.0","id":7,"method":"tools/list","params":%s}""".formatted(params(era, "")),
+                    all(new Expect(400, null)), false, accepts));
+        }
+        s.add(new Shape("tools/list with both types in one Accept, the other way round", "tools/list", null,
+                era -> """
+                        {"jsonrpc":"2.0","id":7,"method":"tools/list","params":%s}""".formatted(params(era, "")),
+                all(Expect.SERVED), false, List.of("text/event-stream, application/json")));
+        // A cursor that does not decode, in the extension's four lists: 200
+        // with -32602 and the id; one that decodes is served.
+        for (String method : List.of("tools/list", "resources/list", "resources/templates/list", "prompts/list")) {
+            for (String cursor : List.of("\"x\"", "\"" + McpExtensionLogGuardTest.MARKER + "\"", "\"\"", "1",
+                    "{\"a\":1}", "\"f/////////8AAAAAAAAAAAAAAAAAAAAA\"")) {
+                s.add(shape(method + " with cursor " + cursor, method, null, era -> """
+                        {"jsonrpc":"2.0","id":7,"method":"%s","params":%s}"""
+                        .formatted(method, params(era, "\"cursor\":" + cursor)), field(-32602)));
+            }
+            s.add(shape(method + " with the initial cursor", method, null, era -> """
+                    {"jsonrpc":"2.0","id":7,"method":"%s","params":%s}"""
+                    .formatted(method, params(era, "\"cursor\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"")),
+                    all(Expect.SERVED)));
+        }
+        // A cancel the extension reaches: answered by the filter (the
+        // extension's 202, or its 200 without a body for a cancel with an
+        // id), never passed on, never logged.
+        for (String requestId : List.of("{}", "99", "\"" + McpExtensionLogGuardTest.MARKER + "\"")) {
+            s.add(shapeWithoutId("notifications/cancelled with requestId " + requestId, "notifications/cancelled",
+                    era -> """
+                            {"jsonrpc":"2.0","method":"notifications/cancelled","params":%s}"""
+                            .formatted(params(era, "\"requestId\":" + requestId)), accepted()));
+        }
+        s.add(shape("notifications/cancelled with an id", "notifications/cancelled", null, era -> """
+                {"jsonrpc":"2.0","id":7,"method":"notifications/cancelled","params":%s}"""
+                .formatted(params(era, "\"requestId\":99")), all(new Expect(200, null))));
         // Left to the extension, which answers them itself and keeps nothing:
         // checked here so that a change of the filter that starts to send
         // them on a path that fails is seen.
-        s.add(shapeWithoutId("notifications/cancelled with requestId {}", "notifications/cancelled", era -> """
-                {"jsonrpc":"2.0","method":"notifications/cancelled","params":%s}"""
-                .formatted(params(era, "\"requestId\":{}")), extension()));
         s.add(shape("resources/read with uri {}", "resources/read", "{}", era -> """
                 {"jsonrpc":"2.0","id":7,"method":"resources/read","params":%s}"""
                 .formatted(params(era, "\"uri\":{}")), extension()));
@@ -354,15 +407,21 @@ class McpMalformedRequestTest {
     // ------------------------------------------------------------------ HTTP
 
     private HttpRequest.Builder post(String body) {
-        return HttpRequest.newBuilder(mcp)
+        return post(body, List.of("application/json, text/event-stream"));
+    }
+
+    private HttpRequest.Builder post(String body, List<String> accepts) {
+        HttpRequest.Builder b = HttpRequest.newBuilder(mcp)
                 .timeout(Duration.ofSeconds(10))
                 .header("Content-Type", "application/json")
-                .header("Accept", "application/json, text/event-stream")
                 .POST(HttpRequest.BodyPublishers.ofString(body));
+        accepts.forEach(a -> b.header("Accept", a));
+        return b;
     }
 
     private HttpRequest request(Shape shape, Era era, String session) {
-        HttpRequest.Builder b = post(shape.body().apply(era));
+        HttpRequest.Builder b = shape.accepts() == null ? post(shape.body().apply(era))
+                : post(shape.body().apply(era), shape.accepts());
         switch (era) {
             case AUTO_INIT -> {
             }
@@ -485,6 +544,20 @@ class McpMalformedRequestTest {
         if (!errors.isEmpty()) {
             failures.add("ERROR records in the log: " + errors);
         }
+        // 2.17.2 (#126): no malformed request makes the server log a line per
+        // request. Only the filter logs, once per kind per minute (below), and
+        // never with text of the request.
+        records.stream()
+                .filter(r -> r.getLevel().intValue() >= Level.WARNING.intValue()
+                        && !McpTransportFilter.class.getName().equals(r.getLoggerName()))
+                .map(McpExtensionLogGuardTest::describe)
+                .distinct()
+                .forEach(line -> failures.add("a WARN or above that is not the filter's: " + line));
+        records.stream()
+                .filter(r -> String.valueOf(formatted(r)).contains(McpExtensionLogGuardTest.MARKER))
+                .map(McpExtensionLogGuardTest::describe)
+                .distinct()
+                .forEach(line -> failures.add("the request's text in the log: " + line));
         // The refusals log one WARN line per kind per minute, with no stack
         // trace. (A kind may already have been logged by an earlier test in
         // this minute, so "at most one", not "exactly one".)
@@ -529,6 +602,10 @@ class McpMalformedRequestTest {
         }
         if (expect.code() == null) {
             return r.body().isEmpty() ? null : "a body where none was expected";
+        }
+        if (expect == Expect.SERVED) {
+            JsonObject m = McpRequestMutationTest.message(r);
+            return m != null && m.getValue("result") instanceof JsonObject ? null : "not served";
         }
         if (!r.headers().firstValue("Content-Type").orElse("").startsWith("application/json")) {
             return "Content-Type " + r.headers().firstValue("Content-Type").orElse("none");

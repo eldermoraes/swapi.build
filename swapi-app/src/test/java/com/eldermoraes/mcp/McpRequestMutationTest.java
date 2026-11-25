@@ -59,7 +59,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * budget of McpMalformedRequestTest), never a 5xx, never an exception that
  * the failure handler of McpTransportFilter had to turn into JSON-RPC and
  * never the answer of its deadline; the body must be a JSON-RPC result or
- * error, or empty with 202/204. And nothing may be left in the extension:
+ * error, or empty with 202/204. No WARN or above may be logged by any logger
+ * but McpTransportFilter's (2.17.2, #126: before, a body that is not an
+ * object, a cursor that does not decode and a cancel of nothing logged a
+ * line per request in the extension), and a seed logs nothing above INFO at
+ * all. And nothing may be left in the extension:
  * its requests in progress and its sessions are compared before and after
  * each request. A session that a successful initialize opens is the client's,
  * and is closed with DELETE as a client would close it.
@@ -538,15 +542,25 @@ class McpRequestMutationTest {
         // The seeds themselves are served: otherwise every mutation of a
         // broken seed would be a refusal, and the test would test nothing.
         List<String> broken = new ArrayList<>();
+        List<String> failures = new ArrayList<>();
+        records.clear();
         for (Seed seed : seeds) {
             for (Era era : seed.eras()) {
                 JsonObject body = body(seed, era);
+                int logBefore = records.size();
                 HttpResponse<String> r = send(request(era, headers(seed, era, body), body.encode(), session));
                 Answer a = judge(r);
                 Outcome wanted = seed.notification() ? Outcome.EMPTY : Outcome.RESULT;
                 if (a.outcome() != wanted) {
                     broken.add(seed.name() + " [" + era + "]: " + (a.problem() != null ? a.problem()
                             : r.statusCode() + " " + r.body()));
+                }
+                // 2.17.2 (#126): a valid request logs nothing above INFO,
+                // not even a line of the filter (reported with the mutations).
+                for (LogRecord rec : records.subList(logBefore, records.size())) {
+                    if (rec.getLevel().intValue() >= Level.WARNING.intValue() || rec.getThrown() != null) {
+                        failures.add("seed " + seed.name() + " [" + era + "]: " + logged(rec));
+                    }
                 }
                 if ("initialize".equals(seed.method()) && r != null) {
                     r.headers().firstValue("Mcp-Session-Id").ifPresent(id -> {
@@ -562,7 +576,6 @@ class McpRequestMutationTest {
         assertTrue(broken.isEmpty(), "seeds that are not served:\n" + String.join("\n", broken));
 
         List<Case> cases = cases(seeds);
-        List<String> failures = new ArrayList<>();
         Map<Outcome, Integer> outcomes = new LinkedHashMap<>();
         Set<String> eras = new LinkedHashSet<>();
         records.clear();
@@ -608,14 +621,14 @@ class McpRequestMutationTest {
             for (String f : routeFailures.subList(routeFailuresBefore, routeFailures.size())) {
                 failures.add(c.where() + ": the request failed in the router (" + f + ")");
             }
+            // 2.17.2 (#126): no malformed request makes the server log a line
+            // per request. Only McpTransportFilter may log a WARN, which it
+            // does once per kind per minute, without a stack trace; any
+            // other WARN or above (the extension, Quarkus, Vert.x) fails.
             for (LogRecord rec : records.subList(logBefore, records.size())) {
-                if (rec.getLevel().intValue() >= Level.SEVERE.intValue()
-                        || (rec.getThrown() != null && !extensionParseWarning(rec))) {
-                    failures.add(c.where() + ": logged " + rec.getLevel() + " " + rec.getLoggerName() + ": "
-                            + McpMalformedRequestTest.formatted(rec)
-                            + (rec.getThrown() == null ? "" : " " + rec.getThrown()));
-                } else if (rec.getThrown() != null) {
-                    parseWarnings++;
+                if (rec.getLevel().intValue() >= Level.SEVERE.intValue() || rec.getThrown() != null
+                        || (rec.getLevel().intValue() >= Level.WARNING.intValue() && !filterLine(rec))) {
+                    failures.add(c.where() + ": " + logged(rec));
                 }
             }
         }
@@ -631,24 +644,21 @@ class McpRequestMutationTest {
             }
         }
         System.out.printf("McpRequestMutationTest: %d seeds, eras %s, %d mutated requests in %d ms, %s,"
-                        + " %d sessions opened for the session era, %d parse warnings of the extension,"
-                        + " %d failures%n",
-                seeds.size(), eras, cases.size(), ms, outcomes, sessionsOpened, parseWarnings, failures.size());
+                        + " %d sessions opened for the session era, %d failures%n",
+                seeds.size(), eras, cases.size(), ms, outcomes, sessionsOpened, failures.size());
         assertTrue(failures.isEmpty(), failures.size() + " mutated requests failed:\n"
                 + String.join("\n", failures));
     }
 
-    private int parseWarnings;
+    private static boolean filterLine(LogRecord rec) {
+        return McpTransportFilter.class.getName().equals(rec.getLoggerName());
+    }
 
-    // A body that is JSON but not an object (or empty): the extension answers
-    // it at once and cleanly (-32700, HTTP 200) and keeps nothing, but logs
-    // the failed cast as a WARN with its stack trace, at every request. Its
-    // own answer, so it stays (McpTransportFilter leaves to the extension what
-    // it refuses first and cleanly); counted, not failed.
-    private static boolean extensionParseWarning(LogRecord rec) {
-        return rec.getLevel().intValue() == Level.WARNING.intValue()
-                && StreamableHttpMcpMessageHandler.class.getName().equals(rec.getLoggerName())
-                && String.valueOf(McpMalformedRequestTest.formatted(rec)).startsWith("Unable to parse the JSON message");
+    // The level, the logger and the message; the message may carry text of the
+    // request, which is fine in a test report.
+    private static String logged(LogRecord rec) {
+        return "logged " + rec.getLevel() + " " + rec.getLoggerName() + ": " + McpMalformedRequestTest.formatted(rec)
+                + (rec.getThrown() == null ? "" : " " + rec.getThrown());
     }
 
     private Set<String> added(Set<String> before) {

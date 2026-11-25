@@ -1,8 +1,14 @@
 package com.eldermoraes.mcp;
 
+import io.quarkiverse.mcp.server.McpConnection;
+import io.quarkiverse.mcp.server.McpLog;
 import io.quarkiverse.mcp.server.McpProtocolVersion;
+import io.quarkiverse.mcp.server.McpServer;
 import io.quarkiverse.mcp.server.ResourceManager;
+import io.quarkiverse.mcp.server.http.runtime.config.McpHttpServerRuntimeConfig;
+import io.quarkiverse.mcp.server.http.runtime.config.McpHttpServersRuntimeConfig;
 import io.quarkiverse.mcp.server.runtime.ConnectionManager;
+import io.quarkiverse.mcp.server.runtime.McpConnectionBase;
 import io.quarkus.arc.Arc;
 import io.quarkus.runtime.configuration.MemorySize;
 import io.quarkus.security.AuthenticationException;
@@ -30,7 +36,10 @@ import org.eclipse.microprofile.config.ConfigProvider;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 
@@ -57,11 +66,14 @@ import java.util.Optional;
  *   request this departs on purpose from the 2026-07-28 spec, which gives a
  *   method the server does not implement HTTP 404 (the extension does so
  *   since 2.1.0, quarkus-mcp-server #1081). 2.16.1 alone followed it for the
- *   listen; 2.17.0 went back to 200 because Claude Code 2.1.331 sends the
+ *   listen; 2.17.0 went back to 200 because Claude Code 2.1.331 sent the
  *   listen on connect and reads a 404 on it as a dropped connection, closing
  *   "with errors", where it reads the 200 as "not offered" and closes
- *   cleanly. A listen whose protocol version headers are wrong still gets
- *   the extension's own 400 (wrongVersionHeaders).
+ *   cleanly. It sent it because the server advertised resources.listChanged,
+ *   which it no longer does since 2.17.2 (SwapiResources); the answer stays
+ *   for a client that sends the listen anyway, and for a rollback. A listen
+ *   whose protocol version headers are wrong still gets the extension's own
+ *   400 (wrongVersionHeaders).
  * - resources/subscribe and resources/unsubscribe with a session (up to
  *   2025-11-25): the extension records a subscriber that will never get a
  *   notification. Since 2.1.0 (#1154) it keeps one entry per connection and
@@ -97,6 +109,22 @@ import java.util.Optional;
  * until a restart. McpExtensionShapeGuardTest pins what the extension does
  * with each shape, and fails the day it handles one itself.
  *
+ * Some refusals the extension makes cleanly but logs at every request, the
+ * client's text unescaped in some of them (2.17.2, #126): an Accept without
+ * both types of the transport and a body that is not a JSON object
+ * (StreamableHttpMcpMessageHandler.handle), a cursor that does not decode
+ * (Messages.getCursor, Cursor.decode) and a notifications/cancelled that
+ * matches no request in progress (McpMessageHandler.cancelRequest). The
+ * filter writes the extension's answer itself, at the point the extension
+ * would, and logs a fixed label once per kind per minute (the cancel, which
+ * is not an error, not at all); McpExtensionLogGuardTest compares the two
+ * answers and fails the day the extension stops logging one. At every
+ * upgrade of the extension, read those four places again. A POST whose body
+ * never arrives whole is logged the same way by the failure handler, not by
+ * Quarkus's error handler (answerFailure). No malformed request to /mcp
+ * makes the server log a line per request; only a defect of the server
+ * does.
+ *
  * The method in the body wins over the Mcp-Method header; the header alone
  * counts only when the body has no method (or is not JSON). Either way a
  * listen is answered here, so neither path opens a stream.
@@ -125,6 +153,7 @@ public class McpTransportFilter {
     private static final String SESSION_HEADER = "Mcp-Session-Id";
     private static final String PROTOCOL_HEADER = "MCP-Protocol-Version";
     private static final String META_PROTOCOL_VERSION = "io.modelcontextprotocol/protocolVersion";
+    private static final String META_LOG_LEVEL = "io.modelcontextprotocol/logLevel";
 
     static final String LISTEN_NOT_OFFERED = "subscriptions/listen is not offered: swapi.build data never"
             + " changes, so this server sends no notifications.";
@@ -135,6 +164,7 @@ public class McpTransportFilter {
     private static final int METHOD_NOT_FOUND = -32601;
     private static final int INVALID_PARAMS = -32602;
     private static final int INTERNAL_ERROR = -32603;
+    private static final int PARSE_ERROR = -32700;
     private static final int RESOURCE_NOT_FOUND = -32002;
     // The extension's spelling of the header in its error messages.
     private static final String PROTOCOL_HEADER_AS_THE_EXTENSION_WRITES_IT = "Mcp-Protocol-Version";
@@ -172,6 +202,11 @@ public class McpTransportFilter {
     private final OncePerMinute warnings = new OncePerMinute(Logger.getLogger(McpTransportFilter.class));
 
     private final Handler<RoutingContext> bodyHandler = quarkusBodyHandler();
+
+    // quarkus.mcp.server.http.streamable.auto-init, read from the mapping the
+    // extension reads: whether a request without a session the process holds
+    // gets one (extensionReachesTheMethod).
+    private final boolean autoInit = autoInit();
 
     // The filter ends the response (405, 204, 404), so it must run AFTER the
     // Quarkus CORS handler, which registers at priority 300 (see
@@ -285,7 +320,30 @@ public class McpTransportFilter {
                     error(null, INVALID_REQUEST, "Invalid request: the body must be a JSON-RPC object"));
             return;
         }
-        forward(rc, message instanceof JsonObject request ? request.getValue("id") : null);
+        // 2.17.2 (#126): the two refusals the extension makes before anything
+        // else (StreamableHttpMcpMessageHandler.handle, in this order) and
+        // logs at every request, the Accept with the header the client sent,
+        // the parse with a stack trace. The filter makes them itself, with
+        // the extension's answer, and logs them once per kind per minute.
+        // The Accept first, as the extension checks it first: a body that is
+        // not an object with the wrong Accept still gets the Accept's 400.
+        if (!acceptsTransport(rc)) {
+            // The extension's ctx.fail(400): the same Quarkus error handler
+            // answers it, so the answer is the same (a bare 400).
+            refused(rc, "Accept");
+            rc.fail(400);
+            return;
+        }
+        if (!(message instanceof JsonObject request)) {
+            // Not JSON, or JSON that is not an object (the extension casts
+            // it): 200 with -32700 and id null in every era, before any
+            // version or session is read, and without echoing Mcp-Session-Id,
+            // as the extension answers it.
+            refused(rc, "body not a JSON object");
+            endWithoutSession(rc, 200, error(null, PARSE_ERROR, "Unable to parse the JSON message"));
+            return;
+        }
+        forward(rc, request.getValue("id"));
     }
 
     // 2.17.1: the net under the shape checks. A shape nobody has found yet
@@ -368,16 +426,20 @@ public class McpTransportFilter {
     // in the extension until a restart.
     //
     // Only requests the extension would get that far with: a request it
-    // refuses first, and cleanly, keeps the extension's own answer. In its
+    // refuses first, and cleanly, keeps the extension's own answer (written
+    // by the filter where the extension would log it at every request: the
+    // cursor and the cancel at the end of this method, the Accept and a body
+    // that is not an object in answerWithoutState). In its
     // order (StreamableHttpMcpMessageHandler.handle, handleStateless,
     // McpMessageHandler.handle): the Accept of the transport (a bare 400);
     // an unsupported protocol version (400); then it reads params and _meta,
     // so their type is checked here at that point; a stateless request
     // without the MCP-Protocol-Version header or with one that differs from
     // _meta, the Mcp-Method and Mcp-Name headers and the required members of
-    // _meta (400); the jsonrpc member and the method (200, -32600 and
-    // -32601). So a request with wrong version headers keeps the answer it
-    // had.
+    // _meta (400); then it decodes what _meta says about the client
+    // (metaContent) and, stateless, reads its log level (400); the jsonrpc
+    // member and the method (200, -32600 and -32601). So a request with wrong
+    // version headers keeps the answer it had.
     //
     // HTTP status, as the extension answers the nearest error it handles
     // itself: 200 in the session era; in the stateless era 400 for params
@@ -429,6 +491,13 @@ public class McpTransportFilter {
             refuse(rc, id, refusal, stateless);
             return true;
         }
+        // 2.17.2: then, for a stateless request, the log level of _meta
+        // (applyMetaLogLevel, right after buildStatelessInitialRequest
+        // decodes what metaContent checks): one it does not know is its own
+        // 400, before the jsonrpc member, the method and anything below.
+        if (stateless && extensionRefusesLogLevel(meta)) {
+            return false;
+        }
         if (!validJsonRpc || method == null) {
             return false;
         }
@@ -447,7 +516,108 @@ public class McpTransportFilter {
             refuse(rc, id, refusal, stateless);
             return true;
         }
+        // 2.17.2 (#126): last, what the extension answers only once the
+        // method runs (McpMessageHandler.operation), and logs at every
+        // request with the client's text unescaped. Only when the extension
+        // would get that far: every check above passed, and the connection
+        // the extension would use is in operation.
+        // (knownMethod is null for a method that is not a string: Set.of
+        // refuses to look null up.)
+        if (knownMethod != null && (CURSOR_LISTS.contains(knownMethod) || CANCELLED.equals(knownMethod))) {
+            if (!extensionReachesTheMethod(rc, stateless)) {
+                return false;
+            }
+            if (CANCELLED.equals(knownMethod)) {
+                // McpMessageHandler.cancelRequest: a cancel that matches no
+                // request in progress is ignored, with a WARN. In the
+                // stateless era and with auto-init it never matches (a
+                // connection per request); in a genuine session only during
+                // the milliseconds a request runs, and no feature of this
+                // server reads a cancellation (no Cancellation is injected),
+                // so a cancel that matches changes nothing either. The
+                // extension's answer: 202, or 200 without a body when the
+                // cancel carries an id (it scans it as a request). Not a
+                // refusal, so nothing is logged. A future long-running
+                // operation (Tasks, a slow tool) needs a cancel that reaches
+                // the extension: an explicit exception here, as for the
+                // deadline.
+                rc.response().setStatusCode(id == null ? 202 : 200).end();
+                return true;
+            }
+            // Messages.getCursor: the cursor read with getString, as the
+            // extension reads it (a number or an object becomes text), and
+            // refused when Cursor.decode would throw.
+            String cursor = params == null ? null : params.getString("cursor");
+            if (cursor != null && !extensionDecodesCursor(cursor)) {
+                refused(rc, "cursor");
+                endWithoutSession(rc, 200, error(id, INVALID_PARAMS, "Invalid cursor detected: " + cursor));
+                return true;
+            }
+        }
         return false;
+    }
+
+    // The four lists of the extension that read a cursor (ToolMessageHandler,
+    // ResourceMessageHandler, ResourceTemplateMessageHandler,
+    // PromptMessageHandler). Not skills/list: SwapiSkillsExtension answers
+    // any cursor itself, without a log line.
+    private static final java.util.Set<String> CURSOR_LISTS = java.util.Set.of("tools/list", "resources/list",
+            "resources/templates/list", "prompts/list");
+    private static final String CANCELLED = "notifications/cancelled";
+
+    // Cursor.decode of extension 2.1.0 (package-private there), copied: not
+    // blank, basic Base64, 24 bytes, and the two Instant.ofEpochSecond(long,
+    // int) it builds, which throw outside the range of Instant. Any exception
+    // is a cursor the extension refuses. McpExtensionLogGuardTest compares
+    // the two on both sides of the rule.
+    static boolean extensionDecodesCursor(String value) {
+        try {
+            if (value.isBlank()) {
+                return false;
+            }
+            byte[] bytes = Base64.getDecoder().decode(value);
+            if (bytes.length != 24) {
+                return false;
+            }
+            ByteBuffer buffer = ByteBuffer.wrap(bytes);
+            Instant.ofEpochSecond(buffer.getLong(), buffer.getInt());
+            Instant.ofEpochSecond(buffer.getLong(), buffer.getInt());
+            return true;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    // Whether the extension would run the method (McpMessageHandler
+    // .doHandleRequest) once every check above passed: a stateless request
+    // gets a connection in operation; a genuine session is used when it is
+    // initializing or in operation; a request without a session the process
+    // holds gets one only with auto-init (quarkus.mcp.server.http.streamable
+    // .auto-init), and otherwise the extension answers it with its own error.
+    private boolean extensionReachesTheMethod(RoutingContext rc, boolean stateless) {
+        if (stateless) {
+            return true;
+        }
+        String session = rc.request().getHeader(SESSION_HEADER);
+        McpConnectionBase connection = session == null ? null : sessions.get(session);
+        // Every session this process holds is a Streamable HTTP one: the
+        // legacy SSE transport is refused above, and no listen reaches the
+        // extension to register a stateless connection.
+        if (connection != null) {
+            return connection.status() == McpConnection.Status.INITIALIZING
+                    || connection.status() == McpConnection.Status.IN_OPERATION;
+        }
+        return autoInit;
+    }
+
+    // applyMetaLogLevel: a log level present in _meta that McpLog.LogLevel
+    // does not know (read with getString, as the extension reads it).
+    private static boolean extensionRefusesLogLevel(JsonObject meta) {
+        if (meta == null) {
+            return false;
+        }
+        String level = meta.getString(META_LOG_LEVEL);
+        return level != null && McpLog.LogLevel.from(level) == null;
     }
 
     // What the extension answers itself, with 400, for a stateless request
@@ -468,6 +638,15 @@ public class McpTransportFilter {
             if (nameHeader == null || (name != null && !nameHeader.equals(name))) {
                 return true;
             }
+        }
+        // 2.17.2: a protocol version in _meta that is not a string. The
+        // extension reads it with getString too, as text ("1", "{}"), which
+        // never equals a supported MCP-Protocol-Version header: its 400
+        // "Header mismatch" (validateStatelessHeaders). wrongVersionHeaders
+        // reads only a string, as the listen always has.
+        if (meta != null && meta.getValue(McpRequestShape.PROTOCOL_VERSION) != null
+                && !(meta.getValue(McpRequestShape.PROTOCOL_VERSION) instanceof String)) {
+            return true;
         }
         return meta == null
                 || meta.getString(McpRequestShape.PROTOCOL_VERSION) == null
@@ -641,10 +820,22 @@ public class McpTransportFilter {
         if (session != null) {
             rc.response().putHeader(SESSION_HEADER, session);
         }
+        endWithoutSession(rc, status, payload);
+    }
+
+    // 2.17.2: an answer the filter writes in the extension's place, as the
+    // extension writes it: without echoing Mcp-Session-Id.
+    private static void endWithoutSession(RoutingContext rc, int status, JsonObject payload) {
         rc.response()
                 .setStatusCode(status)
                 .putHeader("Content-Type", "application/json")
                 .end(payload.toBuffer());
+    }
+
+    private static boolean autoInit() {
+        McpHttpServerRuntimeConfig server = ConfigProvider.getConfig().unwrap(SmallRyeConfig.class)
+                .getConfigMapping(McpHttpServersRuntimeConfig.class).servers().get(McpServer.DEFAULT);
+        return server != null && server.http().streamable().autoInit();
     }
 
     // Built like VertxHttpRecorder.configureAndGetBody builds the handler that
