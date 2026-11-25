@@ -216,6 +216,24 @@ class McpExtensionShapeGuardTest {
         added.forEach(sessions::remove);
     }
 
+    // A request with an id that is neither a string nor a number: the
+    // extension runs the method and answers, then fails while it cleans up
+    // after it (RequestId, in CancellationRequests.remove), so the
+    // auto-init session it created is never removed.
+    @Test
+    void theExtensionKeepsASessionForARequestWithAnIdOfAnotherType() throws Exception {
+        java.util.Set<String> before = ids();
+        HttpResponse<String> r = sendWithDeadline(post("""
+                {"jsonrpc":"2.0","id":true,"method":"tools/list"}""").build(), 5000);
+        assertNotNull(r, "no answer");
+        assertEquals(200, r.statusCode(), r.body());
+        Thread.sleep(300);
+        java.util.Set<String> added = ids();
+        added.removeAll(before);
+        assertEquals(1, added.size(), "the extension no longer keeps a session for an id of another type");
+        added.forEach(sessions::remove);
+    }
+
     private java.util.Set<String> ids() {
         java.util.Set<String> ids = new java.util.HashSet<>();
         sessions.forEach(c -> ids.add(c.id()));

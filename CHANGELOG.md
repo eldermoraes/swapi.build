@@ -43,8 +43,11 @@ asked to approve it again.
   `prompts/get` without a `name` as a string, or with `arguments` that are not
   an object (these answered `-32603` before); a `completion/complete` whose
   `ref` or `argument` is not an object, or whose argument lacks `name` or
-  `value`. A request the extension already refused cleanly keeps its answer,
-  wrong protocol version headers included.
+  `value`. A request whose `id` is neither a string nor a number (the
+  extension answered it, then failed while cleaning up after it, logging an
+  error and keeping state) is answered `-32600` with `id` null, with the
+  status of a defect of `params`. A request the extension already refused
+  cleanly keeps its answer, wrong protocol version headers included.
 - A body shaped like a JSON-RPC response (`result` or `error`) answers HTTP
   `202` without a body, as before, but no longer leaves a session behind (some
   answered `500`). This server never sends a request to a client, so no

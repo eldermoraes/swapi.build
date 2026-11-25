@@ -50,6 +50,19 @@ final class McpRequestShape {
     record Refusal(String kind, String message, boolean envelope) {
     }
 
+    /**
+     * The id of a request, when present, must be a string or a number, as
+     * every revision requires (null is read as no id: a notification). The
+     * extension runs a method with any id, answers, and then fails while it
+     * cleans up after the method (RequestId refuses other types, in
+     * CancellationRequests.remove, McpMessageHandler.operation): an ERROR
+     * with a stack trace in the log, and the throwaway session of auto-init
+     * left behind. Found by McpRequestMutationTest.
+     */
+    static boolean validId(Object id) {
+        return id == null || id instanceof String || id instanceof Number;
+    }
+
     /** params and params._meta, when present, must be objects (McpMessageHandler.findMeta). */
     static Refusal envelope(JsonObject request) {
         Object params = request.getValue("params");

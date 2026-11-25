@@ -426,6 +426,15 @@ public class McpTransportFilter {
         if (!validJsonRpc || method == null) {
             return false;
         }
+        // An id the extension cannot hold: a request that is not one, as
+        // JSON-RPC answers it, -32600 with id null; the status of a defect
+        // of the envelope, as for a body that is null.
+        if (!McpRequestShape.validId(id)) {
+            refused(rc, "id");
+            end(rc, stateless ? 400 : 200,
+                    error(null, INVALID_REQUEST, "Invalid request: id must be a string or a number"));
+            return true;
+        }
         String knownMethod = request.getValue("method") instanceof String s ? s : null;
         refusal = McpRequestShape.methodFields(knownMethod, params, !stateless);
         if (refusal != null) {

@@ -293,6 +293,17 @@ class McpMalformedRequestTest {
                     .formatted(params(era, "\"name\":\"character_profile\",\"arguments\":" + a)),
                     field(-32602)));
         }
+        // An id that is neither a string nor a number: a request that is not
+        // one, -32600 with id null (found by McpRequestMutationTest).
+        for (String id : List.of("true", "[]", "[1]", "{}")) {
+            s.add(new Shape("tools/list with id " + id, "tools/list", null, era -> """
+                    {"jsonrpc":"2.0","id":%s,"method":"tools/list","params":%s}""".formatted(id, params(era, "")),
+                    envelope(-32600), true));
+        }
+        s.add(new Shape("tools/call with id false", "tools/call", "sw_random", era -> """
+                {"jsonrpc":"2.0","id":false,"method":"tools/call","params":%s}"""
+                .formatted(params(era, "\"name\":\"sw_random\",\"arguments\":{\"resource\":\"FILMS\"}")),
+                envelope(-32600), true));
         // completion/complete.
         s.add(shape("completion/complete with ref \"x\"", "completion/complete", null,
                 era -> complete(era, "\"ref\":\"x\",\"argument\":{\"name\":\"name\",\"value\":\"V\"}"),
