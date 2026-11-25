@@ -22,7 +22,9 @@
 # Markdown copies /docs/mcp.md and /resource/films/1.md and /llms-full.txt
 # (## Records, the copies: five since 2.15.0, with /faq and /faq.md). Since 2.17.0:
 # skills/list (the skill's URI and a digest) and resources/read of its SKILL.md,
-# the files SwapiSkills reads from mcp/skills/**. Content only: without Caddy in front,
+# the files SwapiSkills reads from mcp/skills/**. Since 2.17.1: a params that is
+# not an object (400, -32602, paired with tools/list) and a prompts/get without
+# a name (-32602 within 5 s). Content only: without Caddy in front,
 # the poisoning checks belong to verify-deploy.sh. Also run against the jar and
 # the local native build in the release rehearsal (docs/RELEASE.md).
 set -u
@@ -218,6 +220,31 @@ else
     '{"jsonrpc":"2.0","id":43,"method":"resources/subscribe","params":{"uri":"swapi://people/9999"}}' \
     not_found '-32002 citing swapi://people/9999'
 fi
+
+# 2.17.1+: McpTransportFilter refuses the malformed requests the extension
+# cannot handle (McpRequestShape: new code in the native image), with -32602.
+# Up to 2.17.0 some got HTTP 500, and a few no answer at all. A params that is
+# not an object, stateless (HTTP 400), paired with a well-formed tools/list.
+good_code=$(curl -s --max-time 20 -o /dev/null -w '%{http_code}' -X POST "$BASE/mcp" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'Mcp-Method: tools/list' -H 'MCP-Protocol-Version: 2026-07-28' \
+  -d '{"jsonrpc":"2.0","id":6,"method":"tools/list","params":{'"$STATELESS_META"'}}')
+bad=$(curl -s --max-time 5 -w '\n%{http_code}' -X POST "$BASE/mcp" \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'Mcp-Method: tools/list' -H 'MCP-Protocol-Version: 2026-07-28' \
+  -d '{"jsonrpc":"2.0","id":7,"method":"tools/list","params":[]}'); rc=$?
+bad_code="${bad##*$'\n'}"; bad="${bad%$'\n'*}"
+if [ "$good_code" = "200" ] && [ "$rc" = "0" ] && [ "$bad_code" = "400" ] \
+   && printf '%s' "$bad" | grep -qF '"code":-32602' && printf '%s' "$bad" | grep -qF '"id":7'; then
+  pass "MCP params that is not an object -> 400, -32602 (tools/list itself -> 200)"
+else
+  fail "MCP params that is not an object" "tools/list 200; params [] 400 with -32602 and id 7" \
+    "tools/list HTTP $good_code; curl exit $rc, HTTP $bad_code, $(printf '%s' "$bad" | head -c 160)"
+fi
+# A prompts/get without a name must end on its own, within 5 s, refused.
+invalid_params_200() { [ "$MCP_STATUS" = "200" ] && grep -qF '"code":-32602'; }
+mcp_probe "MCP prompts/get without a name -> 200, -32602 within 5 s" prompts/get '' character_profile 5 \
+  invalid_params_200 'curl ends within 5 s, HTTP 200, -32602'
 
 echo
 if [ "$FAILURES" -eq 0 ]; then
