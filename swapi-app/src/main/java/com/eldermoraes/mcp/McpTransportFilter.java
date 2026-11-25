@@ -124,7 +124,9 @@ import java.util.Optional;
  * never arrives whole is logged the same way by the failure handler, not by
  * Quarkus's error handler (answerFailure). No malformed request to /mcp
  * makes the server log a line per request; only a defect of the server
- * does.
+ * does. One known exception, left open: a form body that the body handler's
+ * form decoder refuses as it reads it still goes to Quarkus's error handler
+ * (answerFailure leaves the decoder's exceptions alone).
  *
  * The method in the body wins over the Mcp-Method header; the header alone
  * counts only when the body has no method (or is not JSON). Either way a

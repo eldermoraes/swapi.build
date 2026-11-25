@@ -168,7 +168,22 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   and extension 2.1.0 answer a method the server does not implement; the 200
   departs from the spec on purpose, because Claude Code 2.1.331 reads a 404 on
   its listen as a dropped connection and closes "with errors"
-  (`statelessListenIsRefusedWith200UnlikeAnUnknownStatelessMethod`). It also
+  (`statelessListenIsRefusedWith200UnlikeAnUnknownStatelessMethod`). Claude
+  Code and the Inspector sent that listen on connect because the server
+  advertised `resources.listChanged`; since 2.17.2 it advertises
+  `resources: {subscribe: true}`, `tools: {}`, `prompts: {}` (plus `logging`
+  and the skills extension) in every revision, and they no longer send it
+  (`McpCapabilitiesTest`, and the `listChanged` probes of `native-smoke.sh`
+  and `verify-deploy.sh`). The extension adds `listChanged` at build time
+  when any bean has an injection point of one of its managers
+  (`ResourceManager`, `ToolManager`, `PromptManager`,
+  `ResourceTemplateManager`), `Instance<>` and `Provider<>` of them included:
+  never inject one, in `src/main` or in a test of the default profile; look
+  it up with `Arc.container().instance(...)` (`SwapiResources`,
+  `SwapiSkills`, `McpTransportFilter`). `subscribe` stays advertised (the
+  extension adds it whenever a resource exists, with no switch). The listen
+  and the session subscribe keep their answers, for a client that sends them
+  anyway and for a rollback. It also
   answers `resources/subscribe` / `unsubscribe` of the session era, with or
   without `Mcp-Session-Id` (auto-init gives one), without recording anything
   (extension 2.1.0 would keep one subscriber per session and URI until the
@@ -202,8 +217,32 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   client). Status as the extension's nearest answer: 200 in the session era;
   stateless, 400 for `params`/`_meta` and 200 for a method's own fields. A
   request the extension refuses first and cleanly (Accept, version headers,
-  stateless headers and `_meta` members, `jsonrpc`, method) keeps its answer;
-  the shape checks run after the version logic. Checks are on types, on
+  stateless headers and `_meta` members, `jsonrpc`, method) keeps the
+  extension's answer; the shape checks run after the version logic. Where
+  the extension would log that refusal at every request, the client's text
+  unescaped in some (2.17.2: a body that is not a JSON object, an Accept
+  without both types, a cursor that does not decode), the filter writes the
+  same answer itself, status and body, compared with the extension's in a
+  test (`McpExtensionLogGuardTest`, which also fails the day the extension
+  stops logging one), and logs it once per kind per minute. A
+  `notifications/cancelled` that the extension would reach is answered by
+  the filter (202, or 200 with no body when it carries an `id`, as the
+  extension answers) and never reaches the extension: no answer here lasts
+  long enough to cancel, and nothing here reads a cancellation. A cancel the
+  extension refuses first keeps that refusal; a future long-running
+  operation needs an explicit exception here, as for the deadline. A POST
+  whose body never arrives whole (connection closed mid-body, malformed
+  chunk) is logged the same way by the filter's failure handler, not by
+  Quarkus's error handler, and gets no answer, as before
+  (`McpIncompleteBodyTest`). No malformed request to `/mcp` makes the server
+  log a line per request; only a defect of the server does (an `ERROR`, on
+  purpose, like the `VertxCoreRecorder` line). One known exception, open: a
+  form body (`application/x-www-form-urlencoded`) that the body handler's
+  form decoder refuses as it reads it is still answered and logged by
+  Quarkus's error handler (`aFormBodyTheDecoderRefusesKeepsItsAnswer` pins
+  the answer). `McpRequestMutationTest`
+  fails on any `WARN` that is not the filter's, and the native smoke on any
+  `WARN` or `ERROR` outside its short list. Checks are on types, on
   fields every supported revision requires and the extension fails without,
   and on one value (an icon `theme`); never on extra members, and never on
   what the extension already serves (an `initialize` without `capabilities`
@@ -216,7 +255,8 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   `McpRequestMutationTest` does not trust that list: it takes a full valid
   request of every method served, in the three eras, mutates every member at
   every depth (removed, null, each JSON type) and requires an answer within a
-  second, no 5xx, no exception in the router, no `ERROR` in the log, no
+  second, no 5xx, no exception in the router, no `WARN` or above in the log
+  but the filter's (2.17.2; a seed logs nothing above `INFO`), no
   deadline answer and no state left; a shape it finds becomes an explicit case
   of the matrix. The net under it:
   every POST passed on to the extension gets a deadline,

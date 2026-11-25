@@ -122,7 +122,14 @@ it reads without checking them, as `McpRequestShape` describes (its class
 comment lists the paths), and compare with the shapes the filter refuses.
 `McpExtensionShapeGuardTest` fails when the extension starts to handle a shape
 itself (the filter may then leave it to the extension), but only the reading
-finds a shape that is new.
+finds a shape that is new. Read again, too, the four refusals the filter writes
+in the extension's place because the extension logs them at every request
+(2.17.2: the `Accept` and the parse in `StreamableHttpMcpMessageHandler.handle`,
+`Messages.getCursor` with `Cursor.decode`, `McpMessageHandler.cancelRequest`;
+`McpExtensionLogGuardTest` fails when one changes), and how the extension
+decides `listChanged` (`McpServerProcessor.analyzeManagerUsage`, with ArC's
+`InjectionPointInfo.getRequiredType`; `McpCapabilitiesTest` fails when it
+starts to see the `Arc.container()` lookups).
 
 ## 5. Commit and merge to `main`
 
