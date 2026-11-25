@@ -196,7 +196,8 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   answer and left state in its heap (its set of requests in progress, the
   auto-init session, a request context) until a restart. `McpTransportFilter`
   refuses those shapes itself (`McpRequestShape`): `-32602` naming the field
-  (`-32600`, id null, for a JSON `null` body), and `202` without a session for
+  (`-32600`, id null, for a JSON `null` body and for an `id` that is neither
+  a string nor a number), and `202` without a session for
   a body shaped like a response (this server never sends a request to a
   client). Status as the extension's nearest answer: 200 in the session era;
   stateless, 400 for `params`/`_meta` and 200 for a method's own fields. A
@@ -211,14 +212,25 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   paths are in `McpRequestShape`); `McpExtensionShapeGuardTest` fails when the
   extension starts to handle a shape itself, and `McpMalformedRequestTest`
   checks every shape in three eras, including that the extension's
-  `ongoingRequests` and `ConnectionManager` are unchanged. The net under it:
+  `ongoingRequests` and `ConnectionManager` are unchanged.
+  `McpRequestMutationTest` does not trust that list: it takes a full valid
+  request of every method served, in the three eras, mutates every member at
+  every depth (removed, null, each JSON type) and requires an answer within a
+  second, no 5xx, no exception in the router, no `ERROR` in the log, no
+  deadline answer and no state left; a shape it finds becomes an explicit case
+  of the matrix. The net under it:
   every POST passed on to the extension gets a deadline,
   `swapi.mcp.response-deadline=10s` (`-32603` with the id, or a reset if the
   head was written; one timer, cancelled when the response ends), and a
   failure handler on `/mcp` answers an exception (status 500) as `-32603`
   instead of Quarkus's error page, leaving the extension's `ctx.fail` 400/404,
   the 413 and security failures alone (`McpResponseDeadlineTest`). The
-  deadline frees the connection, not the extension's state. No answer here
+  deadline frees the connection, not the extension's state. The same test
+  has the real extension answer late (a tool registered through `ToolManager`
+  for one test, never in production code), in a session and stateless: the
+  client gets the deadline's `-32603`, the late write is dropped without a log
+  line, the extension's state is released when the tool returns and the
+  server goes on serving. No answer here
   takes more than milliseconds: a future long-running operation (Tasks, a slow
   tool) needs an explicit exception in the filter, never a larger deadline.
   Refusals, deadlines and failures log one `WARN` per kind per minute, no
