@@ -190,6 +190,39 @@ behind Caddy), with DNS-only records on Cloudflare. Also serves an MCP server
   `quarkus.http.limits.max-body-size=256K` bounds the
   double decode on the event loop. `McpListenLimitTest` guards it; never let a
   POST to `/mcp` open a stream that waits for notifications.
+- **No POST to `/mcp` goes unanswered or leaves state in the extension
+  (2.17.1).** Extension 2.1.0 reads request fields with unchecked casts: some
+  malformed requests got HTTP 500 with a stack trace, and a few never got an
+  answer and left state in its heap (its set of requests in progress, the
+  auto-init session, a request context) until a restart. `McpTransportFilter`
+  refuses those shapes itself (`McpRequestShape`): `-32602` naming the field
+  (`-32600`, id null, for a JSON `null` body), and `202` without a session for
+  a body shaped like a response (this server never sends a request to a
+  client). Status as the extension's nearest answer: 200 in the session era;
+  stateless, 400 for `params`/`_meta` and 200 for a method's own fields. A
+  request the extension refuses first and cleanly (Accept, version headers,
+  stateless headers and `_meta` members, `jsonrpc`, method) keeps its answer;
+  the shape checks run after the version logic. Checks are on types, on
+  fields every supported revision requires and the extension fails without,
+  and on one value (an icon `theme`); never on extra members, and never on
+  what the extension already serves (an `initialize` without `capabilities`
+  is answered). The list is derived from the extension's source, not from
+  trying requests: **at every extension upgrade, read its source again** (the
+  paths are in `McpRequestShape`); `McpExtensionShapeGuardTest` fails when the
+  extension starts to handle a shape itself, and `McpMalformedRequestTest`
+  checks every shape in three eras, including that the extension's
+  `ongoingRequests` and `ConnectionManager` are unchanged. The net under it:
+  every POST passed on to the extension gets a deadline,
+  `swapi.mcp.response-deadline=10s` (`-32603` with the id, or a reset if the
+  head was written; one timer, cancelled when the response ends), and a
+  failure handler on `/mcp` answers an exception (status 500) as `-32603`
+  instead of Quarkus's error page, leaving the extension's `ctx.fail` 400/404,
+  the 413 and security failures alone (`McpResponseDeadlineTest`). The
+  deadline frees the connection, not the extension's state. No answer here
+  takes more than milliseconds: a future long-running operation (Tasks, a slow
+  tool) needs an explicit exception in the filter, never a larger deadline.
+  Refusals, deadlines and failures log one `WARN` per kind per minute, no
+  stack (`OncePerMinute`); `VertxCoreRecorder` is not silenced.
 - **MCP surface (2.13.0+).** Four tools; `sw_get` takes an optional `expand`
   (relation names or `*` alone, at most 8, one level deep) and `sw_list` /
   `sw_search` an optional `fields` (at most 24, `url` always kept), both in

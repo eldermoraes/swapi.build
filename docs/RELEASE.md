@@ -79,18 +79,20 @@ a release that changes how `/mcp` handles a request: `McpTransportFilter`, the
 version of the MCP server extension, or `quarkus.http.limits.max-body-size`.
 
 `scripts/mcp-listen-load.sh` measures what the suite cannot: the cost of many
-concurrent `subscriptions/listen` requests, and the memory over many tool
-calls. **Never run it against production**: it opens hundreds of connections on
+concurrent `subscriptions/listen` requests and of many concurrent malformed
+requests (2.17.1+), and the memory over many tool calls. **Never run it against production**: it opens hundreds of connections on
 purpose. The target is a local instance of the release candidate (its pid), or
 the native binary in a container (`podman:<container>`, read as the `VmRSS` of
 its PID 1):
 
 ```bash
-# mcp-listen-load.sh listens <base-url> <target> [count=500] [hold=60]
-# mcp-listen-load.sh calls   <base-url> <target> [count=10000]
-scripts/mcp-listen-load.sh listens http://localhost:5432 <pid>
-scripts/mcp-listen-load.sh calls   http://localhost:5432 <pid>
-scripts/mcp-listen-load.sh listens http://localhost:<port> podman:<container>
+# mcp-listen-load.sh listens   <base-url> <target> [count=500] [hold=60]
+# mcp-listen-load.sh malformed <base-url> <target> [count=300] [hold=60]
+# mcp-listen-load.sh calls     <base-url> <target> [count=10000]
+scripts/mcp-listen-load.sh listens   http://localhost:5432 <pid>
+scripts/mcp-listen-load.sh malformed http://localhost:5432 <pid>
+scripts/mcp-listen-load.sh calls     http://localhost:5432 <pid>
+scripts/mcp-listen-load.sh listens   http://localhost:<port> podman:<container>
 ```
 
 What to expect, with the 2.12.1 measurements as the baseline (native binary in
@@ -108,6 +110,19 @@ quotes it in MB.
   173.2 MB), so a flat figure does not prove that fix: `McpRequestContextTest`
   does, in the suite. A figure that grows with the number of calls is
   something new, to investigate before releasing.
+- `malformed` (2.17.1+): all answered within 2 s with `-32602`, none still
+  open at 30 s, and the memory back where it was 5 s after closing. A request
+  still open at 30 s means the filter no longer refuses that shape: the
+  connection then ends only at `swapi.mcp.response-deadline`, and the
+  extension keeps state for it.
+
+**Upgrading the MCP server extension** (any version, also a patch): besides
+this rehearsal, read the new version's source again for the request fields
+it reads without checking them, as `McpRequestShape` describes (its class
+comment lists the paths), and compare with the shapes the filter refuses.
+`McpExtensionShapeGuardTest` fails when the extension starts to handle a shape
+itself (the filter may then leave it to the extension), but only the reading
+finds a shape that is new.
 
 ## 5. Commit and merge to `main`
 
