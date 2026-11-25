@@ -26,6 +26,8 @@ public final class LlmsTxt {
               sw_list and sw_search an optional `fields` (e.g. ["name"] for a compact index).
             - MCP resources: `swapi://people` (index) and `swapi://people/1` (one record), the same for
               films, planets, species, starships and vehicles. MCP prompt: `character_profile` (a name).
+            - MCP skill (Skills over MCP extension): `star-wars-research`, at
+              `skill://star-wars-research/SKILL.md`, for questions that take several tool calls.
             - REST: `{base}/api/{resource}`, `{base}/api/{resource}/{id}`, `{base}/api/{resource}/random`
               and `{base}/api/{resource}?search={text}`; resources: people, films, planets, species,
               starships, vehicles.

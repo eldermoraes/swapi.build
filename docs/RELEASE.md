@@ -184,8 +184,8 @@ Then the post-deploy checks in `docs/DEPLOY.md`.
 
 The server is listed as `build.swapi/star-wars`, published from the repo-root
 `server.json`. The manifest names the server and its remote only: tools,
-resources and prompts (2.13.0+) are not in `server.json`; clients read them
-from the server itself. Republishing is part of every release:
+resources and prompts (2.13.0+) and the skill (2.17.0+) are not in
+`server.json`; clients read them from the server itself. Republishing is part of every release:
 
 1. Bump `version` in `server.json` together with the pom
    (`ServerJsonVersionTest` fails the suite if they drift).

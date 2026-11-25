@@ -89,9 +89,20 @@ Since 2.13.0 the records are also MCP resources: `swapi://people` (an index) and
 `swapi://people/1` (the `sw_get` text), for the six types, plus the templates
 `swapi://<type>/{id}`. The server prompt `character_profile` takes a character name.
 
-**Caching:** Quarkiverse MCP Server 2.0.0 emits the required `ttlMs: 0` and
+Since 2.17.0 the server also publishes an Agent Skill, `star-wars-research`, through the
+[Skills over MCP](https://modelcontextprotocol.io/extensions/skills/overview) extension
+(`skills/list`, `skills/get`): how to chain the four tools, which relations `expand` and which
+fields `fields` accept per type, and the film id trap. Its files are the resources
+`skill://star-wars-research/SKILL.md` and `skill://star-wars-research/references/relations.md`.
+In Claude Code (v2.1.331 or later, a beta feature there) it appears as
+`swapi-build:star-wars-research`.
+
+**Caching:** Quarkiverse MCP Server (2.0.0 and later) emits the required `ttlMs: 0` and
 `cacheScope: "public"` fields on stateless discovery and tool-list responses.
-Zero TTL means immediately stale; no positive freshness period is configured.
+Zero TTL means immediately stale; the extension's methods configure no positive freshness
+period. The skills methods are the exception: `skills/list` and `skills/get` answer
+`ttlMs: 300000` (five minutes) with `cacheScope: "public"`, since the skill's files change only
+with a release and a client checks the digest of every file it reads.
 Its [cache hints](https://github.com/quarkiverse/quarkus-mcp-server/blob/2.0.0/docs/modules/ROOT/pages/release-notes.adoc)
 apply to discovery, list methods and `resources/read`, **not `tools/call`**.
 Tool-result caching is not enabled, including for `sw_random`. REST/edge caching is a separate mechanism.
@@ -213,7 +224,7 @@ swapi-app/
       specie/                 # Specie model, service, resource
       starship/               # Starship model, service, resource
       vehicle/                # Vehicle model, service, resource
-      mcp/                    # MCP server: tools (sw_list, sw_get, sw_random, sw_search), resources, prompt
+      mcp/                    # MCP server: tools (sw_list, sw_get, sw_random, sw_search), resources, prompt, skill
       seo/                    # Site pages: metadata, server-rendered <main> (Qute), Markdown copies, sitemap
       stats/                  # Anonymous usage counters and server times (/api/stats)
       SWObject.java           # Base model class (and the one helper that makes an address absolute)
@@ -223,6 +234,7 @@ swapi-app/
     resources/
       data/                   # Static JSON data files
       seo/                    # site.json (page metadata) and faq.json (FAQ text)
+      mcp/skills/             # The files of the MCP skill star-wars-research
       templates/              # Qute templates of the server-rendered pages
       application.properties  # Quarkus configuration
     webui/                    # Frontend (TypeScript + Vite)

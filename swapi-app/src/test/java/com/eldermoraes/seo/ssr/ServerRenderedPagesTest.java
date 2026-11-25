@@ -116,6 +116,14 @@ class ServerRenderedPagesTest {
         assertFalse(main.contains("character_profile Darth Vader"), main);
         assertTrue(main.contains("arguments as JSON"), main);
         assertTrue(main.contains("Who is Luke Skywalker? Include his homeworld and species."), main);
+        // 2.17.0: the skill, after the server prompt, with its name in Claude
+        // Code, the client version and that the client calls it a beta.
+        assertTrue(main.indexOf("<h2>Skill</h2>") > main.indexOf("<h2>Server prompt</h2>"), main);
+        assertTrue(main.contains("<code>star-wars-research</code>"), main);
+        assertTrue(main.contains("<code>swapi-build:star-wars-research</code>"), main);
+        assertTrue(main.contains("<code>skill://star-wars-research/SKILL.md</code>"), main);
+        assertTrue(main.contains("v2.1.331"), main);
+        assertTrue(main.contains("beta"), main);
         assertTrue(main.contains("codex mcp add swapi-build --url https://preview.example/mcp"), "the Codex guide, an inactive panel");
         assertFalse(main.contains("https://swapi.build"), "no fixed domain");
         // Decision 1 (Elder, 27/10/2026): texts of the Vercel days.

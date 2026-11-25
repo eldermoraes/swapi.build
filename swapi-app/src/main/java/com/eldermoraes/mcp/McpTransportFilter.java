@@ -42,10 +42,15 @@ import java.util.Optional;
  *   protocol version): the extension (still in 2.1.0) opens an SSE stream
  *   with no time limit and no count, so anyone could hold hundreds open.
  *   Answered at once with -32601, the code the extension uses for a method
- *   that is not available, under the HTTP status the extension gives that
- *   code (2.16.1): 404 when the request is stateless, as the 2026-07-28
- *   spec says for a method the server does not implement (the extension does
- *   so since 2.1.0, quarkus-mcp-server #1081), 200 in the session era.
+ *   that is not available, under HTTP 200 in both eras. For a stateless
+ *   request this departs on purpose from the 2026-07-28 spec, which gives a
+ *   method the server does not implement HTTP 404 (the extension does so
+ *   since 2.1.0, quarkus-mcp-server #1081). 2.16.1 alone followed it for the
+ *   listen; 2.17.0 went back to 200 because Claude Code 2.1.331 sends the
+ *   listen on connect and reads a 404 on it as a dropped connection, closing
+ *   "with errors", where it reads the 200 as "not offered" and closes
+ *   cleanly. A listen whose protocol version headers are wrong still gets
+ *   the extension's own 400 (wrongVersionHeaders).
  * - resources/subscribe and resources/unsubscribe with a session (up to
  *   2025-11-25): the extension records a subscriber that will never get a
  *   notification. Since 2.1.0 (#1154) it keeps one entry per connection and
@@ -221,7 +226,7 @@ public class McpTransportFilter {
                 if (refused != null) {
                     end(rc, 400, refused);
                 } else {
-                    end(rc, listenStatus(isStateless(rc, request)), error(id, METHOD_NOT_FOUND, LISTEN_NOT_OFFERED));
+                    end(rc, 200, error(id, METHOD_NOT_FOUND, LISTEN_NOT_OFFERED));
                 }
                 return;
             }
@@ -230,17 +235,11 @@ public class McpTransportFilter {
                 return;
             }
         } else if (LISTEN.equals(headerMethod)) {
-            // Not JSON, but the header says listen: never open a stream. With
-            // no body to read, only the header can say it is stateless.
-            end(rc, listenStatus(hasStatelessHeader(rc)), error(null, METHOD_NOT_FOUND, LISTEN_NOT_OFFERED));
+            // Not JSON, but the header says listen: never open a stream.
+            end(rc, 200, error(null, METHOD_NOT_FOUND, LISTEN_NOT_OFFERED));
             return;
         }
         rc.next();
-    }
-
-    // 2.16.1: the HTTP status the extension gives -32601 in each era.
-    private static int listenStatus(boolean stateless) {
-        return stateless ? 404 : 200;
     }
 
     // 2.16.1: the answer extension 2.1.0 gives any method whose protocol

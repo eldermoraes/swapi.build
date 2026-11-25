@@ -47,6 +47,16 @@ class MarkdownCopiesTest {
         Assertions.assertTrue(body.contains(phrase), path + ": " + body);
     }
 
+    // 2.17.0: the section of the skill reaches the copy of /docs/mcp.
+    @Test
+    void mcpCopyHasTheSkill() {
+        String body = copy("/docs/mcp.md");
+        Assertions.assertTrue(body.contains("## Skill"), body);
+        Assertions.assertTrue(body.contains("`swapi-build:star-wars-research`"), body);
+        Assertions.assertTrue(body.contains("`skill://star-wars-research/SKILL.md`"), body);
+        Assertions.assertTrue(body.indexOf("## Skill") > body.indexOf("## Server prompt"), body);
+    }
+
     @Test
     void homeCopyIsIndexHtmlMd() {
         String body = copy("/index.html.md");

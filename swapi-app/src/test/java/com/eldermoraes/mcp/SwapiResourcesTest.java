@@ -105,6 +105,14 @@ class SwapiResourcesTest {
         return contents.text();
     }
 
+    /**
+     * The files of the skill star-wars-research (2.17.0, SwapiSkills), listed
+     * as concrete resources next to the records. Their reads are
+     * SwapiSkillsTest's: text/markdown, not the application/json of read().
+     */
+    static final List<String> SKILL_FILES = List.of("skill://star-wars-research/SKILL.md",
+            "skill://star-wars-research/references/relations.md");
+
     private int recordCount() {
         int n = 0;
         for (String type : TYPES) {
@@ -118,7 +126,12 @@ class SwapiResourcesTest {
         ResourcesPage page = list();
         assertNull(page.nextCursor(), "one page: quarkus.mcp.server.resources.page-size");
         assertEquals(260, recordCount());
-        assertEquals(6 + recordCount(), page.size());
+        assertEquals(6 + recordCount() + SKILL_FILES.size(), page.size());
+        for (String uri : SKILL_FILES) {
+            var info = page.findByUri(uri);
+            assertNotNull(info, uri);
+            assertEquals("text/markdown", info.mimeType(), uri);
+        }
         for (String type : TYPES) {
             for (int id : known.ids(type)) {
                 var info = page.findByUri("swapi://" + type + "/" + id);
@@ -134,7 +147,7 @@ class SwapiResourcesTest {
     // grows past the page and the "@" picker of Claude Code loses records.
     @Test
     void resourcesListKeepsAMarginBelowThePageSize() {
-        int total = 6 + recordCount();
+        int total = 6 + recordCount() + SKILL_FILES.size();
         assertTrue(total <= pageSize - PAGE_MARGIN, total + " resources against quarkus.mcp.server.resources.page-size="
                 + pageSize + ": raise page-size in application.properties (keep " + PAGE_MARGIN
                 + " of margin) so resources/list stays one page");

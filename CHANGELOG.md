@@ -16,6 +16,56 @@ is inherited from `swapi-app/pom.xml`, so it always matches the latest released 
 
 ## [Unreleased]
 
+## [2.17.0] - 2026-11-24
+
+The MCP server publishes an Agent Skill. The answers of the four tools, the
+`swapi://` resources and the prompt do not change.
+
+### Added
+
+- The Skills over MCP extension (`io.modelcontextprotocol/skills`), advertised
+  in `server/discover` and `initialize` with an empty settings object (no
+  `directoryRead`): `skills/list` (one page; a non-null `cursor` is `-32602`) and
+  `skills/get` (the entry for the URI of a `SKILL.md`; any other URI is
+  `-32602`), both with `ttlMs` 300000 and `cacheScope` `public`.
+- The skill `star-wars-research`: how to answer a question that takes several
+  calls with `sw_search`, `sw_get`, `sw_list` and `sw_random`, follow
+  relations with `expand`, shorten lists with `fields`, the scope of
+  Episodes I-VI and the film id trap. Its two files are the resources
+  `skill://star-wars-research/SKILL.md` and
+  `skill://star-wars-research/references/relations.md` (`text/markdown`),
+  read with `resources/read`; each entry's manifest carries the size and
+  SHA-256 digest of the bytes served. A client that approved the skill asks
+  again whenever a later release changes a byte of it. In Claude Code
+  (v2.1.331 or later, a beta there) it appears as
+  `swapi-build:star-wars-research`.
+
+### Changed
+
+- The server instructions end with a pointer to the skill:
+  `For questions that take several calls, load the skill
+  skill://star-wars-research/SKILL.md.`
+- `resources/list` has two more entries, the files of the skill (268, still
+  one page).
+- `/docs/mcp` (and `/docs/mcp.md`) has a "Skill" section after "Server
+  prompt"; `llms.txt` names the skill by its URI.
+- The deploy probes check the extension in `server/discover`, `skills/list`,
+  the read of the `SKILL.md` and `skills/get` (`-32602` for an unknown skill,
+  paired with the real one); the native smoke checks `skills/list` and the
+  read of the `SKILL.md`.
+- A well-formed stateless `subscriptions/listen` (protocol 2026-07-28)
+  answers HTTP `200` again, with the same `-32601` body, as in the session
+  era and as up to 2.16.0; 2.16.1 is the only version that answered it
+  `404`. Claude Code 2.1.331 sends the listen on connect and tries three
+  times: against the `404` it logged each attempt as a dropped connection
+  and closed the server "with errors", against the `200` it reads "not
+  offered" and closes cleanly (tools worked in both cases). This departs on
+  purpose from the 2026-07-28 specification, which gives a stateless method
+  the server does not implement `404`, for this one method: any other such
+  method, the stateless `resources/subscribe` among them, still answers
+  `404`, and a listen with wrong version headers still gets `400`. The
+  deploy and native-smoke probes expect the `200`.
+
 ## [2.16.1] - 2026-11-24
 
 The MCP server extension moves to 2.1.0. No address, field, tool, resource
@@ -1170,7 +1220,7 @@ snapshot version is not a release. -->
 
 - Id handling across all domains.
 
-[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.16.1...HEAD
+[Unreleased]: https://github.com/eldermoraes/swapi.build/compare/v2.17.0...HEAD
 [2.4.3]: https://github.com/eldermoraes/swapi.build/compare/v2.4.2...v2.4.3
 [2.4.2]: https://github.com/eldermoraes/swapi.build/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/eldermoraes/swapi.build/compare/v2.4.0...v2.4.1
@@ -1220,6 +1270,7 @@ snapshot version is not a release. -->
 
 [2.12.1]: https://github.com/eldermoraes/swapi.build/compare/v2.12.0...v2.12.1
 
+[2.17.0]: https://github.com/eldermoraes/swapi.build/compare/v2.16.1...v2.17.0
 [2.16.1]: https://github.com/eldermoraes/swapi.build/compare/v2.16.0...v2.16.1
 [2.16.0]: https://github.com/eldermoraes/swapi.build/compare/v2.15.0...v2.16.0
 [2.15.0]: https://github.com/eldermoraes/swapi.build/compare/v2.14.0...v2.15.0

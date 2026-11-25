@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.eldermoraes</groupId>
     <artifactId>swapi-app</artifactId>
-    <version>2.16.1</version>
+    <version>2.17.0</version>
 
     <properties>
         <compiler-plugin.version>3.14.0</compiler-plugin.version>
@@ -94,6 +94,15 @@
             <groupId>io.rest-assured</groupId>
             <artifactId>rest-assured</artifactId>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- SwapiSkillsTest parses the skill's frontmatter with it, as a client's YAML parser.
+                 Version from the Quarkus BOM. Declared without a scope on purpose: it is already a
+                 runtime dependency (quarkus-smallrye-openapi -> smallrye-open-api-core ->
+                 jackson-dataformat-yaml), and a direct test scope would win over that path and drop
+                 it from the application. Declared here, the resolved classpath does not change. -->
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
         </dependency>
     </dependencies>
 
